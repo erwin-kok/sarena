@@ -1,0 +1,23 @@
+[package]
+name = "dataplane-common"
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["std"]
+std = ["dep:aya"]
+
+[dependencies]
+aya = { workspace = true, optional = true }
+aya-ebpf = { workspace = true }
+network-types = { workspace = true }
+
+[lib]
+path = "src/lib.rs"

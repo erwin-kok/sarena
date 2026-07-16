@@ -1,12 +1,13 @@
 # Sarena
 
 An eBPF-based 🐝 virtual network dataplane and control plane, written in Rust
-with [Aya](https://aya-rs.dev/). Sarena is a personal, from-scratch
-exploration of how kernel-level networking — routing, ARP, forwarding, and
-eventually identity-aware policy — actually works, built one deliberate
+with [Aya](https://aya-rs.dev/). Sarena is a independent, from-scratch
+exploration of how kernel-level networking (routing, ARP, forwarding, and
+eventually identity-aware policy) actually works, built one deliberate
 stage at a time.
 
-> **Status: early development.** Sarena is a hobby and learning project. It
+> **Status: early development.** Sarena is an educational project focused on 
+> understanding and implementing kernel-level networking concepts in Rust. It
 > is not audited, not benchmarked, and not intended for production use.
 > Expect incomplete features, rough edges, and breaking changes without
 > notice.
@@ -20,11 +21,15 @@ classifiers, BPF maps, ARP handling, longest-prefix-match forwarding — from
 first principles, in small, individually verifiable stages, instead of
 treating them as a black box behind a CNI plugin.
 
-Sarena is heavily inspired by Cilium's datapath design and deliberately
-borrows several of its ideas. It is not a fork, a replacement, or a competitor.
-Cilium is a mature, production-grade project built by a much larger team
-solving a much larger problem. Sarena's goal is understanding, not
-adoption.
+Sarena is heavily inspired by Cilium's datapath design and deliberately adopts 
+several of its architectural ideas. It is not a fork, a replacement, or a 
+competitor. Cilium is a mature, production-grade project built by a much larger 
+team solving a much larger problem. 
+
+Rather than recreating Cilium feature-for-feature, Sarena focuses on implementing
+selected networking mechanisms in a small, understandable codebase. The emphasis
+is on understanding, clarity, and sound software engineering rather than feature 
+parity.
 
 ## What Sarena explores
 
@@ -39,6 +44,29 @@ adoption.
   endpoint model, layered on top of the router rather than assumed from
   day one
 
+## Setup
+
+In order to build the project, it needs scapy, and Rust nightly.
+
+Scapy needs to be in `scapyenv` (this venv is currently hard-coded).
+
+```shell
+python3 -m venv scapyenv
+source scapyenv/bin/activate
+pip install scapy
+```
+
+To install nightly (if not already present):
+
+```shell
+rustup toolchain install nightly
+```
+
+Check with:
+```shell
+rustup show
+```
+
 ## About the name
 
 *Sarena* comes from two places at once: **arena**, a central space where
@@ -50,11 +78,23 @@ the same idea: a structure that things return to and pass through.
 
 ## License
 
-Not finalized yet. Likely a dual MIT/Apache-2.0 license for the
-control-plane crates and MIT/GPL for the eBPF crate, matching common
-practice in the Aya ecosystem — final decision pending.
+Unless otherwise noted, Sarena is dual licensed under either the MIT License or 
+the Apache License, Version 2.0, at your option.
+
+Some files derived from third-party projects remain under their original license 
+terms, as indicated by their file headers.
+
+Unless you explicitly state otherwise, any contribution intentionally 
+submitted for inclusion in this project shall be dual licensed under the 
+MIT License and Apache License, Version 2.0, without any additional terms 
+or conditions.
 
 ## Acknowledgments
+
+Sarena is an independent educational project and is not affiliated with or 
+endorsed by the Cilium or Aya projects. Small portions of the repository are 
+derived from upstream projects and retain their original copyright notices and 
+license headers.
 
 - [Cilium](https://github.com/cilium/cilium) — the primary reference and
   inspiration for this project's design

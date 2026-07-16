@@ -1,0 +1,30 @@
+[package]
+name = "dataplane-ebpf-test-programs"
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+dataplane-common = { path = "../../shared/dataplane-common", default-features = false }
+dataplane-common-test = { path = "../../shared/dataplane-common-test", default-features = false }
+dataplane-ebpf-test-framework = { path = "../dataplane-ebpf-test-framework", default-features = false }
+dataplane-ebpf-common = { path = "../dataplane-ebpf-common", default-features = false }
+dataplane-test-macros = { path = "../../dataplane-test-macros", default-features = false }
+scapy-bytes = { package = "dataplane-test-scapy", path = "../../shared/dataplane-test-scapy", default-features = false }
+
+aya-ebpf = { workspace = true, default-features = false }
+network-types = { workspace = true, default-features = false }
+serde = { workspace = true, default-features = false }
+
+[build-dependencies]
+which = { workspace = true }
+
+[[bin]]
+name = "dataplane-ebpf-test-programs"
+path = "src/main.rs"

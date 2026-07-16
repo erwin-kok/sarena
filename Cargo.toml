@@ -1,0 +1,105 @@
+[workspace]
+members = [
+    # Test infrastructure
+    "dataplane-test-macros",
+    "dataplane-test-runner",
+
+    # Shared
+    "shared/dataplane-common",
+    "shared/dataplane-common-test",
+    "shared/dataplane-test-scapy",
+
+    # eBPF framework 
+    "ebpf/dataplane-ebpf-common",
+    "ebpf/dataplane-ebpf-test-framework",
+
+    # eBPF programs
+    "ebpf/dataplane-ebpf-programs",
+    "ebpf/dataplane-ebpf-test-programs",
+
+    # Build tooling
+    "xtask",
+]
+
+default-members = [
+    "dataplane-test-macros",
+    "dataplane-test-runner",
+
+    "shared/dataplane-common", 
+    "shared/dataplane-common-test",
+    "shared/dataplane-test-scapy",
+]
+
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/erwin-kok/sarena"
+version = "0.1.0"
+
+[workspace.dependencies]
+anyhow = { version = "1" }
+aya = { git = "https://github.com/erwin-kok/aya", branch = "development", default-features = false }
+aya-build = { git = "https://github.com/erwin-kok/aya", branch = "development", default-features = false }
+aya-ebpf = { git = "https://github.com/erwin-kok/aya", branch = "development", default-features = false }
+aya-log = { git = "https://github.com/erwin-kok/aya", branch = "development", default-features = false }
+aya-log-ebpf = { git = "https://github.com/erwin-kok/aya", branch = "development", default-features = false }
+cargo_metadata = { version = "0.23.0", default-features = false }
+clap = { version = "4.5.20", features = ["std"] }
+env_logger = { version = "0.11.5", default-features = false }
+futures = { version = "0.3.32", default-features = false }
+hex = { version = "0.4", default-features = false }
+ipnetwork = { version ="0.21.1", default-features = false }
+libbpf-sys = { version = "1.7.0", default-features = false }
+libc = { version = "0.2.159", default-features = false }
+log = { version = "0.4.22", default-features = false }
+network-types = { version = "0.2.0", default-features = false }
+proc-macro2 = { version = "1", default-features = false }
+proc-macro2-diagnostics = { version = "0.10.1", default-features = false }
+quote = { version = "1", default-features = false }
+regex = { version = "1.12.4" }
+serde = { version = "1", default-features = false, features = ["derive"] }
+serde_json = "1"
+syn = { version = "2", default-features = false }
+thiserror = { version = "2" }
+tokio = { version = "1.40.0" }
+which = { version = "8" }
+
+[workspace.lints.clippy]
+all = "warn"
+cargo = "warn"
+pedantic = "warn"
+
+cast_possible_truncation = { level = "allow", priority = 1 }
+cast_possible_wrap = { level = "allow", priority = 1 }
+cast_sign_loss = { level = "allow", priority = 1 }
+default_trait_access = { level = "allow", priority = 1 }
+inline_always = { level = "allow", priority = 1 }
+items_after_statements = { level = "allow", priority = 1 }
+len_without_is_empty = { level = "allow", priority = 1 }
+match_same_arms = { level = "allow", priority = 1 }
+missing_errors_doc = { level = "allow", priority = 1 }
+missing_panics_doc = { level = "allow", priority = 1 }
+must_use_candidate = { level = "allow", priority = 1 }
+needless_pass_by_value = { level = "allow", priority = 1 }
+semicolon_if_nothing_returned = { level = "allow", priority = 1 }
+similar_names = { level = "allow", priority = 1 }
+struct_excessive_bools = { level = "allow", priority = 1 }
+too_many_lines = { level = "allow", priority = 1 }
+transmute_ptr_to_ptr = { level = "allow", priority = 1 }
+unreadable_literal = { level = "allow", priority = 1 }
+
+cargo_common_metadata = { level = "allow", priority = 1 }
+multiple_crate_versions = { level = "allow", priority = 1 }
+
+[profile.ebpf]
+inherits = "release"
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+debug = 2
+strip = false
+overflow-checks = false

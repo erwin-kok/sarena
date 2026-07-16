@@ -1,0 +1,25 @@
+[package]
+name = "dataplane-ebpf-programs"
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+dataplane-ebpf-common = { path = "../dataplane-ebpf-common", default-features = false }
+dataplane-common = { path = "../../shared/dataplane-common", default-features = false }
+
+aya-ebpf = { workspace = true, default-features = false }
+network-types = { workspace = true, default-features = false }
+
+[build-dependencies]
+which = { workspace = true }
+
+[[bin]]
+name = "dataplane-ebpf-programs"
+path = "src/main.rs"
