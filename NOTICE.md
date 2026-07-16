@@ -1,4 +1,4 @@
-Sarena
+# Sarena
 
 This project is an independent educational project.
 
@@ -8,15 +8,16 @@ from upstream sources.
 
 It is built using Aya.
 
-Special thanks to the Cilium community for building and openly sharing a production-grade eBPF 
-networking platform that serves as an invaluable learning resource.
-
 Some files are derived from:
 
 - Cilium
+
   Copyright The Cilium Authors
+
   Licensed under the Apache License 2.0 or other licenses indicated in the individual files.
 
 - Aya
+
   Copyright Aya contributors
+
   Licensed under either MIT or Apache-2.0.

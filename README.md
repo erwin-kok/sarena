@@ -96,6 +96,10 @@ endorsed by the Cilium or Aya projects. Small portions of the repository are
 derived from upstream projects and retain their original copyright notices and 
 license headers.
 
+Special thanks to the Cilium community for building and openly sharing a 
+production-grade eBPF networking platform that serves as an invaluable learning 
+resource.
+
 - [Cilium](https://github.com/cilium/cilium) — the primary reference and
   inspiration for this project's design
 - [Aya](https://github.com/aya-rs/aya) — the Rust eBPF library this project
