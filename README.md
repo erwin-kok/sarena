@@ -1,5 +1,10 @@
 # Sarena
 
+[![ci](https://github.com/erwin-kok/sarena/actions/workflows/ci.yaml/badge.svg)](https://github.com/erwin-kok/sarena/actions/workflows/ci.yaml)
+[![made-with-rust](https://img.shields.io/badge/Made%20with-Rust-1f425f.svg)](https://www.rust-lang.org/)
+[![License](https://img.shields.io/github/license/erwin-kok/sarena.svg)](https://github.com/erwin-kok/sarena/blob/master/LICENSE-APACHE)
+
+
 An eBPF-based 🐝 virtual network dataplane and control plane, written in Rust
 with [Aya](https://aya-rs.dev/). Sarena is a independent, from-scratch
 exploration of how kernel-level networking (routing, ARP, forwarding, and
@@ -66,6 +71,20 @@ Check with:
 ```shell
 rustup show
 ```
+
+Create the following dir and add read/write/execute permissions (The ebpf programs will be stored here):
+```shell
+sudo mkdir -p /usr/lib/sarena/ebpf
+sudo chmod a+rwx /usr/lib/sarena/ebpf
+```
+
+## Engineering blog
+
+From time to time, I write about new features, implementation details, design decisions, and lessons learned while exploring and building this project.
+
+If you're interested in the background and technical details, check out my engineering blog:
+
+👉 https://erwinkok.org/
 
 ## About the name
 
