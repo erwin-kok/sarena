@@ -5,17 +5,17 @@ members = [
     "dataplane-test-runner",
 
     # Shared
-    "shared/dataplane-common",
-    "shared/dataplane-common-test",
-    "shared/dataplane-test-scapy",
+    "dataplane-common",
+    "dataplane-common-test",
+    "dataplane-test-scapy",
 
     # eBPF framework 
-    "ebpf/dataplane-ebpf-common",
-    "ebpf/dataplane-ebpf-test-framework",
+    "dataplane-ebpf-common",
+    "dataplane-ebpf-test-framework",
 
     # eBPF programs
-    "ebpf/dataplane-ebpf-programs",
-    "ebpf/dataplane-ebpf-test-programs",
+    "dataplane-ebpf-programs",
+    "dataplane-ebpf-test-programs",
 
     # Build tooling
     "xtask",
@@ -25,9 +25,9 @@ default-members = [
     "dataplane-test-macros",
     "dataplane-test-runner",
 
-    "shared/dataplane-common", 
-    "shared/dataplane-common-test",
-    "shared/dataplane-test-scapy",
+    "dataplane-common", 
+    "dataplane-common-test",
+    "dataplane-test-scapy",
 ]
 
 resolver = "2"

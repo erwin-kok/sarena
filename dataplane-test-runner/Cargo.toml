@@ -12,7 +12,7 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-dataplane-common-test = { path = "../shared/dataplane-common-test", features = ["std"] }
+dataplane-common-test = { path = "../dataplane-common-test", features = ["std"] }
 
 aya = { workspace = true }
 regex = { workspace = true }

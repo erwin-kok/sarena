@@ -11,8 +11,8 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-dataplane-common = { path = "../../shared/dataplane-common", default-features = false }
-dataplane-common-test = { path = "../../shared/dataplane-common-test", default-features = false }
+dataplane-common = { path = "../dataplane-common", default-features = false }
+dataplane-common-test = { path = "../dataplane-common-test", default-features = false }
 
 aya-ebpf = { workspace = true }
 network-types = { workspace = true }

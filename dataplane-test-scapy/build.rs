@@ -7,7 +7,7 @@ fn main() {
     let output = format!("{out_dir}/scapy_bytes.rs");
 
     let status = Command::new("python3")
-        .arg("../../scapy/scapy_header_gen.py")
+        .arg("../scapy/scapy_header_gen.py")
         .arg(&output)
         .status()
         .expect("failed to run scapy generator");

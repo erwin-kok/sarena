@@ -83,7 +83,7 @@ pub fn basic_test_non_equal_bytes_assert(ctx: TcContext, t: &mut TestSuite) {
     );
     assert_test!(t, entry.expected_len == entry.actual_len);
 
-    // Prevent pakcet compare
+    // Prevent packet compare
     SCAPY_ASSERT_MAP_COUNT
         .set(0, 0, 0)
         .expect("set assert map count");
@@ -139,7 +139,7 @@ pub fn basic_test_too_short_assert(ctx: TcContext, t: &mut TestSuite) {
         scapy_bytes::SCAPY_SST_REQ_BYTES.len() == entry.actual_len
     );
 
-    // Prevent pakcet compare
+    // Prevent packet compare
     SCAPY_ASSERT_MAP_COUNT
         .set(0, 0, 0)
         .expect("set assert map count");

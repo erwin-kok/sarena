@@ -11,12 +11,12 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-dataplane-common = { path = "../../shared/dataplane-common", default-features = false }
-dataplane-common-test = { path = "../../shared/dataplane-common-test", default-features = false }
+dataplane-common = { path = "../dataplane-common", default-features = false }
+dataplane-common-test = { path = "../dataplane-common-test", default-features = false }
 dataplane-ebpf-test-framework = { path = "../dataplane-ebpf-test-framework", default-features = false }
 dataplane-ebpf-common = { path = "../dataplane-ebpf-common", default-features = false }
-dataplane-test-macros = { path = "../../dataplane-test-macros", default-features = false }
-scapy-bytes = { package = "dataplane-test-scapy", path = "../../shared/dataplane-test-scapy", default-features = false }
+dataplane-test-macros = { path = "../dataplane-test-macros", default-features = false }
+scapy-bytes = { package = "dataplane-test-scapy", path = "../dataplane-test-scapy", default-features = false }
 
 aya-ebpf = { workspace = true, default-features = false }
 network-types = { workspace = true, default-features = false }
