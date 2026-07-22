@@ -12,7 +12,7 @@ use crate::build_ebpf::{self, BuildEbpfOptions};
 const DEFAULT_SRC_DIR: &str = "./target-ebpf";
 
 /// Default install prefix, mirrors what most Linux packages use.
-const DEFAULT_INSTALL_DIR: &str = "/usr/lib/dataplane/ebpf";
+const DEFAULT_INSTALL_DIR: &str = "/usr/lib/sarena/ebpf";
 
 #[derive(Debug, Default, Parser)]
 pub struct InstallEbpfOptions {

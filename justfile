@@ -23,22 +23,22 @@ clippy:
 # Run all tests except the eBPF test runner (requires root + installed eBPF programs)
 test:
     cargo test --workspace \
-        --exclude dataplane-test-runner \
-        --exclude dataplane-ebpf-programs \
-        --exclude dataplane-ebpf-test-programs
+        --exclude sarena-test-runner \
+        --exclude sarena-ebpf-programs \
+        --exclude sarena-ebpf-test-programs
 
 # Build eBPF programs (outputs to ./target-ebpf/)
 build-ebpf:
     cargo xtask build-ebpf
 
-# Build and install eBPF programs to /usr/lib/dataplane/ebpf (requires sudo)
+# Build and install eBPF programs to /usr/lib/sarena/ebpf (requires sudo)
 install-ebpf: build-ebpf
     cargo xtask install-ebpf
 
 ebpf-test:
     #!/usr/bin/env bash
     set -euo pipefail
-    exe=$(cargo test --no-run -p dataplane-test-runner --message-format=json \
+    exe=$(cargo test --no-run -p sarena-test-runner --message-format=json \
         | jq -r 'select(.profile.test == true) | .executable')
     sudo "$exe" --no-capture
 

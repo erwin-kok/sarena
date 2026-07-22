@@ -12,7 +12,7 @@ use clap::Parser;
 use serde_json::Value;
 
 /// Default eBPF packages to build. Can be overridden via --package.
-const DEFAULT_EBPF_PACKAGES: &[&str] = &["dataplane-ebpf-programs", "dataplane-ebpf-test-programs"];
+const DEFAULT_EBPF_PACKAGES: &[&str] = &["sarena-ebpf-programs", "sarena-ebpf-test-programs"];
 
 /// Default target triple for eBPF programs.
 const DEFAULT_TARGET: &str = "bpfel-unknown-none";
@@ -189,7 +189,7 @@ fn build_package(
             Some("compiler-artifact") => {
                 // Guard: only collect artifacts that belong to the package we
                 // asked to build.  The `target.name` field holds the crate
-                // name (e.g. "dataplane-ebpf-programs"), which is stable and
+                // name (e.g. "sarena-ebpf-programs"), which is stable and
                 // unambiguous.  We also check `package_id` as a fallback for
                 // workspaces where the target name was customised.
                 let target_name = v["target"]["name"].as_str().unwrap_or("");

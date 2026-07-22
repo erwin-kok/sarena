@@ -1,33 +1,33 @@
 [workspace]
 members = [
     # Test infrastructure
-    "dataplane-test-macros",
-    "dataplane-test-runner",
+    "sarena-test-macros",
+    "sarena-test-runner",
 
     # Shared
-    "dataplane-common",
-    "dataplane-common-test",
-    "dataplane-test-scapy",
+    "sarena-common",
+    "sarena-common-test",
+    "sarena-test-scapy",
 
     # eBPF framework 
-    "dataplane-ebpf-common",
-    "dataplane-ebpf-test-framework",
+    "sarena-ebpf-common",
+    "sarena-ebpf-test-framework",
 
     # eBPF programs
-    "dataplane-ebpf-programs",
-    "dataplane-ebpf-test-programs",
+    "sarena-ebpf-programs",
+    "sarena-ebpf-test-programs",
 
     # Build tooling
     "xtask",
 ]
 
 default-members = [
-    "dataplane-test-macros",
-    "dataplane-test-runner",
+    "sarena-test-macros",
+    "sarena-test-runner",
 
-    "dataplane-common", 
-    "dataplane-common-test",
-    "dataplane-test-scapy",
+    "sarena-common", 
+    "sarena-common-test",
+    "sarena-test-scapy",
 ]
 
 resolver = "2"

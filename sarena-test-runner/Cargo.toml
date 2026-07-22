@@ -1,0 +1,20 @@
+[package]
+name = "sarena-test-runner"
+publish = false
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sarena-common-test = { path = "../sarena-common-test", features = ["std"] }
+
+aya = { workspace = true }
+regex = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

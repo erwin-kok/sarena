@@ -1,0 +1,25 @@
+[package]
+name = "sarena-ebpf-programs"
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sarena-ebpf-common = { path = "../sarena-ebpf-common", default-features = false }
+sarena-common = { path = "../sarena-common", default-features = false }
+
+aya-ebpf = { workspace = true, default-features = false }
+network-types = { workspace = true, default-features = false }
+
+[build-dependencies]
+which = { workspace = true }
+
+[[bin]]
+name = "sarena-ebpf-programs"
+path = "src/main.rs"

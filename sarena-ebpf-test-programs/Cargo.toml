@@ -1,0 +1,30 @@
+[package]
+name = "sarena-ebpf-test-programs"
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sarena-common = { path = "../sarena-common", default-features = false }
+sarena-common-test = { path = "../sarena-common-test", default-features = false }
+sarena-ebpf-test-framework = { path = "../sarena-ebpf-test-framework", default-features = false }
+sarena-ebpf-common = { path = "../sarena-ebpf-common", default-features = false }
+sarena-test-macros = { path = "../sarena-test-macros", default-features = false }
+scapy-bytes = { package = "sarena-test-scapy", path = "../sarena-test-scapy", default-features = false }
+
+aya-ebpf = { workspace = true, default-features = false }
+network-types = { workspace = true, default-features = false }
+serde = { workspace = true, default-features = false }
+
+[build-dependencies]
+which = { workspace = true }
+
+[[bin]]
+name = "sarena-ebpf-test-programs"
+path = "src/main.rs"

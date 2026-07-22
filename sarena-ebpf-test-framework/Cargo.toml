@@ -1,0 +1,22 @@
+[package]
+name = "sarena-ebpf-test-framework"
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sarena-common = { path = "../sarena-common", default-features = false }
+sarena-common-test = { path = "../sarena-common-test", default-features = false }
+
+aya-ebpf = { workspace = true }
+network-types = { workspace = true }
+serde = { workspace = true }
+
+[build-dependencies]
+which = { workspace = true }
