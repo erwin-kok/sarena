@@ -23,6 +23,7 @@ clippy:
 # Run all tests except the eBPF test runner (requires root + installed eBPF programs)
 test:
     cargo test --workspace \
+        --features test-support \
         --exclude sarena-test-runner \
         --exclude sarena-ebpf-programs \
         --exclude sarena-ebpf-test-programs
@@ -35,6 +36,35 @@ build-ebpf:
 install-ebpf: build-ebpf
     cargo xtask install-ebpf
 
+netns-clean:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    for _ in $(seq 1 20); do
+        mounts=$(awk '{print $5}' /proc/self/mountinfo | grep -E '^/run/netns(/|$)' || true)
+        if [ -z "$mounts" ]; then
+            exit 0
+        fi
+        while IFS= read -r m; do
+            sudo umount "$m" 2>/dev/null || true
+        done < <(echo "$mounts" | awk '{ print length, $0 }' | sort -rn | cut -d' ' -f2-)
+    done
+
+    echo "warning: could not fully clean up mounts under /run/netns:" >&2
+    awk '{print $5}' /proc/self/mountinfo | grep -E '^/run/netns(/|$)' >&2 || true
+    exit 1
+    
+# Run all integration tests in the sarena-infra package (requires root)
+infra-test: netns-clean
+    #!/usr/bin/env bash
+    set -euo pipefail
+    exes=$(cargo test -p sarena-infra --features test-support --tests --no-run --message-format=json \
+        | jq -r 'select(.profile.test == true) | .executable | select(. != null)')
+    for exe in $exes; do
+        just netns-clean
+        sudo "$exe" --ignored --no-capture
+    done
+
 ebpf-test:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -43,4 +73,4 @@ ebpf-test:
     sudo "$exe" --no-capture
 
 # Full workflow: build, test, install eBPF programs, run eBPF tests
-all: build test install-ebpf ebpf-test
+all: build test install-ebpf infra-test ebpf-test

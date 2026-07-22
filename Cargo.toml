@@ -1,5 +1,7 @@
 [workspace]
 members = [
+    "sarena-infra",
+
     # Test infrastructure
     "sarena-test-macros",
     "sarena-test-runner",
@@ -22,6 +24,8 @@ members = [
 ]
 
 default-members = [
+    "sarena-infra",
+
     "sarena-test-macros",
     "sarena-test-runner",
 

@@ -1,0 +1,44 @@
+[package]
+name = "sarena-infra"
+description = "Low-level Linux dataplane primitives: netns, links, veth, BPF (XDP/TCX) introspection."
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+aya = { workspace = true }
+futures = { workspace = true }
+thiserror = { workspace = true }
+
+# Netlink / rtnetlink. NOTE: these two need to be a mutually-compatible pair
+# -- if `cargo update` pulls a newer rtnetlink that expects a newer
+# netlink-packet-route, bump both together.
+rtnetlink = "0.21"
+netlink-packet-route = "0.30"
+
+# Namespace / mount / syscall primitives.
+nix = { version = "0.31", features = ["sched", "mount", "fs"] }
+
+tokio = { workspace = true, features = ["rt", "sync", "macros"] }
+
+# BPF (XDP / TCX) attachment introspection. We depend on both:
+#  - libbpf-rs for anything it already wraps safely (kept around for when
+#    load/attach support is added in a later phase), and
+#  - libbpf-sys directly, for the raw bpf_xdp_query / bpf_prog_query_opts
+#    calls this crate's bpf module needs, since libbpf-rs's safe `query`
+#    module does not (as of writing) cover per-ifindex attach-point queries.
+libbpf-rs = "0.26"
+libbpf-sys = "1"
+
+[dev-dependencies]
+libc = "0.2"
+serial_test = "3"
+
+[features]
+test-support = []
