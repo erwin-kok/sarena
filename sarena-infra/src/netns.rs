@@ -134,7 +134,7 @@ impl Netns {
 
     /// List the names of all namespaces currently registered under
     /// `/run/netns`.
-    pub fn list() -> Result<Vec<String>, InfraError> {
+    pub fn list() -> Res<Vec<String>> {
         let entries = std::fs::read_dir(NETNS_PATH).map_err(|e| InfraError::Io {
             context: format!("read_dir {NETNS_PATH}"),
             source: e,
@@ -186,10 +186,10 @@ impl Netns {
     /// If restoring the namespace fails and `f` did *not* panic, that
     /// failure is returned as [`InfraError::RestoreNamespace`] rather than
     /// silently ignored.
-    pub async fn run<F, Fut, T>(self, f: F) -> Result<T, InfraError>
+    pub async fn run<F, Fut, T>(self, f: F) -> Res<T>
     where
         F: FnOnce(rtnetlink::Handle) -> Fut + Send + 'static,
-        Fut: Future<Output = Result<T, InfraError>> + Send + 'static,
+        Fut: Future<Output = Res<T>> + Send + 'static,
         T: Send + 'static,
     {
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -212,10 +212,10 @@ impl Netns {
     /// the target one, executes `f` on a private single-threaded runtime,
     /// then restores the original namespace before returning. Must be
     /// called from a thread dedicated to this single operation.
-    fn run_on_dedicated_thread<F, Fut, T>(self, f: F) -> Result<T, InfraError>
+    fn run_on_dedicated_thread<F, Fut, T>(self, f: F) -> Res<T>
     where
         F: FnOnce(rtnetlink::Handle) -> Fut,
-        Fut: Future<Output = Result<T, InfraError>>,
+        Fut: Future<Output = Res<T>>,
     {
         // 1. Save the current thread's network namespace.
         let current = File::open(THREAD_SELF_NS_PATH).map_err(|e| InfraError::OpenNamespace {
@@ -328,7 +328,7 @@ fn ensure_netns_dir() -> Res<()> {
 /// Whether `path` is a mount point, by comparing device IDs against its
 /// parent directory (the standard trick: a mount point sits on a different
 /// device than its parent, from the perspective of `stat(2)`).
-fn is_mountpoint(path: &str) -> Result<bool, InfraError> {
+fn is_mountpoint(path: &str) -> Res<bool> {
     let canonical = std::fs::canonicalize(path).map_err(|e| InfraError::Io {
         context: format!("canonicalize {path}"),
         source: e,

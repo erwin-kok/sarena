@@ -8,10 +8,6 @@ pub struct MockNetworkProvisioner {
     pub netns_deleted: Vec<String>,
     pub veths_created: Vec<VethSpec>,
     pub veths_deleted: Vec<VethPair<MockLink>>,
-    /// Snapshot registry backing `get_link`/`list_links`. Only updated by
-    /// `create_veth`/`delete_veth`/`add_link` -- mutating a `MockLink` a
-    /// test is already holding (via `LinkHandle`) does not update this, so
-    /// registry queries only reflect provisioner-level operations.
     pub links: Vec<MockLink>,
     next_ifindex: u32,
 }
@@ -96,9 +92,6 @@ impl NetworkProvisioner for MockNetworkProvisioner {
 }
 
 impl MockNetworkProvisioner {
-    /// Seed the registry with a link the test didn't create through
-    /// `create_veth` -- e.g. `lo` or a physical NIC that's expected to
-    /// already exist.
     pub fn add_link(&mut self, link: MockLink) {
         self.links.push(link);
     }
@@ -138,12 +131,7 @@ mod tests {
                 peer_mac: None,
             })
             .await?;
-
-        // The point of the split: this reads as an operation on the link
-        // itself, and works identically whether `pair.host` is a real
-        // `Link` or a `MockLink`.
         pair.host.set_up().await?;
-
         Ok(pair)
     }
 
@@ -164,17 +152,4 @@ mod tests {
         assert_eq!(mock.veths_created.len(), 1);
         assert_eq!(mock.netns_created, vec!["test-ns".to_owned()]);
     }
-
-    // The real DataplaneInfraProvisioner would be exercised the same way,
-    // generically, in an `#[ignore]`d integration test with root/CAP_*:
-    //
-    // #[tokio::test]
-    // #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN"]
-    // async fn real_provisioner_creates_veth_pair() {
-    //     let mut real = DataplaneInfraProvisioner;
-    //     let ns = real.create_netns("dpi-prov-test").await.unwrap();
-    //     let pair = provision_and_start_port(&mut real, ns.clone()).await.unwrap();
-    //     assert_ne!(pair.host.ifindex(), 0);
-    //     real.delete_netns(&ns).await.unwrap();
-    // }
 }

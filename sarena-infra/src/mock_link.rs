@@ -1,6 +1,13 @@
-use std::net::Ipv4Addr;
+use std::{net::Ipv4Addr, path::Path};
 
-use crate::{Link, MacAddress, Res};
+use aya::programs::TcAttachType;
+
+use crate::{Link, MacAddress, PinnedTcxProgram, Res, TcxAttach};
+
+#[derive(Debug, Clone, Default)]
+pub struct MockProgram {
+    pub name: String,
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct MockLink {
@@ -8,16 +15,21 @@ pub struct MockLink {
     pub ifindex: u32,
     pub mac: MacAddress,
     pub peer_ifname: Option<String>,
-    // Recorded calls, so tests can assert on what happened.
     pub up_calls: u32,
     pub down_calls: u32,
     pub mtu_calls: Vec<u32>,
     pub mac_calls: Vec<MacAddress>,
     pub addr_calls: Vec<(Ipv4Addr, u8)>,
+    pub gateway_calls: Vec<Ipv4Addr>,
     pub rename_calls: Vec<String>,
     pub setns_calls: Vec<String>,
     pub delete_calls: u32,
     pub netns: Option<String>,
+    pub tcx_upsert_calls: Vec<(String, TcAttachType)>,
+    pub tcx_has_link_calls: Vec<(u32, TcAttachType)>,
+    /// What `has_tcx_link` should answer -- set this before calling it.
+    pub has_tcx_link_result: bool,
+    pub next_link_id: u32,
 }
 
 impl Link for MockLink {
@@ -75,6 +87,39 @@ impl Link for MockLink {
         self.addr_calls.push((ip, prefix_len));
         Ok(())
     }
+
+    async fn add_gateway(&mut self, gateway: Ipv4Addr) -> Res<()> {
+        self.gateway_calls.push(gateway);
+        Ok(())
+    }
+}
+
+impl TcxAttach for MockLink {
+    type Program = MockProgram;
+
+    fn upsert_tcx_program(
+        &mut self,
+        prog: &mut MockProgram,
+        bpffs_dir: impl AsRef<Path>,
+        attach_type: TcAttachType,
+    ) -> Res<PinnedTcxProgram> {
+        let _ = bpffs_dir;
+        self.tcx_upsert_calls.push((prog.name.clone(), attach_type));
+        self.next_link_id += 1;
+        Ok(PinnedTcxProgram {
+            name: prog.name.clone(),
+            link_id: self.next_link_id,
+        })
+    }
+
+    fn detach_tcx(_bpffs_dir: impl AsRef<Path>, _program: &PinnedTcxProgram) -> Res<()> {
+        Ok(())
+    }
+
+    fn has_tcx_link(&mut self, program: &PinnedTcxProgram, attach_type: TcAttachType) -> Res<bool> {
+        self.tcx_has_link_calls.push((program.link_id, attach_type));
+        Ok(self.has_tcx_link_result)
+    }
 }
 
 #[cfg(test)]
@@ -95,12 +140,7 @@ mod tests {
                 peer_mac: None,
             })
             .await?;
-
-        // The point of the split: this reads as an operation on the link
-        // itself, and works identically whether `pair.host` is a real
-        // `Link` or a `MockLink`.
         pair.host.set_up().await?;
-
         Ok(pair)
     }
 
@@ -121,17 +161,4 @@ mod tests {
         assert_eq!(mock.veths_created.len(), 1);
         assert_eq!(mock.netns_created, vec!["test-ns".to_owned()]);
     }
-
-    // The real DataplaneInfraProvisioner would be exercised the same way,
-    // generically, in an `#[ignore]`d integration test with root/CAP_*:
-    //
-    // #[tokio::test]
-    // #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN"]
-    // async fn real_provisioner_creates_veth_pair() {
-    //     let mut real = DataplaneInfraProvisioner;
-    //     let ns = real.create_netns("dpi-prov-test").await.unwrap();
-    //     let pair = provision_and_start_port(&mut real, ns.clone()).await.unwrap();
-    //     assert_ne!(pair.host.ifindex(), 0);
-    //     real.delete_netns(&ns).await.unwrap();
-    // }
 }

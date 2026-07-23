@@ -1,14 +1,16 @@
 use std::{
     net::Ipv4Addr,
     os::fd::{AsRawFd, RawFd},
+    path::Path,
 };
 
+use aya::programs::{SchedClassifier, TcAttachType};
 use futures::TryStreamExt;
 use netlink_packet_route::link::{
     InfoData, InfoKind, InfoVeth, LinkAttribute, LinkFlags, LinkInfo, LinkMessage,
 };
 
-use crate::{InfraError, Link, MacAddress, Netns, Res};
+use crate::{InfraError, Link, MacAddress, Netns, PinnedTcxProgram, Res, TcxAttach, tcx};
 
 /// Recognised `IFLA_INFO_KIND` strings mapped to typed variants.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -242,21 +244,67 @@ impl Link for NetlinkLink {
     }
 
     async fn set_addr(&mut self, ip: Ipv4Addr, prefix_len: u8) -> Res<()> {
-        // `sarena-infra` doesn't have address (IFA_*) support yet --
-        // flagged in the earlier roadmap discussion as a needed-but-not-
-        // yet-built `address.rs` sibling to `link.rs`. This is the one
-        // operation here that can't be wired up to the current crate.
-        let _ = (ip, prefix_len);
-        unimplemented!(
-            "sarena-infra has no address.rs yet -- see the roadmap discussion for what's needed"
-        )
+        let index = self.index;
+        match &self.netns {
+            Some(ns) => {
+                let netns = Netns::open(ns)?;
+                netns
+                    .run(move |handle| async move {
+                        link_set_addr_impl(&handle, index, ip, prefix_len).await
+                    })
+                    .await
+            }
+            None => {
+                let handle = default_handle().await?;
+                link_set_addr_impl(&handle, index, ip, prefix_len).await
+            }
+        }
+    }
+
+    async fn add_gateway(&mut self, gateway: Ipv4Addr) -> Res<()> {
+        let index = self.index;
+        match &self.netns {
+            Some(ns) => {
+                let netns = Netns::open(ns)?;
+                netns
+                    .run(move |handle| async move {
+                        link_add_gateway_impl(&handle, index, gateway).await
+                    })
+                    .await
+            }
+            None => {
+                let handle = default_handle().await?;
+                link_add_gateway_impl(&handle, index, gateway).await
+            }
+        }
+    }
+}
+
+impl TcxAttach for NetlinkLink {
+    type Program = SchedClassifier;
+
+    fn upsert_tcx_program(
+        &mut self,
+        prog: &mut SchedClassifier,
+        bpffs_dir: impl AsRef<Path>,
+        attach_type: TcAttachType,
+    ) -> Res<PinnedTcxProgram> {
+        tcx::upsert_tcx_program(self, prog, bpffs_dir, attach_type)
+    }
+
+    fn detach_tcx(bpffs_dir: impl AsRef<Path>, program: &PinnedTcxProgram) -> Res<()> {
+        tcx::detach_tcx(bpffs_dir, program)
+    }
+
+    fn has_tcx_link(&mut self, program: &PinnedTcxProgram, attach_type: TcAttachType) -> Res<bool> {
+        tcx::has_tcx_link(self, program, attach_type)
     }
 }
 
 pub(crate) async fn create_veth_pair(
     name: &str,
     peer_name: &str,
-) -> Result<(NetlinkLink, NetlinkLink), InfraError> {
+) -> Res<(NetlinkLink, NetlinkLink)> {
     let handle = default_handle().await?;
 
     let mut peer_msg = LinkMessage::default();
@@ -365,20 +413,35 @@ fn parse_link(msg: LinkMessage) -> NetlinkLink {
 
 /// Fetch a single link by name; called from within an active namespace.
 async fn get_link_impl(handle: &rtnetlink::Handle, name: &str) -> Res<NetlinkLink> {
-    handle
+    // `match_name` makes this a targeted (non-dump) RTM_GETLINK: a name the
+    // kernel doesn't recognize comes back as an ENODEV netlink error, not
+    // an empty stream. The `ok_or_else` below is retained as a fallback in
+    // case some kernel version instead returns a successful empty result.
+    let msg = match handle
         .link()
         .get()
         .match_name(name.to_owned())
         .execute()
         .try_next()
         .await
-        .map_err(InfraError::Netlink)?
-        .map(parse_link)
+    {
+        Ok(msg) => msg,
+        Err(rtnetlink::Error::NetlinkError(err))
+            if err
+                .code
+                .is_some_and(|code| code.get() == -(nix::errno::Errno::ENODEV as i32)) =>
+        {
+            return Err(InfraError::LinkNotFound(name.to_owned()));
+        }
+        Err(err) => return Err(InfraError::Netlink(err)),
+    };
+
+    msg.map(parse_link)
         .ok_or_else(|| InfraError::LinkNotFound(name.to_owned()))
 }
 
 /// List all links; called from within an active namespace.
-async fn list_links_impl(handle: &rtnetlink::Handle) -> Result<Vec<NetlinkLink>, InfraError> {
+async fn list_links_impl(handle: &rtnetlink::Handle) -> Res<Vec<NetlinkLink>> {
     handle
         .link()
         .get()
@@ -443,6 +506,44 @@ async fn link_set_mac_impl(handle: &rtnetlink::Handle, index: u32, mac: MacAddre
         .map_err(InfraError::Netlink)
 }
 
+/// Set (replacing any existing matching entry) an IPv4 address on the link
+/// with the given index; called from within an active namespace.
+async fn link_set_addr_impl(
+    handle: &rtnetlink::Handle,
+    index: u32,
+    ip: Ipv4Addr,
+    prefix_len: u8,
+) -> Res<()> {
+    handle
+        .address()
+        .add(index, ip.into(), prefix_len)
+        .replace()
+        .execute()
+        .await
+        .map_err(InfraError::Netlink)
+}
+
+/// Add (replacing any existing one) the default route via `gateway`,
+/// routed out through the link with the given index; called from within an
+/// active namespace.
+async fn link_add_gateway_impl(
+    handle: &rtnetlink::Handle,
+    index: u32,
+    gateway: Ipv4Addr,
+) -> Res<()> {
+    let route = rtnetlink::RouteMessageBuilder::<Ipv4Addr>::new()
+        .gateway(gateway)
+        .output_interface(index)
+        .build();
+    handle
+        .route()
+        .add(route)
+        .replace()
+        .execute()
+        .await
+        .map_err(InfraError::Netlink)
+}
+
 /// Rename the link with the given index; called from within an active namespace.
 async fn link_rename_impl(handle: &rtnetlink::Handle, index: u32, new_name: &str) -> Res<()> {
     let mut msg = LinkMessage::default();
@@ -481,7 +582,7 @@ async fn link_setns_impl(handle: &rtnetlink::Handle, index: u32, target_raw_fd: 
         .map_err(InfraError::Netlink)
 }
 
-async fn default_handle() -> Result<rtnetlink::Handle, InfraError> {
+async fn default_handle() -> Res<rtnetlink::Handle> {
     let (conn, handle, _) = rtnetlink::new_connection().map_err(InfraError::Runtime)?;
     tokio::spawn(conn);
     Ok(handle)
