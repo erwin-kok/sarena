@@ -28,12 +28,18 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - uses: extractions/setup-just@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: just setup
+
       - name: Build
-        run: cargo build
+        run: just build
 
       - name: Test
-        run: >
-          cargo test
-          --exclude sarena-test-runner
-          --exclude sarena-ebpf-programs
-          --exclude sarena-ebpf-test-programs
+        run: just test

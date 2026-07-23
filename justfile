@@ -1,5 +1,9 @@
 export PATH := justfile_directory() / "scapyenv/bin" + ":" + env_var("PATH")
 
+setup:
+    python -m venv scapyenv
+    scapyenv/bin/pip install -r scapy/requirements.txt
+
 # Build all workspace packages (excluding eBPF programs)
 build:
     cargo build
