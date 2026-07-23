@@ -114,68 +114,56 @@ impl Link for NetlinkLink {
 
     async fn set_up(&mut self) -> Res<()> {
         let index = self.index;
-        match &self.netns {
-            Some(ns) => {
-                let netns = Netns::open(ns)?;
-                netns
-                    .run(move |handle| async move { link_set_up_impl(&handle, index).await })
-                    .await
-            }
-            None => {
-                let handle = default_handle().await?;
-                link_set_up_impl(&handle, index).await
-            }
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open(ns)?;
+            netns
+                .run(move |handle| async move { link_set_up_impl(&handle, index).await })
+                .await
+        } else {
+            let handle = default_handle().await?;
+            link_set_up_impl(&handle, index).await
         }
     }
 
     async fn set_down(&mut self) -> Res<()> {
         let index = self.index;
-        match &self.netns {
-            Some(ns) => {
-                let netns = Netns::open(ns)?;
-                netns
-                    .run(move |handle| async move { link_set_down_impl(&handle, index).await })
-                    .await
-            }
-            None => {
-                let handle = default_handle().await?;
-                link_set_down_impl(&handle, index).await
-            }
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open(ns)?;
+            netns
+                .run(move |handle| async move { link_set_down_impl(&handle, index).await })
+                .await
+        } else {
+            let handle = default_handle().await?;
+            link_set_down_impl(&handle, index).await
         }
     }
 
     async fn set_mtu(&mut self, mtu: u32) -> Res<()> {
         let index = self.index;
-        match &self.netns {
-            Some(ns) => {
-                let netns = Netns::open(ns)?;
-                netns
-                    .run(move |handle| async move { link_set_mtu_impl(&handle, index, mtu).await })
-                    .await
-            }
-            None => {
-                let handle = default_handle().await?;
-                link_set_mtu_impl(&handle, index, mtu).await
-            }
-        }?;
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open(ns)?;
+            netns
+                .run(move |handle| async move { link_set_mtu_impl(&handle, index, mtu).await })
+                .await?;
+        } else {
+            let handle = default_handle().await?;
+            link_set_mtu_impl(&handle, index, mtu).await?;
+        }
         self.mtu = Some(mtu);
         Ok(())
     }
 
     async fn set_mac(&mut self, mac: MacAddress) -> Res<()> {
         let index = self.index;
-        match &self.netns {
-            Some(ns) => {
-                let netns = Netns::open(ns)?;
-                netns
-                    .run(move |handle| async move { link_set_mac_impl(&handle, index, mac).await })
-                    .await
-            }
-            None => {
-                let handle = default_handle().await?;
-                link_set_mac_impl(&handle, index, mac).await
-            }
-        }?;
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open(ns)?;
+            netns
+                .run(move |handle| async move { link_set_mac_impl(&handle, index, mac).await })
+                .await?;
+        } else {
+            let handle = default_handle().await?;
+            link_set_mac_impl(&handle, index, mac).await?
+        }
         self.mac = Some(mac);
         Ok(())
     }
@@ -184,23 +172,20 @@ impl Link for NetlinkLink {
         let target = Netns::open(target_ns)?;
         let target_raw_fd = target.fd.as_raw_fd();
         let index = self.index;
-        match &self.netns {
-            Some(ns) => {
-                let netns = Netns::open(ns)?;
-                netns
-                    .run(move |handle| async move {
-                        // Keep `target` alive so `target_raw_fd` remains valid.
-                        let _keep = target;
-                        link_setns_impl(&handle, index, target_raw_fd).await
-                    })
-                    .await?;
-            }
-            None => {
-                let handle = default_handle().await?;
-                // Keep `target` alive so `target_raw_fd` remains valid.
-                let _keep = target;
-                link_setns_impl(&handle, index, target_raw_fd).await?;
-            }
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open(ns)?;
+            netns
+                .run(move |handle| async move {
+                    // Keep `target` alive so `target_raw_fd` remains valid.
+                    let _keep = target;
+                    link_setns_impl(&handle, index, target_raw_fd).await
+                })
+                .await?;
+        } else {
+            let handle = default_handle().await?;
+            // Keep `target` alive so `target_raw_fd` remains valid.
+            let _keep = target;
+            link_setns_impl(&handle, index, target_raw_fd).await?;
         }
         self.netns = Some(target_ns.to_owned());
         Ok(())
@@ -209,73 +194,61 @@ impl Link for NetlinkLink {
     async fn rename(&mut self, new_name: &str) -> Res<()> {
         let index = self.index;
         let owned_name = new_name.to_owned();
-        match &self.netns {
-            Some(ns) => {
-                let netns = Netns::open(ns)?;
-                netns
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open(ns)?;
+            netns
                     .run(move |handle| async move {
                         link_rename_impl(&handle, index, &owned_name).await
                     })
-                    .await
-            }
-            None => {
-                let handle = default_handle().await?;
-                link_rename_impl(&handle, index, &owned_name).await
-            }
-        }?;
-        self.name = new_name.to_owned();
+                    .await?;
+        } else {
+            let handle = default_handle().await?;
+            link_rename_impl(&handle, index, &owned_name).await?
+        }
+        new_name.clone_into(&mut self.name);
         Ok(())
     }
 
     async fn delete(&mut self) -> Res<()> {
         let index = self.index;
-        match &self.netns {
-            Some(ns) => {
-                let netns = Netns::open(ns)?;
-                netns
-                    .run(move |handle| async move { link_delete_impl(&handle, index).await })
-                    .await
-            }
-            None => {
-                let handle = default_handle().await?;
-                link_delete_impl(&handle, index).await
-            }
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open(ns)?;
+            netns
+                .run(move |handle| async move { link_delete_impl(&handle, index).await })
+                .await
+        } else {
+            let handle = default_handle().await?;
+            link_delete_impl(&handle, index).await
         }
     }
 
     async fn set_addr(&mut self, ip: Ipv4Addr, prefix_len: u8) -> Res<()> {
         let index = self.index;
-        match &self.netns {
-            Some(ns) => {
-                let netns = Netns::open(ns)?;
-                netns
-                    .run(move |handle| async move {
-                        link_set_addr_impl(&handle, index, ip, prefix_len).await
-                    })
-                    .await
-            }
-            None => {
-                let handle = default_handle().await?;
-                link_set_addr_impl(&handle, index, ip, prefix_len).await
-            }
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open(ns)?;
+            netns
+                .run(move |handle| async move {
+                    link_set_addr_impl(&handle, index, ip, prefix_len).await
+                })
+                .await
+        } else {
+            let handle = default_handle().await?;
+            link_set_addr_impl(&handle, index, ip, prefix_len).await
         }
     }
 
     async fn add_gateway(&mut self, gateway: Ipv4Addr) -> Res<()> {
         let index = self.index;
-        match &self.netns {
-            Some(ns) => {
-                let netns = Netns::open(ns)?;
-                netns
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open(ns)?;
+            netns
                     .run(move |handle| async move {
                         link_add_gateway_impl(&handle, index, gateway).await
                     })
                     .await
-            }
-            None => {
-                let handle = default_handle().await?;
-                link_add_gateway_impl(&handle, index, gateway).await
-            }
+        } else {
+            let handle = default_handle().await?;
+            link_add_gateway_impl(&handle, index, gateway).await
         }
     }
 }

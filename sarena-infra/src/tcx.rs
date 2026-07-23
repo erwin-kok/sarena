@@ -39,7 +39,7 @@ fn attach_tcx(
 ) -> Res<PinnedTcxProgram> {
     let name = prog_name(prog);
     let options = TcAttachOptions::TcxOrder(LinkOrder::last());
-    let link_id = prog.attach_with_options(&device.ifname(), attach_type, options)?;
+    let link_id = prog.attach_with_options(device.ifname(), attach_type, options)?;
     let link = prog.take_link(link_id)?;
     let fd_link: FdLink = link.try_into()?;
     // Grab the kernel's own numeric ID for this link *before* `.pin()`
@@ -81,9 +81,8 @@ fn prog_name(prog: &SchedClassifier) -> String {
 }
 
 pub(crate) fn update_link(pin_path: std::path::PathBuf, prog: &mut SchedClassifier) -> Res<u32> {
-    let pinned_link = PinnedLink::from_pin(&pin_path).map_err(|err| {
+    let pinned_link = PinnedLink::from_pin(&pin_path).inspect_err(|_| {
         let _ = fs::remove_file(&pin_path);
-        err
     })?;
     let fd_link: FdLink = pinned_link.into();
     let link_id = fd_link.info()?.id();
@@ -100,9 +99,8 @@ pub(crate) fn update_link(pin_path: std::path::PathBuf, prog: &mut SchedClassifi
 }
 
 pub(crate) fn unpin_link(pin_path: std::path::PathBuf) -> Res<()> {
-    let pinned_link = PinnedLink::from_pin(&pin_path).map_err(|err| {
+    let pinned_link = PinnedLink::from_pin(&pin_path).inspect_err(|_| {
         let _ = fs::remove_file(&pin_path);
-        err
     })?;
     pinned_link.unpin().map_err(|e| InfraError::Io {
         context: format!("unpin link {}", pin_path.to_string_lossy()),
