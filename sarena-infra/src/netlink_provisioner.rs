@@ -13,6 +13,7 @@ impl NetworkProvisioner for NetlinkNetworkProvisioner {
         Netns::create(name).await
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn delete_netns(&mut self, name: &str) -> Res<()> {
         Netns::delete(name)
     }

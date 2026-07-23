@@ -56,8 +56,6 @@ env_logger = { version = "0.11.5", default-features = false }
 futures = { version = "0.3.32", default-features = false }
 hex = { version = "0.4", default-features = false }
 ipnetwork = { version ="0.21.1", default-features = false }
-libbpf-sys = { version = "1.7.0", default-features = false }
-libc = { version = "0.2.159", default-features = false }
 log = { version = "0.4.22", default-features = false }
 network-types = { version = "0.2.0", default-features = false }
 proc-macro2 = { version = "1", default-features = false }

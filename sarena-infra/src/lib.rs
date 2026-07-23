@@ -12,7 +12,7 @@ pub mod netlink_provisioner;
 pub mod netns;
 pub mod tcx;
 
-#[cfg(any(test, feature = "test-support"))]
+#[cfg(any(test, feature = "test"))]
 pub mod test_support;
 
 pub use mac_address::MacAddress;

@@ -120,7 +120,7 @@ impl Link for NetlinkLink {
                 .run(move |handle| async move { link_set_up_impl(&handle, index).await })
                 .await
         } else {
-            let handle = default_handle().await?;
+            let handle = default_handle()?;
             link_set_up_impl(&handle, index).await
         }
     }
@@ -133,7 +133,7 @@ impl Link for NetlinkLink {
                 .run(move |handle| async move { link_set_down_impl(&handle, index).await })
                 .await
         } else {
-            let handle = default_handle().await?;
+            let handle = default_handle()?;
             link_set_down_impl(&handle, index).await
         }
     }
@@ -146,7 +146,7 @@ impl Link for NetlinkLink {
                 .run(move |handle| async move { link_set_mtu_impl(&handle, index, mtu).await })
                 .await?;
         } else {
-            let handle = default_handle().await?;
+            let handle = default_handle()?;
             link_set_mtu_impl(&handle, index, mtu).await?;
         }
         self.mtu = Some(mtu);
@@ -161,7 +161,7 @@ impl Link for NetlinkLink {
                 .run(move |handle| async move { link_set_mac_impl(&handle, index, mac).await })
                 .await?;
         } else {
-            let handle = default_handle().await?;
+            let handle = default_handle()?;
             link_set_mac_impl(&handle, index, mac).await?
         }
         self.mac = Some(mac);
@@ -182,7 +182,7 @@ impl Link for NetlinkLink {
                 })
                 .await?;
         } else {
-            let handle = default_handle().await?;
+            let handle = default_handle()?;
             // Keep `target` alive so `target_raw_fd` remains valid.
             let _keep = target;
             link_setns_impl(&handle, index, target_raw_fd).await?;
@@ -202,7 +202,7 @@ impl Link for NetlinkLink {
                     })
                     .await?;
         } else {
-            let handle = default_handle().await?;
+            let handle = default_handle()?;
             link_rename_impl(&handle, index, &owned_name).await?
         }
         new_name.clone_into(&mut self.name);
@@ -217,7 +217,7 @@ impl Link for NetlinkLink {
                 .run(move |handle| async move { link_delete_impl(&handle, index).await })
                 .await
         } else {
-            let handle = default_handle().await?;
+            let handle = default_handle()?;
             link_delete_impl(&handle, index).await
         }
     }
@@ -232,7 +232,7 @@ impl Link for NetlinkLink {
                 })
                 .await
         } else {
-            let handle = default_handle().await?;
+            let handle = default_handle()?;
             link_set_addr_impl(&handle, index, ip, prefix_len).await
         }
     }
@@ -247,7 +247,7 @@ impl Link for NetlinkLink {
                     })
                     .await
         } else {
-            let handle = default_handle().await?;
+            let handle = default_handle()?;
             link_add_gateway_impl(&handle, index, gateway).await
         }
     }
@@ -278,7 +278,7 @@ pub(crate) async fn create_veth_pair(
     name: &str,
     peer_name: &str,
 ) -> Res<(NetlinkLink, NetlinkLink)> {
-    let handle = default_handle().await?;
+    let handle = default_handle()?;
 
     let mut peer_msg = LinkMessage::default();
     peer_msg
@@ -306,7 +306,7 @@ pub(crate) async fn create_veth_pair(
 
 /// Return the [`Link`] with the given *name*.
 pub(crate) async fn get_link_by_name(name: &str) -> Res<NetlinkLink> {
-    let handle = default_handle().await?;
+    let handle = default_handle()?;
     let name = name.to_owned();
     get_link_impl(&handle, &name).await
 }
@@ -322,7 +322,7 @@ pub(crate) async fn get_link_by_name_in_ns(ns: &str, name: &str) -> Res<NetlinkL
 
 /// Return all interfaces visible in the default namespace.
 pub(crate) async fn list_links() -> Res<Vec<NetlinkLink>> {
-    let handle = default_handle().await?;
+    let handle = default_handle()?;
     list_links_impl(&handle).await
 }
 
@@ -555,7 +555,7 @@ async fn link_setns_impl(handle: &rtnetlink::Handle, index: u32, target_raw_fd: 
         .map_err(InfraError::Netlink)
 }
 
-async fn default_handle() -> Res<rtnetlink::Handle> {
+fn default_handle() -> Res<rtnetlink::Handle> {
     let (conn, handle, _) = rtnetlink::new_connection().map_err(InfraError::Runtime)?;
     tokio::spawn(conn);
     Ok(handle)

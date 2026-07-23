@@ -32,6 +32,7 @@ pub struct MockLink {
     pub next_link_id: u32,
 }
 
+#[allow(clippy::unused_async_trait_impl)]
 impl Link for MockLink {
     fn ifname(&self) -> &str {
         &self.ifname

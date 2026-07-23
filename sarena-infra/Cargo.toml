@@ -36,4 +36,4 @@ libbpf-rs = "0.26"
 libbpf-sys = "1"
 
 [features]
-test-support = []
+test = []

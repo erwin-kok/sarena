@@ -51,7 +51,7 @@ impl Drop for CleanupGuard {
         let name = self.0.clone();
         let cleanup = Netns::delete(&name);
         match cleanup {
-            Ok(_) => {}
+            Ok(()) => {}
             Err(e) => eprintln!("warning: failed to clean up test namespace {name:?}: {e}"),
         }
     }

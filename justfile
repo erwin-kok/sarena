@@ -23,7 +23,7 @@ clippy:
 # Run all tests except the eBPF test runner (requires root + installed eBPF programs)
 test:
     cargo test --workspace \
-        --features test-support \
+        --features test \
         --exclude sarena-test-runner \
         --exclude sarena-ebpf-programs \
         --exclude sarena-ebpf-test-programs
@@ -58,7 +58,7 @@ netns-clean:
 infra-test: netns-clean
     #!/usr/bin/env bash
     set -euo pipefail
-    exes=$(cargo test -p sarena-infra --features test-support --tests --no-run --message-format=json \
+    exes=$(cargo test -p sarena-infra --features test --tests --no-run --message-format=json \
         | jq -r 'select(.profile.test == true) | .executable | select(. != null)')
     for exe in $exes; do
         just netns-clean

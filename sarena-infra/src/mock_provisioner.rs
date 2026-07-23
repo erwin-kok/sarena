@@ -12,6 +12,7 @@ pub struct MockNetworkProvisioner {
     next_ifindex: u32,
 }
 
+#[allow(clippy::unused_async_trait_impl)]
 impl NetworkProvisioner for MockNetworkProvisioner {
     type LinkType = MockLink;
 
@@ -91,6 +92,7 @@ impl NetworkProvisioner for MockNetworkProvisioner {
     }
 }
 
+#[allow(clippy::unused_async_trait_impl)]
 impl MockNetworkProvisioner {
     pub fn add_link(&mut self, link: MockLink) {
         self.links.push(link);
