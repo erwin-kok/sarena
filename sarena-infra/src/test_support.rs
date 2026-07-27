@@ -4,7 +4,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::Netns;
+use crate::{Netns, NetnsGuard};
 
 /// A short, likely-unique name for a test-owned namespace or link.
 ///
@@ -39,20 +39,7 @@ where
         .await
         .expect("failed to create temporary test namespace");
 
-    let _guard = CleanupGuard(name.clone());
+    let _guard = NetnsGuard::new(name.clone());
 
     body(name).await
-}
-
-struct CleanupGuard(String);
-
-impl Drop for CleanupGuard {
-    fn drop(&mut self) {
-        let name = self.0.clone();
-        let cleanup = Netns::delete(&name);
-        match cleanup {
-            Ok(()) => {}
-            Err(e) => eprintln!("warning: failed to clean up test namespace {name:?}: {e}"),
-        }
-    }
 }

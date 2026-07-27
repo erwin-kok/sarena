@@ -64,66 +64,10 @@ async fn has_default_gateway(ns: &str, ifindex: u32, gateway: Ipv4Addr) -> bool 
 #[tokio::test]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn veth_pair_create_and_configure() {
-    test_support::with_temp_netns("dpi-veth-", |ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
-        let name = test_support::unique_name("dpiv0-");
-        let peer_name = test_support::unique_name("dpiv1-");
-        let pair = provisioner
-            .create_veth(VethSpec {
-                host_ifname: name.clone(),
-                peer_ifname: peer_name.clone(),
-                peer_netns: ns.clone(),
-                host_mac: None,
-                peer_mac: None,
-            })
-            .await
-            .expect("create_veth failed");
-        let (mut host, peer) = (pair.host, pair.peer);
-        host.set_ns(&ns).await.expect("link_setns failed for host");
-
-        // Both ends have left the default namespace.
-        assert!(provisioner.get_link(&name).await.is_err());
-        assert!(provisioner.get_link(&peer_name).await.is_err());
-
-        assert_eq!(host.name, name);
-        assert_eq!(peer.name, peer_name);
-        assert_eq!(host.kind, LinkKind::Veth);
-        assert_eq!(peer.kind, LinkKind::Veth);
-        assert!(!host.is_up(), "veth ends should start down");
-
-        host.set_up().await.expect("link_set_up failed");
-        let refreshed = provisioner.get_link_in_ns(&ns, &name).await.unwrap();
-        assert!(refreshed.is_up());
-
-        host.set_mtu(1400).await.expect("link_set_mtu failed");
-        let refreshed = provisioner.get_link_in_ns(&ns, &name).await.unwrap();
-        assert_eq!(refreshed.mtu, Some(1400));
-
-        let mac = MacAddress::parse("02:00:00:00:00:01").expect("valid MAC literal");
-        host.set_mac(mac).await.expect("link_set_mac failed");
-        let refreshed = provisioner.get_link_in_ns(&ns, &name).await.unwrap();
-        assert_eq!(refreshed.mac, Some(mac));
-
-        host.set_down().await.expect("link_set_down failed");
-        let refreshed = provisioner.get_link_in_ns(&ns, &name).await.unwrap();
-        assert!(!refreshed.is_up());
-
-        host.delete().await.expect("delete failed");
-        assert!(provisioner.get_link_in_ns(&ns, &name).await.is_err());
-
-        // Deleting one end of a veth pair deletes both.
-        assert!(provisioner.get_link_in_ns(&ns, &peer_name).await.is_err());
-    })
-    .await;
-}
-
-#[tokio::test]
-#[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
-async fn veth_pair_create_and_configure_default_ns() {
-    // The peer end still needs *some* namespace -- `create_veth` always
-    // moves it, mirroring how the router actually wires up a veth pair --
-    // so this uses a throwaway namespace for the peer while keeping the
-    // host end (the one under test here) in the default namespace.
+    // The host end starts in the default namespace and stays there for
+    // this test; the peer end always needs *some* namespace --
+    // `create_veth` always moves it -- so this uses a throwaway namespace
+    // for the peer.
     test_support::with_temp_netns("dpid-peer-", |peer_ns| async move {
         let mut provisioner = NetlinkNetworkProvisioner;
         let name = test_support::unique_name("dpid0-");
@@ -140,11 +84,16 @@ async fn veth_pair_create_and_configure_default_ns() {
             .expect("create_veth failed");
         let (mut host, peer) = (pair.host, pair.peer);
 
-        assert_eq!(host.name, name);
-        assert_eq!(peer.name, peer_name);
-        assert_eq!(host.kind, LinkKind::Veth);
-        assert_eq!(peer.kind, LinkKind::Veth);
-        assert!(!host.is_up(), "veth ends should start down");
+        assert_eq!(host.ifname(), name);
+        assert_eq!(peer.ifname(), peer_name);
+        let host_snapshot = provisioner.get_link(&name).await.unwrap();
+        let peer_snapshot = provisioner
+            .get_link_in_ns(&peer_ns, &peer_name)
+            .await
+            .unwrap();
+        assert_eq!(host_snapshot.kind, LinkKind::Veth);
+        assert_eq!(peer_snapshot.kind, LinkKind::Veth);
+        assert!(!host_snapshot.is_up(), "veth ends should start down");
 
         host.set_up().await.expect("link_set_up failed");
         let refreshed = provisioner.get_link(&name).await.unwrap();
@@ -208,12 +157,11 @@ async fn rename_link_by_name() {
             .await
             .expect("create_veth failed");
         let mut host = pair.host;
-        host.set_ns(&ns).await.expect("link_setns failed for host");
 
         host.rename(&to_name).await.expect("rename failed");
 
-        assert!(provisioner.get_link_in_ns(&ns, &from_name).await.is_err());
-        assert!(provisioner.get_link_in_ns(&ns, &to_name).await.is_ok());
+        assert!(provisioner.get_link(&from_name).await.is_err());
+        assert!(provisioner.get_link(&to_name).await.is_ok());
     })
     .await;
 }
@@ -229,7 +177,8 @@ async fn link_setns_moves_only_the_moved_end() {
             let mut provisioner = NetlinkNetworkProvisioner;
             let host_name = test_support::unique_name("dpimv0-");
             let peer_name = test_support::unique_name("dpimv1-");
-            // `create_veth` moves the peer into `ns_a` as part of creation.
+            // `create_veth` moves the peer into `ns_a` as part of creation;
+            // the host end stays in the default namespace.
             let pair = provisioner
                 .create_veth(VethSpec {
                     host_ifname: host_name.clone(),
@@ -240,28 +189,22 @@ async fn link_setns_moves_only_the_moved_end() {
                 })
                 .await
                 .expect("create_veth failed");
-            let (mut host_end, mut peer) = (pair.host, pair.peer);
-            host_end
-                .set_ns(&ns_a)
-                .await
-                .expect("link_setns failed for host_end");
+            let (mut host, peer) = (pair.host, pair.peer);
 
-            // Both ends have left the default namespace.
+            host.set_ns(&ns_b).await.expect("link_setns failed");
+
+            // The moved end is gone from the default namespace and present
+            // in ns_b.
             assert!(provisioner.get_link(&host_name).await.is_err());
-            assert!(provisioner.get_link(&peer_name).await.is_err());
+            assert!(provisioner.get_link_in_ns(&ns_b, &host_name).await.is_ok());
 
-            peer.set_ns(&ns_b).await.expect("link_setns failed");
-
-            // The moved end is gone from ns_a and present in ns_b.
-            assert!(provisioner.get_link_in_ns(&ns_a, &peer_name).await.is_err());
-            assert!(provisioner.get_link_in_ns(&ns_b, &peer_name).await.is_ok());
-
-            // The end that stayed behind is still exactly where it was.
+            // The end that stayed behind (the peer, in ns_a) is still
+            // exactly the same interface it always was.
             let still_there = provisioner
-                .get_link_in_ns(&ns_a, &host_name)
+                .get_link_in_ns(&ns_a, &peer_name)
                 .await
-                .expect("host_end should still be in ns_a");
-            assert_eq!(still_there.index, host_end.index);
+                .expect("peer should still be in ns_a");
+            assert_eq!(still_there.index, peer.ifindex());
         })
         .await;
     })
@@ -460,7 +403,6 @@ async fn delete_twice_fails_the_second_time() {
             .await
             .expect("create_veth failed");
         let mut host = pair.host;
-        host.set_ns(&ns).await.expect("link_setns failed for host");
 
         host.delete().await.expect("first delete failed");
         assert!(

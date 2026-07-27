@@ -10,7 +10,7 @@ impl NetworkProvisioner for NetlinkNetworkProvisioner {
     type LinkType = NetlinkLink;
 
     async fn create_netns(&mut self, name: &str) -> Res<()> {
-        Netns::create(name).await
+        Netns::create(name).await.map(|_| ())
     }
 
     #[allow(clippy::unused_async_trait_impl)]

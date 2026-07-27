@@ -1,4 +1,7 @@
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use aya::programs::{
     LinkOrder, SchedClassifier, TcAttachType,
@@ -18,17 +21,29 @@ pub fn upsert_tcx_program(
     bpffs_dir: impl AsRef<Path>,
     attach_type: TcAttachType,
 ) -> Res<PinnedTcxProgram> {
-    if let Ok(program) = update_tcx(prog, &bpffs_dir) {
+    // Computed once and shared with both branches below: `prog_name` costs a
+    // real `bpf_obj_get_info_by_fd` syscall, and it can't change between an
+    // `update_tcx` attempt and a fallback `attach_tcx` for the same call.
+    let name = prog_name(prog);
+    if let Ok(program) = update_tcx(device, prog, &bpffs_dir, &name) {
         return Ok(program);
     }
-    attach_tcx(device, prog, &bpffs_dir, attach_type)
+    attach_tcx(device, prog, &bpffs_dir, attach_type, name)
 }
 
-fn update_tcx(prog: &mut SchedClassifier, bpffs_dir: impl AsRef<Path>) -> Res<PinnedTcxProgram> {
-    let name = prog_name(prog);
-    let pin_path = bpffs_dir.as_ref().join(&name);
+fn update_tcx(
+    device: &impl Link,
+    prog: &mut SchedClassifier,
+    bpffs_dir: impl AsRef<Path>,
+    name: &str,
+) -> Res<PinnedTcxProgram> {
+    let pin_path = pin_path(&bpffs_dir, device, name);
     let link_id = update_link(pin_path, prog)?;
-    Ok(PinnedTcxProgram { name, link_id })
+    Ok(PinnedTcxProgram {
+        name: name.to_owned(),
+        link_id,
+        ifname: device.ifname().to_owned(),
+    })
 }
 
 fn attach_tcx(
@@ -36,8 +51,8 @@ fn attach_tcx(
     prog: &mut SchedClassifier,
     bpffs_dir: impl AsRef<Path>,
     attach_type: TcAttachType,
+    name: String,
 ) -> Res<PinnedTcxProgram> {
-    let name = prog_name(prog);
     let options = TcAttachOptions::TcxOrder(LinkOrder::last());
     let link_id = prog.attach_with_options(device.ifname(), attach_type, options)?;
     let link = prog.take_link(link_id)?;
@@ -46,14 +61,13 @@ fn attach_tcx(
     // consumes it -- this is what `has_tcx_link` will later match against,
     // instead of the (truncated, non-unique) program name.
     let link_id = fd_link.info()?.id();
-    let pin_path = bpffs_dir.as_ref().join(&name);
+    let pin_path = pin_path(&bpffs_dir, device, &name);
     fd_link.pin(&pin_path)?;
-    Ok(PinnedTcxProgram { name, link_id })
-}
-
-pub fn detach_tcx(bpffs_dir: impl AsRef<Path>, program: &PinnedTcxProgram) -> Res<()> {
-    let pin_path = bpffs_dir.as_ref().join(&program.name);
-    unpin_link(pin_path)
+    Ok(PinnedTcxProgram {
+        name,
+        link_id,
+        ifname: device.ifname().to_owned(),
+    })
 }
 
 pub fn has_tcx_link(
@@ -73,18 +87,8 @@ pub fn has_tcx_link(
     ))
 }
 
-/// Aya truncates this to 16 bytes (`BPF_OBJ_NAME_LEN`); it's used to build
-/// the pin path, not as a unique identifier -- see [`PinnedTcxProgram`].
-fn prog_name(prog: &SchedClassifier) -> String {
-    let info = prog.info().unwrap();
-    info.name_as_str().unwrap_or("[unknown]").to_owned()
-}
-
-pub(crate) fn update_link(pin_path: std::path::PathBuf, prog: &mut SchedClassifier) -> Res<u32> {
-    let pinned_link = PinnedLink::from_pin(&pin_path).inspect_err(|_| {
-        let _ = fs::remove_file(&pin_path);
-    })?;
-    let fd_link: FdLink = pinned_link.into();
+pub(crate) fn update_link(pin_path: PathBuf, prog: &mut SchedClassifier) -> Res<u32> {
+    let fd_link: FdLink = open_pin(&pin_path)?.into();
     let link_id = fd_link.info()?.id();
     let link: SchedClassifierLink = fd_link.try_into()?;
     let link_id_internal = prog.attach_to_link(link)?;
@@ -98,13 +102,39 @@ pub(crate) fn update_link(pin_path: std::path::PathBuf, prog: &mut SchedClassifi
     Ok(link_id)
 }
 
-pub(crate) fn unpin_link(pin_path: std::path::PathBuf) -> Res<()> {
-    let pinned_link = PinnedLink::from_pin(&pin_path).inspect_err(|_| {
-        let _ = fs::remove_file(&pin_path);
-    })?;
-    pinned_link.unpin().map_err(|e| InfraError::Io {
+pub(crate) fn unpin_link(pin_path: PathBuf) -> Res<()> {
+    open_pin(&pin_path)?.unpin().map_err(|e| InfraError::Io {
         context: format!("unpin link {}", pin_path.to_string_lossy()),
         source: e,
     })?;
     Ok(())
+}
+
+/// Single source of truth for how a `(device, program name)` pair maps to
+/// a pin filename -- shared with [`crate::PinnedTcxProgram::detach`], which
+/// needs to reconstruct the exact same path from the fields it stored at
+/// attach time.
+pub(crate) fn pin_filename(ifname: &str, name: &str) -> String {
+    format!("{ifname}-{name}")
+}
+
+fn pin_path(bpffs_dir: impl AsRef<Path>, device: &impl Link, name: &str) -> PathBuf {
+    bpffs_dir.as_ref().join(pin_filename(device.ifname(), name))
+}
+
+/// Aya truncates this to 16 bytes (`BPF_OBJ_NAME_LEN`); it's used to build
+/// the pin path, not as a unique identifier -- see [`PinnedTcxProgram`].
+fn prog_name(prog: &SchedClassifier) -> String {
+    let info = prog.info().unwrap();
+    info.name_as_str().unwrap_or("[unknown]").to_owned()
+}
+
+/// Opens the `bpf_link` pinned at `pin_path`. On failure, best-effort
+/// removes whatever's at `pin_path` -- shared by [`update_link`] and
+/// [`unpin_link`], both of which previously duplicated this exact
+/// open-or-clean-up sequence.
+fn open_pin(pin_path: &Path) -> Res<PinnedLink> {
+    Ok(PinnedLink::from_pin(pin_path).inspect_err(|_| {
+        let _ = fs::remove_file(pin_path);
+    })?)
 }

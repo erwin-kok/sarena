@@ -262,11 +262,16 @@ impl TcxAttach for NetlinkLink {
         bpffs_dir: impl AsRef<Path>,
         attach_type: TcAttachType,
     ) -> Res<PinnedTcxProgram> {
+        // See `TcxAttach::upsert_tcx_program`'s doc comment: only a link in
+        // the caller's own namespace can have a program attached, since a
+        // pin created from here would land in the wrong place otherwise.
+        if let Some(netns) = &self.netns {
+            return Err(InfraError::TcxRequiresLocalLink {
+                ifname: self.name.clone(),
+                netns: netns.clone(),
+            });
+        }
         tcx::upsert_tcx_program(self, prog, bpffs_dir, attach_type)
-    }
-
-    fn detach_tcx(bpffs_dir: impl AsRef<Path>, program: &PinnedTcxProgram) -> Res<()> {
-        tcx::detach_tcx(bpffs_dir, program)
     }
 
     fn has_tcx_link(&mut self, program: &PinnedTcxProgram, attach_type: TcAttachType) -> Res<bool> {
@@ -315,9 +320,15 @@ pub(crate) async fn get_link_by_name(name: &str) -> Res<NetlinkLink> {
 pub(crate) async fn get_link_by_name_in_ns(ns: &str, name: &str) -> Res<NetlinkLink> {
     let netns = Netns::open(ns)?;
     let name = name.to_owned();
-    netns
+    let mut link = netns
         .run(move |handle| async move { get_link_impl(&handle, &name).await })
-        .await
+        .await?;
+    // `parse_link` (called from inside the entered namespace above) has no
+    // way to know its own name -- stamp it here so the returned snapshot
+    // actually reflects where it was fetched from, instead of always
+    // looking like a default-namespace link.
+    link.netns = Some(ns.to_owned());
+    Ok(link)
 }
 
 /// Return all interfaces visible in the default namespace.
@@ -329,9 +340,14 @@ pub(crate) async fn list_links() -> Res<Vec<NetlinkLink>> {
 /// Return all interfaces visible inside namespace *ns*.
 pub(crate) async fn list_links_in_ns(ns: &str) -> Res<Vec<NetlinkLink>> {
     let netns = Netns::open(ns)?;
-    netns
+    let mut links = netns
         .run(move |handle| async move { list_links_impl(&handle).await })
-        .await
+        .await?;
+    // See `get_link_by_name_in_ns` -- same reasoning.
+    for link in &mut links {
+        link.netns = Some(ns.to_owned());
+    }
+    Ok(links)
 }
 
 /// Convert a raw `RTM_NEWLINK` message into a [`Link`].

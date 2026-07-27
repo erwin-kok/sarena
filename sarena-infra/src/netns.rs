@@ -34,6 +34,7 @@ const THREAD_SELF_NS_PATH: &str = "/proc/thread-self/ns/net";
 static NETNS_DIR_BOOTSTRAP: Mutex<()> = Mutex::new(());
 
 /// A named network namespace that closures can be executed inside.
+#[derive(Debug)]
 pub struct Netns {
     pub path: PathBuf,
     pub fd: File,
@@ -61,53 +62,59 @@ impl Netns {
         Ok(Self { path, fd })
     }
 
-    /// Create a new, persistent network namespace named `name`, reachable
-    /// afterwards via `Netns::open(name)`.
+    /// Create a new, persistent network namespace named `name` and return a
+    /// handle to it, equivalent to (but one syscall cheaper than) an
+    /// immediately following `Netns::open(name)`.
+    ///
+    /// Like `open`/`open_path`, the returned handle does **not** own the
+    /// namespace's lifetime -- dropping it just closes its `fd`. The
+    /// namespace itself persists until an explicit [`Netns::delete`]; use
+    /// [`NetnsGuard`] if you want deletion tied to a Rust value's scope
+    /// instead.
     ///
     /// This provisions **only** a loopback interface brought up (`lo`); every
     /// fresh Linux network namespace has one, but it starts down. Anything
     /// beyond that -- in particular, giving the namespace a way to reach
     /// anything else -- is a separate, explicit step: see
-    /// [`crate::link::create_veth_pair`] and [`crate::network::LinkHandle::set_ns`].
+    /// [`crate::netlink_link::create_veth_pair`] and
+    /// [`crate::netlink_link::NetlinkLink::set_ns`].
     ///
     /// Fails with [`InfraError::NamespaceExists`] if `name` is already taken.
     /// On any failure after the namespace file is created, this rolls back
     /// (unmounts/removes it) rather than leaving a broken entry behind.
-    pub async fn create(name: &str) -> Res<()> {
+    pub async fn create(name: &str) -> Res<Self> {
         ensure_netns_dir()?;
 
         let path = Path::new(NETNS_PATH).join(name);
-        if path.exists() {
-            return Err(InfraError::NamespaceExists(name.to_owned()));
-        }
 
-        std::fs::File::create(&path).map_err(|e| InfraError::Io {
-            context: format!("create {}", path.display()),
-            source: e,
-        })?;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map_err(|e| match e.kind() {
+                std::io::ErrorKind::AlreadyExists => InfraError::NamespaceExists(name.to_owned()),
+                _ => InfraError::Io {
+                    context: format!("create {}", path.display()),
+                    source: e,
+                },
+            })?;
 
         let path_for_thread = path.clone();
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        std::thread::Builder::new()
-            .name(format!("netns-create-{name}"))
-            .spawn(move || {
-                let outcome = create_netns_on_thread(&path_for_thread);
-                let _ = tx.send(outcome);
-            })
-            .map_err(InfraError::SpawnThread)?;
-
-        let result = rx.await.map_err(|_| InfraError::ThreadPanicked)?;
+        let result = spawn_thread(format!("netns-create-{name}"), move || {
+            create_netns_on_thread(&path_for_thread)
+        })
+        .await;
 
         if let Err(err) = result {
             rollback_netns_file(&path);
             return Err(err);
         }
 
-        Ok(())
+        Self::open(name)
     }
 
     /// Delete the namespace named `name`, created previously via
-    /// [`create_netns`] (or `ip netns add`).
+    /// [`Netns::create`] (or `ip netns add`).
     ///
     /// This does not itself require thread pinning: unlike `setns`/`unshare`,
     /// plain `mount`/`umount` act on whatever mount namespace the calling
@@ -156,25 +163,54 @@ impl Netns {
         Ok(names)
     }
 
+    /// Unshare a fresh, private network namespace for the **calling
+    /// thread**, making it "the default namespace" for everything that
+    /// thread -- and, transitively, any thread later spawned from it --
+    /// does from this point on, including a tokio runtime built
+    /// afterward. Unlike a named namespace created via [`Netns::create`],
+    /// this one isn't registered under `/run/netns` and vanishes with the
+    /// thread; there's nothing to [`Netns::delete`] or hold a [`Netns`]
+    /// handle to.
+    ///
+    /// # Namespace safety
+    ///
+    /// Unlike every other namespace-switching operation in this module,
+    /// this deliberately does **not** run on a dedicated one-shot thread
+    /// and does **not** restore the previous namespace afterward -- it's
+    /// meant to permanently change what "default" means for the rest of
+    /// the calling thread's life, not to scope a single operation.
+    ///
+    /// This is only safe to call **before** anything that must share the
+    /// *current* default namespace has started running on another thread:
+    ///
+    /// - Under a single-threaded (`current_thread`) tokio runtime, call this as the very first
+    ///   thing the runtime's task does: `block_on` never migrates work to another thread, so
+    ///   everything scheduled afterward inherits it.
+    /// - Under a multi-threaded runtime, this must run **before** the runtime (and its worker pool)
+    ///   is built at all -- a worker thread only inherits the namespace its *creating* thread had
+    ///   at the moment it was spawned, and by the time a multi-thread runtime's `block_on` starts
+    ///   polling anything, its whole pool already exists and may already be executing on several
+    ///   different threads.
+    ///
+    /// Brings `lo` up in the new namespace, mirroring [`Netns::create`].
+    pub async fn unshare_self() -> Res<()> {
+        unshare(CloneFlags::CLONE_NEWNET).map_err(InfraError::CreateNamespace)?;
+
+        let (conn, handle, _) = rtnetlink::new_connection().map_err(InfraError::Runtime)?;
+        tokio::spawn(conn);
+        bring_up_loopback(&handle).await
+    }
+
     /// Execute an async closure **inside this namespace** on a dedicated,
-    /// single-use OS thread, then return to the original namespace.
+    /// single-use OS thread (see [`spawn_thread`]), then return to the
+    /// original namespace.
     ///
     /// # Namespace safety
     ///
     /// `setns(2)` is thread-local: it only affects the calling OS thread.
     /// We therefore need the closure to run pinned to a single OS thread
-    /// for its entire duration.
-    ///
-    /// This deliberately uses a **dedicated `std::thread`**, not
-    /// `tokio::task::spawn_blocking`. `spawn_blocking` pulls from a pool
-    /// shared by the whole process; if this thread ever failed to restore
-    /// its original namespace (see below), it would go back into that pool
-    /// still sitting in the wrong namespace, and some *unrelated* piece of
-    /// blocking work elsewhere in the process could later land on it and
-    /// silently run its syscalls against the wrong namespace. A one-shot
-    /// thread that is never reused eliminates that blast radius entirely:
-    /// worst case, only this thread is affected, and it is about to exit
-    /// anyway.
+    /// for its entire duration -- see [`spawn_thread`] for why that thread
+    /// is dedicated rather than pulled from a shared pool.
     ///
     /// A fresh single-threaded Tokio runtime is built inside that thread so
     /// that `rtnetlink`'s async machinery can run without ever migrating to
@@ -192,31 +228,41 @@ impl Netns {
         Fut: Future<Output = Res<T>> + Send + 'static,
         T: Send + 'static,
     {
-        let (tx, rx) = tokio::sync::oneshot::channel();
         let thread_label = self.path.display().to_string();
 
-        std::thread::Builder::new()
-            .name(format!("netns-run-{thread_label}"))
-            .spawn(move || {
-                let outcome = Self::run_on_dedicated_thread(self, f);
-                // If the receiver was dropped (e.g. the awaiting future was
-                // cancelled), there's nothing left to report to; ignore.
-                let _ = tx.send(outcome);
+        spawn_thread(format!("netns-run-{thread_label}"), move || {
+            self.enter_and_run(|| {
+                // A fresh single-threaded runtime pinned to this thread,
+                // so `rtnetlink`'s async machinery never migrates to
+                // another OS thread.
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(InfraError::Runtime)?;
+                let _enter_guard = rt.enter();
+                let (conn, handle, _) = rtnetlink::new_connection().map_err(InfraError::Runtime)?;
+                rt.spawn(conn);
+                rt.block_on(f(handle))
             })
-            .map_err(InfraError::SpawnThread)?;
-
-        rx.await.map_err(|_| InfraError::ThreadPanicked)?
+        })
+        .await
     }
 
     /// Runs entirely on the calling OS thread: saves the namespace, enters
-    /// the target one, executes `f` on a private single-threaded runtime,
-    /// then restores the original namespace before returning. Must be
-    /// called from a thread dedicated to this single operation.
-    fn run_on_dedicated_thread<F, Fut, T>(self, f: F) -> Res<T>
-    where
-        F: FnOnce(rtnetlink::Handle) -> Fut,
-        Fut: Future<Output = Res<T>>,
-    {
+    /// the target one, executes `f`, then restores the original namespace
+    /// before returning (whether or not `f` panicked -- see below). Must be
+    /// called from a thread dedicated to this single operation, since
+    /// `setns` is thread-local. The dedicated-thread body of [`Netns::run`]
+    /// wraps `f` in a private single-threaded `tokio` runtime first, since
+    /// its `f` needs an `rtnetlink::Handle`.
+    ///
+    /// If `f` panics, the panic is caught just long enough to attempt
+    /// restoring the namespace, then re-raised (so it still propagates as a
+    /// thread panic, surfaced to the caller as [`InfraError::ThreadPanicked`]
+    /// once `run` observes the dedicated thread died). If restoring the
+    /// namespace fails and `f` did *not* panic, that failure is returned as
+    /// [`InfraError::RestoreNamespace`] rather than silently ignored.
+    fn enter_and_run<T>(self, f: impl FnOnce() -> Res<T>) -> Res<T> {
         // 1. Save the current thread's network namespace.
         let current = File::open(THREAD_SELF_NS_PATH).map_err(|e| InfraError::OpenNamespace {
             name: THREAD_SELF_NS_PATH.to_owned(),
@@ -231,22 +277,11 @@ impl Netns {
             }
         })?;
 
-        // 3. Single-threaded runtime pinned to this OS thread.
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(InfraError::Runtime)?;
-        let _enter_guard = rt.enter();
-
-        let (conn, handle, _) = rtnetlink::new_connection().map_err(InfraError::Runtime)?;
-        rt.spawn(conn);
-
-        // 4. Run `f`, catching panics just long enough to still attempt restoring the namespace
+        // 3. Run `f`, catching panics just long enough to still attempt restoring the namespace
         //    before re-raising.
-        let result =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| rt.block_on(f(handle))));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
 
-        // 5. Always attempt to restore, whether `f` panicked or not.
+        // 4. Always attempt to restore, whether `f` panicked or not.
         let restore_result = nix::sched::setns(current.as_fd(), CloneFlags::CLONE_NEWNET);
 
         match result {
@@ -262,6 +297,75 @@ impl Netns {
             Err(panic_payload) => std::panic::resume_unwind(panic_payload),
         }
     }
+}
+
+/// An RAII guard that deletes namespace `name` (via [`Netns::delete`]) when
+/// dropped.
+///
+/// `Netns::create`/`open`/`open_path` deliberately don't imply ownership of
+/// a namespace's lifetime themselves -- they're called repeatedly and
+/// independently for the same name throughout a namespace's life (each
+/// `run` call consumes one), so tying deletion to any single
+/// one of those handles going out of scope would delete the namespace out
+/// from under everyone else still using that name. `NetnsGuard` is instead
+/// for the *one* place that should be responsible for a namespace's
+/// lifetime -- typically whatever created it for a specific purpose (a
+/// test, an endpoint, a control-plane object) -- to tie that responsibility
+/// to a Rust value's scope instead of relying on remembering an explicit
+/// `Netns::delete` call on every exit path (including early returns and
+/// panics).
+///
+/// Best-effort: `Drop` can't return a `Result`, so a deletion failure here
+/// is only logged (to stderr), not propagated.
+pub struct NetnsGuard(String);
+
+impl NetnsGuard {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+}
+
+impl Drop for NetnsGuard {
+    fn drop(&mut self) {
+        if let Err(e) = Netns::delete(&self.0) {
+            eprintln!("warning: failed to clean up namespace {:?}: {e}", self.0);
+        }
+    }
+}
+
+/// Runs synchronous `f` on a dedicated, single-use OS thread, returning its
+/// result asynchronously via a channel -- shared by [`Netns::create`] and
+/// [`Netns::run`], both of which need `f` pinned to one OS thread for its
+/// entire duration (`setns`/`unshare` are thread-local).
+///
+/// Deliberately a **dedicated `std::thread`**, not
+/// `tokio::task::spawn_blocking`: `spawn_blocking` pulls from a pool shared
+/// by the whole process, so if a namespace-switching closure ever failed to
+/// restore its original namespace, the thread would go back into that pool
+/// still sitting in the wrong namespace, and some *unrelated* piece of
+/// blocking work elsewhere in the process could later land on it and
+/// silently run its syscalls against the wrong namespace. A one-shot thread
+/// that is never reused eliminates that blast radius entirely: worst case,
+/// only this thread is affected, and it is about to exit anyway.
+///
+/// If the receiver is dropped before `f` finishes (e.g. the awaiting future
+/// was cancelled), sending the result is a no-op -- there's nothing left to
+/// report to.
+async fn spawn_thread<T, F>(name: String, f: F) -> Res<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Res<T> + Send + 'static,
+{
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    std::thread::Builder::new()
+        .name(name)
+        .spawn(move || {
+            let _ = tx.send(f());
+        })
+        .map_err(InfraError::SpawnThread)?;
+
+    rx.await.map_err(|_| InfraError::ThreadPanicked)?
 }
 
 /// Ensure `/run/netns` exists and is bind-mounted onto itself, marked
@@ -381,7 +485,7 @@ fn create_netns_on_thread(path: &Path) -> Res<()> {
 }
 
 async fn bring_up_loopback(handle: &rtnetlink::Handle) -> Res<()> {
-    let lo_index = handle
+    let lo = handle
         .link()
         .get()
         .match_name("lo".to_owned())
@@ -389,11 +493,10 @@ async fn bring_up_loopback(handle: &rtnetlink::Handle) -> Res<()> {
         .try_next()
         .await
         .map_err(InfraError::Netlink)?
-        .map(|msg| msg.header.index)
         .ok_or_else(|| InfraError::LinkNotFound("lo".to_owned()))?;
 
     let mut msg = LinkMessage::default();
-    msg.header.index = lo_index;
+    msg.header.index = lo.header.index;
     msg.header.flags = LinkFlags::Up;
     msg.header.change_mask = LinkFlags::Up;
     handle

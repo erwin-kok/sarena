@@ -15,6 +15,7 @@ check:
 # clean up target
 clean:
     cargo clean
+    rm -rf target-ebpf
 
 # fmt up target
 fmt:

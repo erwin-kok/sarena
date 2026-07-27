@@ -18,17 +18,19 @@ pub mod test_support;
 pub use mac_address::MacAddress;
 pub use mock_provisioner::MockNetworkProvisioner;
 pub use netlink_provisioner::NetlinkNetworkProvisioner;
-pub use netns::Netns;
+pub use netns::{Netns, NetnsGuard};
 
-/// Everything needed to create one veth pair: the host side stays in the
-/// router's own netns, the peer side gets moved into `peer_netns`.
+/// Everything needed to create one veth pair: the host side stays in
+/// whatever namespace the calling process is already in, the peer side
+/// gets moved into `peer_netns`.
 #[derive(Debug, Clone)]
 pub struct VethSpec {
     pub host_ifname: String,
-    pub peer_ifname: String,
-    pub peer_netns: String,
     pub host_mac: Option<MacAddress>,
+
+    pub peer_ifname: String,
     pub peer_mac: Option<MacAddress>,
+    pub peer_netns: String,
 }
 
 /// What `create_veth` hands back.
@@ -41,11 +43,15 @@ pub struct VethPair<L> {
 #[allow(async_fn_in_trait)]
 pub trait NetworkProvisioner {
     /// Every link this provisioner hands back can also attach/detach TCX
-    /// programs.
+    /// programs -- see [`TcxAttach::upsert_tcx_program`]'s doc comment for
+    /// when that's actually allowed to succeed.
     type LinkType: Link + TcxAttach;
 
+    /// Create namespace `name`.
     async fn create_netns(&mut self, name: &str) -> Res<()>;
+    /// Delete namespace `name`.
     async fn delete_netns(&mut self, netns: &str) -> Res<()>;
+    /// Create a veth pair per `spec`, returning its host and peer ends.
     async fn create_veth(&mut self, spec: VethSpec) -> Res<VethPair<Self::LinkType>>;
     /// Deleting either end of a veth pair deletes both; takes the host end
     /// since that's the one guaranteed to still be reachable from the
@@ -63,8 +69,11 @@ pub trait NetworkProvisioner {
 
 #[allow(async_fn_in_trait)]
 pub trait Link {
+    /// This link's interface name.
     fn ifname(&self) -> &str;
+    /// This link's kernel interface index.
     fn ifindex(&self) -> u32;
+    /// This link's hardware (MAC) address.
     fn mac(&self) -> MacAddress;
 
     /// Bring this link up (set `IFF_UP`).
@@ -81,6 +90,7 @@ pub trait Link {
     async fn rename(&mut self, new_name: &str) -> Res<()>;
     /// Delete this link. Deleting either end of a veth pair deletes both.
     async fn delete(&mut self) -> Res<()>;
+    /// Set this link's IPv4 address (replacing any existing matching entry).
     async fn set_addr(&mut self, ip: Ipv4Addr, prefix_len: u8) -> Res<()>;
     /// Add (replacing any existing one) the default route (`0.0.0.0/0`) via
     /// `gateway`, routed out through this link.
@@ -89,18 +99,49 @@ pub trait Link {
 
 #[derive(Debug, Clone)]
 pub struct PinnedTcxProgram {
-    /// The (possibly truncated) program name used to build the pin path.
+    /// The (possibly truncated) program name -- part of the pin filename,
+    /// but *not* unique on its own: see `ifname`.
     pub name: String,
     /// The pinned `bpf_link`'s kernel ID, checked via [`crate::bpf::link_attach_point`].
     pub link_id: u32,
+    /// The device this was attached to, folded into the pin filename
+    /// alongside `name` -- the same (possibly truncated, non-unique)
+    /// program name can legitimately be attached to more than one device
+    /// (e.g. the same program running on every router port), so `name`
+    /// alone isn't enough to keep pin paths from colliding.
+    ifname: String,
+}
+
+impl PinnedTcxProgram {
+    /// Detach this program: unpins the bpffs link created by
+    /// `TcxAttach::upsert_tcx_program`. Self-contained -- doesn't need the
+    /// device passed back in, since the pin path was already fixed (device
+    /// + program name) at attach time.
+    pub fn detach(&self, bpffs_dir: impl AsRef<Path>) -> Res<()> {
+        tcx::unpin_link(
+            bpffs_dir
+                .as_ref()
+                .join(tcx::pin_filename(&self.ifname, &self.name)),
+        )
+    }
 }
 
 #[allow(async_fn_in_trait)]
 pub trait TcxAttach {
+    /// The loaded eBPF program type this link can attach (e.g. `aya`'s
+    /// `SchedClassifier` for the real implementation).
     type Program;
 
     /// Attach `prog` at `attach_type` if it isn't already pinned under
     /// `bpffs_dir`, otherwise re-point the existing pin at it.
+    ///
+    /// Implementations should reject this with
+    /// [`InfraError::TcxRequiresLocalLink`] when `self` isn't in the
+    /// caller's own namespace (e.g. a veth pair's peer end, moved into a
+    /// downstream namespace by `create_veth`) -- a program attached from
+    /// outside the namespace a link actually lives in wouldn't be attached
+    /// where the caller thinks it is, so this is refused rather than
+    /// silently doing the wrong thing.
     ///
     /// `&mut self` even though the real (`NetlinkLink`) implementation
     /// doesn't need to mutate anything: it keeps the receiver consistent
@@ -112,8 +153,6 @@ pub trait TcxAttach {
         bpffs_dir: impl AsRef<Path>,
         attach_type: TcAttachType,
     ) -> Res<PinnedTcxProgram>;
-    /// Remove the pin created by `upsert_tcx_program`, detaching `program`.
-    fn detach_tcx(bpffs_dir: impl AsRef<Path>, program: &PinnedTcxProgram) -> Res<()>;
     /// Is `program` currently attached at `attach_type` on this link,
     /// according to the kernel (not just "does a pin file exist")? See the
     /// `&mut self` note on `upsert_tcx_program` -- same reasoning.
@@ -166,6 +205,11 @@ pub enum InfraError {
 
     #[error("namespace {0:?} does not exist")]
     NamespaceNotFound(String),
+
+    #[error(
+        "cannot attach a TCX program to link {ifname:?}: it lives in namespace {netns:?}, not the caller's own"
+    )]
+    TcxRequiresLocalLink { ifname: String, netns: String },
 
     #[error("failed to create namespace (unshare)")]
     CreateNamespace(#[source] nix::errno::Errno),

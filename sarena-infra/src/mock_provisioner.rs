@@ -59,6 +59,7 @@ impl NetworkProvisioner for MockNetworkProvisioner {
                     peer_ifindex as u8,
                 ])),
                 peer_ifname: Some(spec.host_ifname.clone()),
+                netns: Some(spec.peer_netns.clone()),
                 ..Default::default()
             },
         };

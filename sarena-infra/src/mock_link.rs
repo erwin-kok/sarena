@@ -2,7 +2,7 @@ use std::{net::Ipv4Addr, path::Path};
 
 use aya::programs::TcAttachType;
 
-use crate::{Link, MacAddress, PinnedTcxProgram, Res, TcxAttach};
+use crate::{InfraError, Link, MacAddress, PinnedTcxProgram, Res, TcxAttach};
 
 #[derive(Debug, Clone, Default)]
 pub struct MockProgram {
@@ -27,7 +27,6 @@ pub struct MockLink {
     pub netns: Option<String>,
     pub tcx_upsert_calls: Vec<(String, TcAttachType)>,
     pub tcx_has_link_calls: Vec<(u32, TcAttachType)>,
-    /// What `has_tcx_link` should answer -- set this before calling it.
     pub has_tcx_link_result: bool,
     pub next_link_id: u32,
 }
@@ -105,16 +104,19 @@ impl TcxAttach for MockLink {
         attach_type: TcAttachType,
     ) -> Res<PinnedTcxProgram> {
         let _ = bpffs_dir;
+        if let Some(netns) = &self.netns {
+            return Err(InfraError::TcxRequiresLocalLink {
+                ifname: self.ifname.clone(),
+                netns: netns.clone(),
+            });
+        }
         self.tcx_upsert_calls.push((prog.name.clone(), attach_type));
         self.next_link_id += 1;
         Ok(PinnedTcxProgram {
             name: prog.name.clone(),
             link_id: self.next_link_id,
+            ifname: self.ifname.clone(),
         })
-    }
-
-    fn detach_tcx(_bpffs_dir: impl AsRef<Path>, _program: &PinnedTcxProgram) -> Res<()> {
-        Ok(())
     }
 
     fn has_tcx_link(&mut self, program: &PinnedTcxProgram, attach_type: TcAttachType) -> Res<bool> {
@@ -161,5 +163,37 @@ mod tests {
         assert_eq!(pair.host.up_calls, 1);
         assert_eq!(mock.veths_created.len(), 1);
         assert_eq!(mock.netns_created, vec!["test-ns".to_owned()]);
+    }
+
+    #[test]
+    fn upsert_tcx_program_rejects_non_local_link() {
+        let mut link = MockLink {
+            netns: Some("some-ns".to_owned()),
+            ..Default::default()
+        };
+        let mut prog = MockProgram {
+            name: "prog".to_owned(),
+        };
+
+        let err = link
+            .upsert_tcx_program(&mut prog, "/tmp", TcAttachType::Egress)
+            .expect_err("attaching to a non-local mock link should fail");
+        assert!(matches!(err, InfraError::TcxRequiresLocalLink { .. }));
+        assert!(link.tcx_upsert_calls.is_empty());
+    }
+
+    #[test]
+    fn upsert_tcx_program_allows_local_link() {
+        let mut link = MockLink::default();
+        let mut prog = MockProgram {
+            name: "prog".to_owned(),
+        };
+
+        link.upsert_tcx_program(&mut prog, "/tmp", TcAttachType::Egress)
+            .expect("attaching to a local mock link should succeed");
+        assert_eq!(
+            link.tcx_upsert_calls,
+            vec![("prog".to_owned(), TcAttachType::Egress)]
+        );
     }
 }
