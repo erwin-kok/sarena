@@ -31,7 +31,8 @@ test:
         --features test \
         --exclude sarena-test-runner \
         --exclude sarena-ebpf-programs \
-        --exclude sarena-ebpf-test-programs
+        --exclude sarena-ebpf-test-programs \
+        -- --no-capture
 
 # Build eBPF programs (outputs to ./target-ebpf/)
 build-ebpf:

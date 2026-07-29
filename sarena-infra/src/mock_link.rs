@@ -115,7 +115,6 @@ impl TcxAttach for MockLink {
         Ok(PinnedTcxProgram {
             name: prog.name.clone(),
             link_id: self.next_link_id,
-            ifname: self.ifname.clone(),
         })
     }
 

@@ -16,6 +16,7 @@ aya = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync", "macros"] }
+tracing = { workspace = true }
 
 # Netlink / rtnetlink. NOTE: these two need to be a mutually-compatible pair
 # -- if `cargo update` pulls a newer rtnetlink that expects a newer

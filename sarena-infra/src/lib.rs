@@ -1,4 +1,7 @@
-use std::{net::Ipv4Addr, path::Path};
+use std::{
+    net::Ipv4Addr,
+    path::{Path, PathBuf},
+};
 
 use aya::programs::{ProgramError, TcAttachType};
 use thiserror::Error;
@@ -102,14 +105,8 @@ pub struct PinnedTcxProgram {
     /// The (possibly truncated) program name -- part of the pin filename,
     /// but *not* unique on its own: see `ifname`.
     pub name: String,
-    /// The pinned `bpf_link`'s kernel ID, checked via [`crate::bpf::link_attach_point`].
+    /// The pinned `bpf_link`'s kernel ID.
     pub link_id: u32,
-    /// The device this was attached to, folded into the pin filename
-    /// alongside `name` -- the same (possibly truncated, non-unique)
-    /// program name can legitimately be attached to more than one device
-    /// (e.g. the same program running on every router port), so `name`
-    /// alone isn't enough to keep pin paths from colliding.
-    ifname: String,
 }
 
 impl PinnedTcxProgram {
@@ -118,44 +115,20 @@ impl PinnedTcxProgram {
     /// device passed back in, since the pin path was already fixed (device
     /// + program name) at attach time.
     pub fn detach(&self, bpffs_dir: impl AsRef<Path>) -> Res<()> {
-        tcx::unpin_link(
-            bpffs_dir
-                .as_ref()
-                .join(tcx::pin_filename(&self.ifname, &self.name)),
-        )
+        tcx::detach_tcx_program(&bpffs_dir, &self.name)
     }
 }
 
 #[allow(async_fn_in_trait)]
 pub trait TcxAttach {
-    /// The loaded eBPF program type this link can attach (e.g. `aya`'s
-    /// `SchedClassifier` for the real implementation).
     type Program;
 
-    /// Attach `prog` at `attach_type` if it isn't already pinned under
-    /// `bpffs_dir`, otherwise re-point the existing pin at it.
-    ///
-    /// Implementations should reject this with
-    /// [`InfraError::TcxRequiresLocalLink`] when `self` isn't in the
-    /// caller's own namespace (e.g. a veth pair's peer end, moved into a
-    /// downstream namespace by `create_veth`) -- a program attached from
-    /// outside the namespace a link actually lives in wouldn't be attached
-    /// where the caller thinks it is, so this is refused rather than
-    /// silently doing the wrong thing.
-    ///
-    /// `&mut self` even though the real (`NetlinkLink`) implementation
-    /// doesn't need to mutate anything: it keeps the receiver consistent
-    /// with the rest of this trait/`Link`, so `MockLink` can record calls
-    /// into a plain `Vec` field rather than needing interior mutability.
     fn upsert_tcx_program(
         &mut self,
         prog: &mut Self::Program,
         bpffs_dir: impl AsRef<Path>,
         attach_type: TcAttachType,
     ) -> Res<PinnedTcxProgram>;
-    /// Is `program` currently attached at `attach_type` on this link,
-    /// according to the kernel (not just "does a pin file exist")? See the
-    /// `&mut self` note on `upsert_tcx_program` -- same reasoning.
     fn has_tcx_link(&mut self, program: &PinnedTcxProgram, attach_type: TcAttachType) -> Res<bool>;
 }
 
@@ -246,6 +219,22 @@ pub enum InfraError {
 
     #[error("link error: {0}")]
     LinkError(#[from] aya::programs::links::LinkError),
+
+    /// No `bpf_link` is pinned at this path (`BPF_OBJ_GET` returned
+    /// `ENOENT`) - e.g. this is the first-ever attach for this
+    /// device/program, or the pin was removed out from under us.
+    #[error("no bpf link pinned at {0:?}")]
+    NotExist(PathBuf),
+
+    /// The `bpf_link` pinned at this path is defunct: its target
+    /// network device has been removed/unregistered while the link
+    /// itself stayed pinned in bpffs. `bpf_link_update` returns
+    /// `ENOLINK` in exactly this case - see `tcx_link_update` in the
+    /// kernel's `kernel/bpf/tcx.c`, which checks `tcx->dev == NULL`
+    /// (`dev` is nulled by `tcx_uninstall` when the device goes away,
+    /// while the link/pin itself survives).
+    #[error("bpf link pinned at {0:?} is defunct (its target device is gone)")]
+    NoLink(PathBuf),
 
     #[error("pin error: {0}")]
     PinError(#[from] aya::pin::PinError),

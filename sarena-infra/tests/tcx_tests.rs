@@ -6,7 +6,7 @@ use aya::{
 };
 use sarena_infra::{
     InfraError, Link, NetlinkNetworkProvisioner, NetworkProvisioner, TcxAttach, VethSpec,
-    tcx::{has_tcx_link, upsert_tcx_program},
+    tcx::{has_tcx, upsert_tcx},
     test_support,
 };
 
@@ -29,15 +29,15 @@ async fn attach_detach_tcx() {
 
         // Attaching the same program twice should result in a link create,
         // then an update -- both must resolve to the same kernel link ID.
-        let first = upsert_tcx_program(&lo, program, link_dir, TcAttachType::Egress).unwrap();
-        let second = upsert_tcx_program(&lo, program, link_dir, TcAttachType::Egress).unwrap();
+        let first = upsert_tcx(&lo, program, link_dir, TcAttachType::Egress).unwrap();
+        let second = upsert_tcx(&lo, program, link_dir, TcAttachType::Egress).unwrap();
         assert_eq!(first.link_id, second.link_id);
 
-        assert!(has_tcx_link(&lo, &second, TcAttachType::Egress).unwrap());
+        assert!(has_tcx(&lo, &second, TcAttachType::Egress).unwrap());
 
         second.detach(link_dir).unwrap();
 
-        assert!(!has_tcx_link(&lo, &second, TcAttachType::Egress).unwrap());
+        assert!(!has_tcx(&lo, &second, TcAttachType::Egress).unwrap());
 
         fs::remove_dir_all(link_dir).unwrap();
     })

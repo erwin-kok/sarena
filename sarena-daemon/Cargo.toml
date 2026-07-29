@@ -1,0 +1,34 @@
+[package]
+name = "sarena-daemon"
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sarena-common = { path = "../sarena-common", features = ["std"] }
+sarena-infra = { path = "../sarena-infra", features = ["test"] }
+
+anyhow = { workspace = true, default-features = true }
+aya = { workspace = true }
+aya-log = { workspace = true }
+env_logger = { workspace = true }
+log = { workspace = true }
+tokio = { workspace = true, features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "net",
+    "signal",
+] }
+clap = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+
+[[bin]]
+name = "sarena-daemon"
+path = "src/main.rs"

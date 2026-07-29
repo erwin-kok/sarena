@@ -3,56 +3,78 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use aya::programs::{
-    LinkOrder, SchedClassifier, TcAttachType,
-    links::{FdLink, PinnedLink},
-    tc::{SchedClassifierLink, TcAttachOptions},
+use aya::{
+    programs::{
+        LinkOrder, ProgramError, SchedClassifier, TcAttachType,
+        links::{FdLink, LinkError, PinnedLink},
+        tc::{SchedClassifierLink, TcAttachOptions},
+    },
+    sys::SyscallError,
 };
-use libbpf_sys::{BPF_TCX_EGRESS, BPF_TCX_INGRESS};
+use tracing::info;
 
-use crate::{
-    InfraError, Link, PinnedTcxProgram, Res,
-    bpf::{LinkAttachPoint, link_attach_point},
-};
+use crate::{InfraError, Link, PinnedTcxProgram, Res};
 
-pub fn upsert_tcx_program(
+pub fn upsert_tcx(
     device: &impl Link,
     prog: &mut SchedClassifier,
     bpffs_dir: impl AsRef<Path>,
     attach_type: TcAttachType,
 ) -> Res<PinnedTcxProgram> {
-    // Computed once and shared with both branches below: `prog_name` costs a
-    // real `bpf_obj_get_info_by_fd` syscall, and it can't change between an
-    // `update_tcx` attempt and a fallback `attach_tcx` for the same call.
-    let name = prog_name(prog);
-    if let Ok(program) = update_tcx(device, prog, &bpffs_dir, &name) {
+    let info = prog.info().unwrap();
+    let prog_name = info.name_as_str().unwrap_or("[unknown]");
+    if let Ok(program) = update_tcx(device, prog, prog_name, &bpffs_dir, prog_name) {
         return Ok(program);
     }
-    attach_tcx(device, prog, &bpffs_dir, attach_type, name)
+    attach_tcx(device, prog, prog_name, &bpffs_dir, attach_type)
+}
+
+pub fn detach_tcx_program(bpffs_dir: impl AsRef<Path>, prog_name: &str) -> Res<()> {
+    let pin_path = bpffs_dir.as_ref().join(prog_name);
+    unpin_link(&pin_path)?;
+    info!(
+        pin_path = %pin_path.to_string_lossy(),
+        prog_name = %prog_name,
+        "Program removed from device"
+    );
+    Ok(())
 }
 
 fn update_tcx(
     device: &impl Link,
     prog: &mut SchedClassifier,
+    prog_name: &str,
     bpffs_dir: impl AsRef<Path>,
     name: &str,
 ) -> Res<PinnedTcxProgram> {
-    let pin_path = pin_path(&bpffs_dir, device, name);
-    let link_id = update_link(pin_path, prog)?;
+    let pin_path = bpffs_dir.as_ref().join(prog_name);
+    let link_id = update_link(&pin_path, prog)?;
+    info!(
+        pin_path = %pin_path.to_string_lossy(),
+        prog_name = %prog_name,
+        link = %device.ifname(),
+        "Program updated on device using tcx"
+    );
     Ok(PinnedTcxProgram {
         name: name.to_owned(),
         link_id,
-        ifname: device.ifname().to_owned(),
     })
 }
 
 fn attach_tcx(
     device: &impl Link,
     prog: &mut SchedClassifier,
+    prog_name: &str,
     bpffs_dir: impl AsRef<Path>,
     attach_type: TcAttachType,
-    name: String,
 ) -> Res<PinnedTcxProgram> {
+    fs::create_dir_all(&bpffs_dir).map_err(|e| InfraError::Io {
+        context: format!(
+            "creating bpffs link dir for tcx attachment to device {}",
+            bpffs_dir.as_ref().display()
+        ),
+        source: e,
+    })?;
     let options = TcAttachOptions::TcxOrder(LinkOrder::last());
     let link_id = prog.attach_with_options(device.ifname(), attach_type, options)?;
     let link = prog.take_link(link_id)?;
@@ -61,37 +83,67 @@ fn attach_tcx(
     // consumes it -- this is what `has_tcx_link` will later match against,
     // instead of the (truncated, non-unique) program name.
     let link_id = fd_link.info()?.id();
-    let pin_path = pin_path(&bpffs_dir, device, &name);
+    let pin_path = bpffs_dir.as_ref().join(prog_name);
     fd_link.pin(&pin_path)?;
+    info!(
+        pin_path = %pin_path.to_string_lossy(),
+        prog_name = %prog_name,
+        link = %device.ifname(),
+        "Program attached to device using tcx"
+    );
     Ok(PinnedTcxProgram {
-        name,
+        name: prog_name.to_owned(),
         link_id,
-        ifname: device.ifname().to_owned(),
     })
 }
 
-pub fn has_tcx_link(
+pub fn has_tcx(
     device: &impl Link,
     program: &PinnedTcxProgram,
     attach_type: TcAttachType,
 ) -> Res<bool> {
-    let attach_type = match attach_type {
-        TcAttachType::Ingress => BPF_TCX_INGRESS,
-        TcAttachType::Egress => BPF_TCX_EGRESS,
-        TcAttachType::Custom(c) => c,
-    };
-    Ok(matches!(
-        link_attach_point(program.link_id)?,
-        Some(LinkAttachPoint::Tcx { ifindex, attach_type: actual })
-            if ifindex == device.ifindex() && actual == attach_type
-    ))
+    let (_revision, programs) = SchedClassifier::query_tcx(device.ifname(), attach_type)?;
+    Ok(programs
+        .into_iter()
+        .any(|p| p.name_as_str().is_some_and(|name| name == program.name)))
 }
 
-pub(crate) fn update_link(pin_path: PathBuf, prog: &mut SchedClassifier) -> Res<u32> {
-    let fd_link: FdLink = open_pin(&pin_path)?.into();
+fn update_link(pin_path: &PathBuf, prog: &mut SchedClassifier) -> Res<u32> {
+    // `BPF_OBJ_GET` on a path with nothing pinned there fails with
+    // `ENOENT` - the common case for a brand new device/program pair,
+    // reported distinctly (`InfraError::NotExist`) so callers can tell
+    // "nothing pinned yet, fall through to a fresh attach" apart from a
+    // genuinely abnormal failure to open an existing pin.
+    let pinned_link = PinnedLink::from_pin(pin_path).map_err(|e| {
+        let _ = fs::remove_file(pin_path);
+        match &e {
+            LinkError::SyscallError(SyscallError { io_error, .. })
+                if io_error.kind() == std::io::ErrorKind::NotFound =>
+            {
+                InfraError::NotExist(pin_path.clone())
+            }
+            _ => InfraError::from(e),
+        }
+    })?;
+    let fd_link: FdLink = pinned_link.into();
     let link_id = fd_link.info()?.id();
     let link: SchedClassifierLink = fd_link.try_into()?;
-    let link_id_internal = prog.attach_to_link(link)?;
+    // `bpf_link_update` (called by `attach_to_link`) returns `ENOLINK`
+    // when the link's target device has been removed/unregistered
+    // while the link stayed pinned - see `tcx_link_update` in the
+    // kernel's `kernel/bpf/tcx.c`. Reported distinctly
+    // (`InfraError::NoLink`) rather than folded into the generic
+    // `ProgramError` wrapper, since it's a specific, actionable state
+    // ("this pin is orphaned, clean it up") rather than an arbitrary
+    // failure.
+    let link_id_internal = prog.attach_to_link(link).map_err(|e| match &e {
+        ProgramError::SyscallError(SyscallError { io_error, .. })
+            if io_error.raw_os_error() == Some(nix::errno::Errno::ENOLINK as i32) =>
+        {
+            InfraError::NoLink(pin_path.clone())
+        }
+        _ => InfraError::from(e),
+    })?;
     // `attach_to_link` transfers ownership of the link into `prog`'s
     // internal map, keeping a second, independent fd reference to the
     // underlying bpf_link alive for as long as `prog` itself lives. We
@@ -102,39 +154,13 @@ pub(crate) fn update_link(pin_path: PathBuf, prog: &mut SchedClassifier) -> Res<
     Ok(link_id)
 }
 
-pub(crate) fn unpin_link(pin_path: PathBuf) -> Res<()> {
-    open_pin(&pin_path)?.unpin().map_err(|e| InfraError::Io {
+fn unpin_link(pin_path: &PathBuf) -> Res<()> {
+    let pinned_link = PinnedLink::from_pin(pin_path).inspect_err(|_| {
+        let _ = fs::remove_file(pin_path);
+    })?;
+    pinned_link.unpin().map_err(|e| InfraError::Io {
         context: format!("unpin link {}", pin_path.to_string_lossy()),
         source: e,
     })?;
     Ok(())
-}
-
-/// Single source of truth for how a `(device, program name)` pair maps to
-/// a pin filename -- shared with [`crate::PinnedTcxProgram::detach`], which
-/// needs to reconstruct the exact same path from the fields it stored at
-/// attach time.
-pub(crate) fn pin_filename(ifname: &str, name: &str) -> String {
-    format!("{ifname}-{name}")
-}
-
-fn pin_path(bpffs_dir: impl AsRef<Path>, device: &impl Link, name: &str) -> PathBuf {
-    bpffs_dir.as_ref().join(pin_filename(device.ifname(), name))
-}
-
-/// Aya truncates this to 16 bytes (`BPF_OBJ_NAME_LEN`); it's used to build
-/// the pin path, not as a unique identifier -- see [`PinnedTcxProgram`].
-fn prog_name(prog: &SchedClassifier) -> String {
-    let info = prog.info().unwrap();
-    info.name_as_str().unwrap_or("[unknown]").to_owned()
-}
-
-/// Opens the `bpf_link` pinned at `pin_path`. On failure, best-effort
-/// removes whatever's at `pin_path` -- shared by [`update_link`] and
-/// [`unpin_link`], both of which previously duplicated this exact
-/// open-or-clean-up sequence.
-fn open_pin(pin_path: &Path) -> Res<PinnedLink> {
-    Ok(PinnedLink::from_pin(pin_path).inspect_err(|_| {
-        let _ = fs::remove_file(pin_path);
-    })?)
 }
