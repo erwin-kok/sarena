@@ -1,0 +1,23 @@
+[package]
+name = "sarena-loader"
+description = "In-process TCX/XDP loader: attaches/detaches compiled eBPF programs per endpoint."
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+test = []
+
+[dependencies]
+aya = { workspace = true }
+sarena-infra = { path = "../sarena-infra", features = ["test"] }
+tokio = { workspace = true, features = ["rt"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }

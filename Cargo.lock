@@ -831,6 +831,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sarena-loader"
+version = "0.1.0"
+dependencies = [
+ "aya",
+ "sarena-infra",
+ "thiserror 2.0.19",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "sarena-test-macros"
 version = "0.1.0"
 dependencies = [

@@ -2,6 +2,7 @@
 members = [
     "sarena-daemon",
     "sarena-infra",
+    "sarena-loader",
 
     # Test infrastructure
     "sarena-test-macros",
@@ -27,6 +28,7 @@ members = [
 default-members = [
     "sarena-daemon",
     "sarena-infra",
+    "sarena-loader",
 
     "sarena-test-macros",
     "sarena-test-runner",

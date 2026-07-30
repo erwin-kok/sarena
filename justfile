@@ -61,15 +61,10 @@ netns-clean:
     exit 1
     
 # Run all integration tests in the sarena-infra package (requires root)
-infra-test: netns-clean
-    #!/usr/bin/env bash
-    set -euo pipefail
-    exes=$(cargo test -p sarena-infra --features test --tests --no-run --message-format=json \
-        | jq -r 'select(.profile.test == true) | .executable | select(. != null)')
-    for exe in $exes; do
-        just netns-clean
-        sudo "$exe" --ignored --no-capture
-    done
+infra-test: (_root-test "sarena-infra")
+
+# Run all integration tests in the sarena-loader package (requires root)
+loader-test: (_root-test "sarena-loader")
 
 ebpf-test:
     #!/usr/bin/env bash
@@ -78,5 +73,24 @@ ebpf-test:
         | jq -r 'select(.profile.test == true) | .executable')
     sudo "$exe" --no-capture
 
+# Run the sarena-daemon (requires sudo: it manages netns/BPF attachments)
+run-daemon:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    exe=$(cargo build -p sarena-daemon --message-format=json \
+        | jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable')
+    sudo "$exe"
+
 # Full workflow: build, test, install eBPF programs, run eBPF tests
-all: build test install-ebpf infra-test ebpf-test
+all: build test install-ebpf infra-test loader-test ebpf-test
+
+# Run all `#[ignore]`d integration tests (requiring root/CAP_NET_ADMIN) for `package`
+_root-test package: netns-clean
+    #!/usr/bin/env bash
+    set -euo pipefail
+    exes=$(cargo test -p {{package}} --features test --tests --no-run --message-format=json \
+        | jq -r 'select(.profile.test == true) | .executable | select(. != null)')
+    for exe in $exes; do
+        just netns-clean
+        sudo "$exe" --ignored --no-capture
+    done
