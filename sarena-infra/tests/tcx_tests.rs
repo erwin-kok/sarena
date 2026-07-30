@@ -44,12 +44,76 @@ async fn attach_detach_tcx() {
     .await;
 }
 
-/// `TcxAttach::upsert_tcx_program`'s implementations should refuse to
-/// attach to a link that isn't in the caller's own namespace -- a program
-/// pinned from here wouldn't be attached where the caller thinks it is.
-/// The free `tcx::upsert_tcx_program` function used by `attach_detach_tcx`
-/// above doesn't carry this guard itself (it has no way to know a device's
-/// namespace); it's enforced one layer up, in the `TcxAttach` trait impl.
+#[tokio::test]
+#[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
+async fn upsert_tcx_recovers_from_a_defunct_pin_after_device_replacement() {
+    let dir = std::env::var("EBPF_DIR").unwrap_or_else(|_| "/usr/lib/sarena/ebpf".into());
+    let mut test_bpf = Ebpf::load_file(format!("{dir}/sarena-ebpf-test-programs.o")).unwrap();
+    let program = test_bpf.program_mut("dummy_test").unwrap();
+    let program: &mut SchedClassifier = program.try_into().unwrap();
+    program.load().unwrap();
+
+    test_support::with_temp_netns("dpi-enolink-", |ns| async move {
+        let link_dir = Path::new("/sys/fs/bpf/sarena-test-tcx-enolink");
+        let _ = fs::remove_dir_all(link_dir);
+        fs::create_dir_all(link_dir).unwrap();
+
+        let mut provisioner = NetlinkNetworkProvisioner;
+
+        let mut pair = provisioner
+            .create_veth(VethSpec {
+                host_ifname: test_support::unique_name("dpienolk0-"),
+                peer_ifname: test_support::unique_name("dpienolk1-"),
+                peer_netns: ns.clone(),
+                host_mac: None,
+                peer_mac: None,
+            })
+            .await
+            .expect("create_veth failed");
+
+        let first = upsert_tcx(&pair.host, program, link_dir, TcAttachType::Egress)
+            .expect("first-ever attach should succeed");
+
+        // Delete the device *without* detaching first - this is exactly
+        // what leaves the pinned link defunct instead of cleanly removed.
+        provisioner
+            .delete_veth(&mut pair)
+            .await
+            .expect("delete_veth failed");
+
+        // An unrelated replacement device to reattach onto, reusing the
+        // same pin path/program name.
+        let mut pair2 = provisioner
+            .create_veth(VethSpec {
+                host_ifname: test_support::unique_name("dpienolk2-"),
+                peer_ifname: test_support::unique_name("dpienolk3-"),
+                peer_netns: ns.clone(),
+                host_mac: None,
+                peer_mac: None,
+            })
+            .await
+            .expect("create_veth failed");
+
+        let second = upsert_tcx(&pair2.host, program, link_dir, TcAttachType::Egress).expect(
+            "re-attaching after the old device was replaced should succeed, not fail with EEXIST",
+        );
+
+        assert_ne!(
+            first.link_id, second.link_id,
+            "the defunct link must have been replaced by a genuinely new one, not reused"
+        );
+        assert!(has_tcx(&pair2.host, &second, TcAttachType::Egress).unwrap());
+
+        second.detach(link_dir).unwrap();
+        provisioner
+            .delete_veth(&mut pair2)
+            .await
+            .expect("cleanup delete_veth failed");
+        fs::remove_dir_all(link_dir).unwrap();
+    })
+    .await;
+}
+
 #[tokio::test]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn upsert_tcx_program_rejects_non_local_link() {

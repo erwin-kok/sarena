@@ -6,7 +6,6 @@ use std::{
 use aya::programs::{ProgramError, TcAttachType};
 use thiserror::Error;
 
-pub mod bpf;
 pub mod mac_address;
 pub mod mock_link;
 pub mod mock_provisioner;

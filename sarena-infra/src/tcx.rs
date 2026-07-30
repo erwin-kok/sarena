@@ -23,8 +23,17 @@ pub fn upsert_tcx(
 ) -> Res<PinnedTcxProgram> {
     let info = prog.info().unwrap();
     let prog_name = info.name_as_str().unwrap_or("[unknown]");
-    if let Ok(program) = update_tcx(device, prog, prog_name, &bpffs_dir, prog_name) {
-        return Ok(program);
+    match update_tcx(device, prog, prog_name, &bpffs_dir, prog_name) {
+        Ok(program) => return Ok(program),
+        // Nothing pinned yet (first-ever attach, or a defunct pin that
+        // `update_tcx` already cleaned up below) - fall through to a
+        // fresh attach.
+        Err(InfraError::NotExist(_)) => {}
+        // Any other error is unrecoverable - surface it rather than
+        // silently retrying via a fresh attach, which would otherwise
+        // mask real failures (and, for a still-live pin, fail anyway
+        // with EEXIST when `attach_tcx` tries to pin over it).
+        Err(e) => return Err(e),
     }
     attach_tcx(device, prog, prog_name, &bpffs_dir, attach_type)
 }
@@ -48,7 +57,27 @@ fn update_tcx(
     name: &str,
 ) -> Res<PinnedTcxProgram> {
     let pin_path = bpffs_dir.as_ref().join(prog_name);
-    let link_id = update_link(&pin_path, prog)?;
+    let link_id = match update_link(&pin_path, prog) {
+        Ok(link_id) => link_id,
+        // The pinned link is defunct (its target device is gone) - the
+        // program is no longer triggered, so the stale pin has to be
+        // removed before a fresh attach can reuse this path. Reported
+        // back as `NotExist` so the caller only has to look for one
+        // "needs a fresh attach" case.
+        Err(InfraError::NoLink(_)) => {
+            fs::remove_file(&pin_path).map_err(|e| InfraError::Io {
+                context: format!("unpinning defunct link {}", pin_path.to_string_lossy()),
+                source: e,
+            })?;
+            info!(
+                pin_path = %pin_path.to_string_lossy(),
+                prog_name = %prog_name,
+                "Unpinned defunct link for program"
+            );
+            return Err(InfraError::NotExist(pin_path));
+        }
+        Err(e) => return Err(e),
+    };
     info!(
         pin_path = %pin_path.to_string_lossy(),
         prog_name = %prog_name,
@@ -114,16 +143,13 @@ fn update_link(pin_path: &PathBuf, prog: &mut SchedClassifier) -> Res<u32> {
     // reported distinctly (`InfraError::NotExist`) so callers can tell
     // "nothing pinned yet, fall through to a fresh attach" apart from a
     // genuinely abnormal failure to open an existing pin.
-    let pinned_link = PinnedLink::from_pin(pin_path).map_err(|e| {
-        let _ = fs::remove_file(pin_path);
-        match &e {
-            LinkError::SyscallError(SyscallError { io_error, .. })
-                if io_error.kind() == std::io::ErrorKind::NotFound =>
-            {
-                InfraError::NotExist(pin_path.clone())
-            }
-            _ => InfraError::from(e),
+    let pinned_link = PinnedLink::from_pin(pin_path).map_err(|e| match &e {
+        LinkError::SyscallError(SyscallError { io_error, .. })
+            if io_error.kind() == std::io::ErrorKind::NotFound =>
+        {
+            InfraError::NotExist(pin_path.clone())
         }
+        _ => InfraError::from(e),
     })?;
     let fd_link: FdLink = pinned_link.into();
     let link_id = fd_link.info()?.id();

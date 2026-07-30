@@ -27,14 +27,5 @@ netlink-packet-route = "0.30"
 # Namespace / mount / syscall primitives.
 nix = { version = "0.31", features = ["sched", "mount", "fs"] }
 
-# BPF (XDP / TCX) attachment introspection. We depend on both:
-#  - libbpf-rs for anything it already wraps safely (kept around for when
-#    load/attach support is added in a later phase), and
-#  - libbpf-sys directly, for the raw bpf_xdp_query / bpf_prog_query_opts
-#    calls this crate's bpf module needs, since libbpf-rs's safe `query`
-#    module does not (as of writing) cover per-ifindex attach-point queries.
-libbpf-rs = "0.26"
-libbpf-sys = "1"
-
 [features]
 test = []
