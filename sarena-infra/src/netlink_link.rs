@@ -274,7 +274,7 @@ impl TcxAttach for NetlinkLink {
         tcx::upsert_tcx(self, prog, bpffs_dir, attach_type)
     }
 
-    fn has_tcx_link(&mut self, program: &PinnedTcxProgram, attach_type: TcAttachType) -> Res<bool> {
+    fn has_tcx_link(&mut self, program: &str, attach_type: TcAttachType) -> Res<bool> {
         tcx::has_tcx(self, program, attach_type)
     }
 }

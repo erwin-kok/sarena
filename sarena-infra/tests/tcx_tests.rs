@@ -33,11 +33,11 @@ async fn attach_detach_tcx() {
         let second = upsert_tcx(&lo, program, link_dir, TcAttachType::Egress).unwrap();
         assert_eq!(first.link_id, second.link_id);
 
-        assert!(has_tcx(&lo, &second, TcAttachType::Egress).unwrap());
+        assert!(has_tcx(&lo, "dummy_test", TcAttachType::Egress).unwrap());
 
         second.detach(link_dir).unwrap();
 
-        assert!(!has_tcx(&lo, &second, TcAttachType::Egress).unwrap());
+        assert!(!has_tcx(&lo, "dummy_test", TcAttachType::Egress).unwrap());
 
         fs::remove_dir_all(link_dir).unwrap();
     })
@@ -102,7 +102,7 @@ async fn upsert_tcx_recovers_from_a_defunct_pin_after_device_replacement() {
             first.link_id, second.link_id,
             "the defunct link must have been replaced by a genuinely new one, not reused"
         );
-        assert!(has_tcx(&pair2.host, &second, TcAttachType::Egress).unwrap());
+        assert!(has_tcx(&pair2.host, "dummy_test", TcAttachType::Egress).unwrap());
 
         second.detach(link_dir).unwrap();
         provisioner

@@ -26,7 +26,7 @@ pub struct MockLink {
     pub delete_calls: u32,
     pub netns: Option<String>,
     pub tcx_upsert_calls: Vec<(String, TcAttachType)>,
-    pub tcx_has_link_calls: Vec<(u32, TcAttachType)>,
+    pub tcx_has_link_calls: Vec<(String, TcAttachType)>,
     pub has_tcx_link_result: bool,
     pub next_link_id: u32,
 }
@@ -118,8 +118,9 @@ impl TcxAttach for MockLink {
         })
     }
 
-    fn has_tcx_link(&mut self, program: &PinnedTcxProgram, attach_type: TcAttachType) -> Res<bool> {
-        self.tcx_has_link_calls.push((program.link_id, attach_type));
+    fn has_tcx_link(&mut self, program: &str, attach_type: TcAttachType) -> Res<bool> {
+        self.tcx_has_link_calls
+            .push((program.to_string(), attach_type));
         Ok(self.has_tcx_link_result)
     }
 }

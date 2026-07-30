@@ -126,15 +126,11 @@ fn attach_tcx(
     })
 }
 
-pub fn has_tcx(
-    device: &impl Link,
-    program: &PinnedTcxProgram,
-    attach_type: TcAttachType,
-) -> Res<bool> {
+pub fn has_tcx(device: &impl Link, program: &str, attach_type: TcAttachType) -> Res<bool> {
     let (_revision, programs) = SchedClassifier::query_tcx(device.ifname(), attach_type)?;
     Ok(programs
         .into_iter()
-        .any(|p| p.name_as_str().is_some_and(|name| name == program.name)))
+        .any(|p| p.name_as_str().is_some_and(|name| name == program)))
 }
 
 fn update_link(pin_path: &PathBuf, prog: &mut SchedClassifier) -> Res<u32> {

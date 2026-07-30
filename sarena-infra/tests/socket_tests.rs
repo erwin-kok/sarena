@@ -1,5 +1,3 @@
-//! End-to-end test: netns + veth + addressing + a socket bound on top.
-
 use std::{
     net::{IpAddr, Ipv4Addr, TcpListener, UdpSocket},
     time::Duration,

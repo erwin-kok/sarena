@@ -128,7 +128,7 @@ pub trait TcxAttach {
         bpffs_dir: impl AsRef<Path>,
         attach_type: TcAttachType,
     ) -> Res<PinnedTcxProgram>;
-    fn has_tcx_link(&mut self, program: &PinnedTcxProgram, attach_type: TcAttachType) -> Res<bool>;
+    fn has_tcx_link(&mut self, program: &str, attach_type: TcAttachType) -> Res<bool>;
 }
 
 #[derive(Debug, Error)]
