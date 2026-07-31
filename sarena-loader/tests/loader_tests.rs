@@ -7,7 +7,7 @@ use aya::programs::TcAttachType;
 use sarena_infra::{
     Link, NetlinkNetworkProvisioner, Netns, NetworkProvisioner, TcxAttach, VethSpec, test_support,
 };
-use sarena_loader::{AyaBackend, EndpointId, Loader, LoaderHandle};
+use sarena_loader::{AyaBackend, EndpointKind, Loader, LoaderHandle};
 
 const PIN_ROOT: &str = "/sys/fs/bpf/test";
 
@@ -66,11 +66,11 @@ async fn load_multiple_links() {
             let mut host2 = pair2.host;
 
             loader_handle
-                .add_endpoint(EndpointId::Host(host1_name.clone()))
+                .add_endpoint(EndpointKind::Host, &host1_name)
                 .await
                 .expect("add_endpoint (host1) failed");
             loader_handle
-                .add_endpoint(EndpointId::Host(host2_name.clone()))
+                .add_endpoint(EndpointKind::Host, &host2_name)
                 .await
                 .expect("add_endpoint (host2) failed");
 

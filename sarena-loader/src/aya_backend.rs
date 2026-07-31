@@ -14,7 +14,6 @@ use sarena_infra::{
 
 use crate::{
     backend::BpfBackend,
-    endpoint::EndpointId,
     error::{LoaderError, Res},
     manifest::Hook,
 };
@@ -51,23 +50,22 @@ impl BpfBackend for AyaBackend {
     type Instance = Ebpf;
     type LinkType = NetlinkLink;
 
-    fn resolve_link(&mut self, id: &EndpointId) -> Res<NetlinkLink> {
+    fn resolve_link(&mut self, link: &str) -> Res<NetlinkLink> {
         // `NetworkProvisioner::get_link` is async (rtnetlink-based); this
         // method is called from the actor's own dedicated OS thread (see
         // `actor::LoaderHandle::spawn`), which is never a tokio worker, so
         // blocking here is fine. A one-shot current-thread runtime bridges
         // the two, the same way `sarena_infra::Netns::run` does internally.
-        let name = id.link_name();
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .map_err(|e| LoaderError::LinkResolve {
-                id: format!("{id:?}"),
+                link: link.to_string(),
                 src: format!("failed to build link-resolution runtime: {e}"),
             })?;
-        rt.block_on(self.provisioner.get_link(&name))
+        rt.block_on(self.provisioner.get_link(link))
             .map_err(|e| LoaderError::LinkResolve {
-                id: format!("{id:?}"),
+                link: link.to_string(),
                 src: e.to_string(),
             })
     }

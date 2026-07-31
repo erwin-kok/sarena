@@ -1,21 +1,24 @@
 use std::{
     fs,
     net::{IpAddr, Ipv4Addr, UdpSocket},
-    path::Path,
     time::Duration,
 };
 
 use aya::{
-    Ebpf, EbpfError,
+    EbpfError,
     maps::MapError,
-    programs::{ProgramError, SchedClassifier, TcAttachType},
+    programs::{ProgramError, TcAttachType},
 };
 use env_logger::Env;
-use log::info;
 use sarena_infra::{
     InfraError, Link as _, NetlinkNetworkProvisioner, Netns, NetnsGuard, NetworkProvisioner as _,
     TcxAttach as _, VethSpec,
 };
+use sarena_loader::{AyaBackend, EndpointKind, Loader, LoaderHandle};
+use tokio::signal;
+use tracing::info;
+
+const PIN_ROOT: &str = "/sys/fs/bpf/test";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), anyhow::Error> {
@@ -29,17 +32,26 @@ async fn main() -> Result<(), anyhow::Error> {
 
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
+
     info!("Application started");
 
+    let _ = fs::remove_dir_all(PIN_ROOT);
+
+    std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
+
     let dir = std::env::var("EBPF_DIR").unwrap_or_else(|_| "/usr/lib/sarena/ebpf".into());
-    let mut prod_bpf = Ebpf::load_file(format!("{dir}/sarena-ebpf-programs.o"))?;
-
-    load_bpf_program(&mut prod_bpf, "port_ingress")?;
-    load_bpf_program(&mut prod_bpf, "port_egress")?;
-
-    let link_dir = Path::new("/sys/fs/bpf/sarena-test-attach-detach-tcx");
-    let _ = fs::remove_dir_all(link_dir);
-    fs::create_dir_all(link_dir).unwrap();
+    let backend = AyaBackend::new(
+        format!("{dir}/sarena-ebpf-programs.o"),
+        format!("{PIN_ROOT}/globals"),
+    );
+    let loader = Loader::new(backend, PIN_ROOT);
+    let loader_handle = LoaderHandle::spawn(loader, 16);
 
     let client1_ns = "client1_ns";
     let client1_netns = Netns::create(client1_ns).await?;
@@ -113,20 +125,23 @@ async fn main() -> Result<(), anyhow::Error> {
         b"1",
     )?;
 
-    let ingress_program = get_sched_classifier(&mut prod_bpf, "port_ingress")?;
-    let host1_pinned_iprogram =
-        host1.upsert_tcx_program(ingress_program, link_dir, TcAttachType::Ingress)?;
-    let host2_pinned_iprogram =
-        host2.upsert_tcx_program(ingress_program, link_dir, TcAttachType::Ingress)?;
-
-    let egress_program = get_sched_classifier(&mut prod_bpf, "port_egress")?;
-    let host1_pinned_eprogram =
-        host1.upsert_tcx_program(egress_program, link_dir, TcAttachType::Egress)?;
-    let host2_pinned_eprogram =
-        host2.upsert_tcx_program(egress_program, link_dir, TcAttachType::Egress)?;
-
     info!("host1 index: {}", host1.ifindex());
     info!("host2 index: {}", host2.ifindex());
+
+    loader_handle
+        .add_endpoint(EndpointKind::Host, host1_name)
+        .await
+        .expect("add_endpoint (host1) failed");
+    loader_handle
+        .add_endpoint(EndpointKind::Host, host2_name)
+        .await
+        .expect("add_endpoint (host2) failed");
+
+    assert!(
+        host1
+            .has_tcx_link("from_host", TcAttachType::Ingress)
+            .expect("expect program")
+    );
 
     let listener =
         client1_netns
@@ -155,35 +170,17 @@ async fn main() -> Result<(), anyhow::Error> {
     assert_eq!(&buf[..n], payload);
     assert_eq!(from.ip(), IpAddr::V4(peer2_ip));
 
-    host1_pinned_iprogram.detach(link_dir).unwrap();
-    host2_pinned_iprogram.detach(link_dir).unwrap();
+    let ctrl_c = signal::ctrl_c();
+    info!("Waiting for Ctrl-C...");
+    ctrl_c.await?;
+    info!("Exiting...");
 
-    host1_pinned_eprogram.detach(link_dir).unwrap();
-    host2_pinned_eprogram.detach(link_dir).unwrap();
-
-    fs::remove_dir_all(link_dir).unwrap();
+    loader_handle.teardown_all().await.expect("teardown failed");
 
     host1.delete().await?;
     host2.delete().await?;
 
     Ok(())
-}
-
-fn load_bpf_program(bpf: &mut Ebpf, name: &str) -> Res<()> {
-    let program = bpf
-        .program_mut(name)
-        .ok_or_else(|| DaemonError::ProgramNotFound(name.to_string()))?;
-    let program: &mut SchedClassifier = program.try_into()?;
-    program.load()?;
-    Ok(())
-}
-
-fn get_sched_classifier<'a>(bpf: &'a mut Ebpf, name: &str) -> Res<&'a mut SchedClassifier> {
-    let sched = bpf
-        .program_mut(name)
-        .ok_or_else(|| DaemonError::ProgramNotFound(name.to_string()))?
-        .try_into()?;
-    Ok(sched)
 }
 
 #[derive(Debug, thiserror::Error)]

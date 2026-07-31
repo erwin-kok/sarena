@@ -29,8 +29,8 @@ pub enum LoaderError {
     #[error("failed to unpin {path:?}: {src}")]
     Unpin { path: PathBuf, src: String },
 
-    #[error("failed to resolve link for endpoint {id}: {src}")]
-    LinkResolve { id: String, src: String },
+    #[error("failed to resolve link {link:?}: {src}")]
+    LinkResolve { link: String, src: String },
 
     #[error("failed to list pins under {prefix:?}: {src}")]
     ListPins { prefix: PathBuf, src: String },

@@ -7,14 +7,13 @@ use sarena_infra::{Link as _, mock_link::MockLink};
 
 use crate::{
     backend::BpfBackend,
-    endpoint::EndpointId,
     error::{LoaderError, Res},
     manifest::Hook,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Call {
-    ResolveLink(EndpointId),
+    ResolveLink(String),
     LoadInstance(Vec<(String, PathBuf)>),
     EnsureAttached {
         program: &'static str,
@@ -63,11 +62,11 @@ impl BpfBackend for MockBackend {
     type Instance = MockInstance;
     type LinkType = MockLink;
 
-    fn resolve_link(&mut self, id: &EndpointId) -> Res<Self::LinkType> {
+    fn resolve_link(&mut self, link: &str) -> Res<Self::LinkType> {
         self.tick()?;
-        self.calls.push(Call::ResolveLink(id.clone()));
+        self.calls.push(Call::ResolveLink(link.to_string()));
         Ok(MockLink {
-            ifname: id.link_name(),
+            ifname: link.to_string(),
             ..Default::default()
         })
     }
@@ -99,7 +98,7 @@ impl BpfBackend for MockBackend {
             hook,
             ifname: link.ifname().to_string(),
         });
-        let path = link_pin_dir.join(format!("{}-{}", link.ifname(), program_name));
+        let path = link_pin_dir.join(program_name);
         self.links.insert(path);
         Ok(())
     }

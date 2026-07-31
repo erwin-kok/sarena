@@ -2,26 +2,28 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     backend::BpfBackend,
-    endpoint::EndpointId,
+    endpoint::EndpointKind,
     error::{LoaderError, Res},
     loader::{EndpointHandle, Loader},
 };
 
 enum Command {
     AddEndpoint {
-        id: EndpointId,
+        kind: EndpointKind,
+        link: String,
         reply: oneshot::Sender<Res<EndpointHandle>>,
     },
     RemoveEndpoint {
-        id: EndpointId,
+        kind: EndpointKind,
+        link: String,
         reply: oneshot::Sender<Res<()>>,
     },
     ListActiveEndpoints {
-        reply: oneshot::Sender<Res<Vec<EndpointId>>>,
+        reply: oneshot::Sender<Res<Vec<(EndpointKind, String)>>>,
     },
     Reconcile {
-        desired: Vec<EndpointId>,
-        reply: oneshot::Sender<Res<Vec<(EndpointId, LoaderError)>>>,
+        desired: Vec<(EndpointKind, String)>,
+        reply: oneshot::Sender<Res<Vec<(EndpointKind, String, LoaderError)>>>,
     },
     TeardownAll {
         reply: oneshot::Sender<Res<()>>,
@@ -67,21 +69,27 @@ impl LoaderHandle {
         Self { tx }
     }
 
-    pub async fn add_endpoint(&self, id: EndpointId) -> Res<EndpointHandle> {
-        self.call(|reply| Command::AddEndpoint { id, reply }).await
-    }
-
-    pub async fn remove_endpoint(&self, id: EndpointId) -> Res<()> {
-        self.call(|reply| Command::RemoveEndpoint { id, reply })
+    pub async fn add_endpoint(&self, kind: EndpointKind, link: &str) -> Res<EndpointHandle> {
+        let link = link.to_string();
+        self.call(|reply| Command::AddEndpoint { kind, link, reply })
             .await
     }
 
-    pub async fn list_active_endpoints(&self) -> Res<Vec<EndpointId>> {
+    pub async fn remove_endpoint(&self, kind: EndpointKind, link: &str) -> Res<()> {
+        let link = link.to_string();
+        self.call(|reply| Command::RemoveEndpoint { kind, link, reply })
+            .await
+    }
+
+    pub async fn list_active_endpoints(&self) -> Res<Vec<(EndpointKind, String)>> {
         self.call(|reply| Command::ListActiveEndpoints { reply })
             .await
     }
 
-    pub async fn reconcile(&self, desired: Vec<EndpointId>) -> Res<Vec<(EndpointId, LoaderError)>> {
+    pub async fn reconcile(
+        &self,
+        desired: Vec<(EndpointKind, String)>,
+    ) -> Res<Vec<(EndpointKind, String, LoaderError)>> {
         self.call(|reply| Command::Reconcile { desired, reply })
             .await
     }
@@ -105,11 +113,11 @@ fn dispatch<B: BpfBackend>(loader: &mut Loader<B>, cmd: Command) {
     // (e.g. it timed out and moved on), that's the caller's business,
     // not a reason to log noise or panic here.
     match cmd {
-        Command::AddEndpoint { id, reply } => {
-            let _ = reply.send(loader.add_endpoint(&id));
+        Command::AddEndpoint { kind, link, reply } => {
+            let _ = reply.send(loader.add_endpoint(kind, &link));
         }
-        Command::RemoveEndpoint { id, reply } => {
-            let _ = reply.send(loader.remove_endpoint(&id));
+        Command::RemoveEndpoint { kind, link, reply } => {
+            let _ = reply.send(loader.remove_endpoint(kind, &link));
         }
         Command::ListActiveEndpoints { reply } => {
             let _ = reply.send(loader.list_active_endpoints());
@@ -126,20 +134,21 @@ fn dispatch<B: BpfBackend>(loader: &mut Loader<B>, cmd: Command) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{endpoint::ContainerId, mock_backend::MockBackend};
+    use crate::mock_backend::MockBackend;
 
     #[tokio::test]
     async fn actor_serializes_calls_and_reports_state_after_restart() {
         let loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
         let handle = LoaderHandle::spawn(loader, 16);
 
-        let id = EndpointId::Container(ContainerId(123));
-        handle.add_endpoint(id.clone()).await.unwrap();
+        let kind = EndpointKind::Container;
+        let link = "lxc00123";
+        handle.add_endpoint(kind, link).await.unwrap();
 
         let active = handle.list_active_endpoints().await.unwrap();
-        assert_eq!(active, vec![id.clone()]);
+        assert_eq!(active, vec![(kind, link.to_string())]);
 
-        handle.remove_endpoint(id).await.unwrap();
+        handle.remove_endpoint(kind, link).await.unwrap();
         assert!(handle.list_active_endpoints().await.unwrap().is_empty());
     }
 

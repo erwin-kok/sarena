@@ -13,7 +13,7 @@ mod mock_backend;
 pub use actor::LoaderHandle;
 pub use aya_backend::AyaBackend;
 pub use backend::BpfBackend;
-pub use endpoint::{ContainerId, EndpointId};
+pub use endpoint::EndpointKind;
 pub use error::{HookFailure, LoaderError};
 pub use loader::{EndpointHandle, Loader};
 pub use manifest::Hook;

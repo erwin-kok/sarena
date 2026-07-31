@@ -72,6 +72,7 @@ syn = { version = "2", default-features = false }
 thiserror = { version = "2" }
 tokio = { version = "1.40.0" }
 tracing = { version = "0.1" }
+tracing-subscriber = { version = "0.3", default-features = false }
 which = { version = "8" }
 
 [workspace.lints.clippy]

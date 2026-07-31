@@ -79,7 +79,7 @@ pub(crate) const WIREGUARD_HOOKS: &[HookSpec] = &[
 ];
 
 pub(crate) const CONTAINER_PER_ENDPOINT_MAPS: &[&str] = &["calls_map"];
-pub(crate) const HOST_PER_ENDPOINT_MAPS: &[&str] = &["calls_map"];
+pub(crate) const HOST_PER_ENDPOINT_MAPS: &[&str] = &["calls_map", "endpoint_config"];
 pub(crate) const NETDEV_PER_ENDPOINT_MAPS: &[&str] = &["calls_map"];
 pub(crate) const OVERLAY_PER_ENDPOINT_MAPS: &[&str] = &["calls_map"];
 pub(crate) const WIREGUARD_PER_ENDPOINT_MAPS: &[&str] = &["calls_map"];

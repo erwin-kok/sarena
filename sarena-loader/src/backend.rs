@@ -3,13 +3,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{endpoint::EndpointId, error::Res, manifest::Hook};
+use crate::{error::Res, manifest::Hook};
 
 pub trait BpfBackend {
     type Instance;
     type LinkType;
 
-    fn resolve_link(&mut self, id: &EndpointId) -> Res<Self::LinkType>;
+    fn resolve_link(&mut self, link: &str) -> Res<Self::LinkType>;
     fn load_instance(&mut self, maps: &HashMap<String, PathBuf>) -> Res<Self::Instance>;
     fn ensure_attached(
         &mut self,

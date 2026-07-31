@@ -1,21 +1,19 @@
 use std::path::{Path, PathBuf};
 
-use crate::{ContainerId, endpoint::EndpointId};
+use crate::endpoint::EndpointKind;
 
 /// Resolves every pin path this loader ever touches, all under one
 /// root (e.g. `/sys/fs/bpf/sarena`). Pure and deterministic on
 /// purpose - no I/O here, so every method is trivially unit-testable
 /// and there's exactly one place that knows the on-disk layout.
 ///
-/// Layout:
+/// Layout (uniform across every kind - `link` is always the network
+/// interface name):
 /// ```text
-/// <root>/links/container/<container_id>/<prog_name>
-/// <root>/links/host/<link_name>/<prog_name>
-/// <root>/links/netdev/<link_name>/<prog_name>
-/// <root>/links/overlay/<link_name>/<prog_name>
+/// <root>/links/<kind>/<link>/<prog_name>
 ///
-/// <root>/globals/<map_name>                   global maps
-/// <root>/globals/<map_name>_<endpoint_key>    per-endpoint maps
+/// <root>/globals/<map_name>        global maps
+/// <root>/globals/<map_name>_<link> per-endpoint maps
 /// ```
 #[derive(Clone, Debug)]
 pub struct PinRoot(PathBuf);
@@ -38,83 +36,53 @@ impl PinRoot {
         self.0.join("globals")
     }
 
-    pub fn endpoint_link_dir(&self, id: &EndpointId) -> PathBuf {
-        self.links_dir().join(pin_subpath(id))
+    pub fn endpoint_link_dir(&self, kind: EndpointKind, link: &str) -> PathBuf {
+        self.links_dir().join(pin_subpath(kind, link))
     }
 
-    pub fn per_endpoint_map_dir(&self, map_name: &str, id: &EndpointId) -> PathBuf {
-        self.globals_dir()
-            .join(format!("{map_name}_{}", endpoint_key(id)))
+    pub fn per_endpoint_map_dir(&self, map_name: &str, link: &str) -> PathBuf {
+        self.globals_dir().join(format!("{map_name}_{link}"))
     }
 
-    pub fn parse_pin_subpath(path: &Path) -> Option<EndpointId> {
+    pub fn parse_pin_subpath(path: &Path) -> Option<(EndpointKind, String)> {
         let mut components = path.components();
-        let kind = components.next()?.as_os_str().to_str()?;
-        match kind {
-            "container" => {
-                let raw = components.next()?.as_os_str().to_str()?;
-                let id: u16 = raw.parse().ok()?;
-                Some(EndpointId::Container(ContainerId(id)))
-            }
-            "host" => {
-                let name = components.next()?.as_os_str().to_str()?;
-                Some(EndpointId::Host(name.to_string()))
-            }
-            "netdev" => {
-                let name = components.next()?.as_os_str().to_str()?;
-                Some(EndpointId::NetDev(name.to_string()))
-            }
-            "overlay" => {
-                let name = components.next()?.as_os_str().to_str()?;
-                Some(EndpointId::Overlay(name.to_string()))
-            }
-            "wireguard" => {
-                let name = components.next()?.as_os_str().to_str()?;
-                Some(EndpointId::Wireguard(name.to_string()))
-            }
-            _ => None,
-        }
+        let kind_str = components.next()?.as_os_str().to_str()?;
+        let kind = match kind_str {
+            "container" => EndpointKind::Container,
+            "host" => EndpointKind::Host,
+            "netdev" => EndpointKind::NetDev,
+            "overlay" => EndpointKind::Overlay,
+            "wireguard" => EndpointKind::Wireguard,
+            _ => return None,
+        };
+        let link = components.next()?.as_os_str().to_str()?.to_string();
+        Some((kind, link))
     }
 }
 
-fn endpoint_key(id: &EndpointId) -> String {
-    match id {
-        EndpointId::Container(cid) => cid.to_string(),
-        EndpointId::Host(link) => link.clone(),
-        EndpointId::NetDev(link) => link.clone(),
-        EndpointId::Overlay(link) => link.clone(),
-        EndpointId::Wireguard(link) => link.clone(),
-    }
-}
-
-fn pin_subpath(id: &EndpointId) -> PathBuf {
-    match id {
-        EndpointId::Container(cid) => Path::new("container").join(cid.to_string()),
-        EndpointId::Host(link) => Path::new("host").join(link),
-        EndpointId::NetDev(link) => Path::new("netdev").join(link),
-        EndpointId::Overlay(link) => Path::new("overlay").join(link),
-        EndpointId::Wireguard(link) => Path::new("wireguard").join(link),
-    }
+fn pin_subpath(kind: EndpointKind, link: &str) -> PathBuf {
+    Path::new(kind.kind_str()).join(link)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::endpoint::ContainerId;
 
     #[test]
     fn pin_subpath_roundtrips_for_every_kind() {
-        let ids = [
-            EndpointId::Container(ContainerId(42)),
-            EndpointId::Host("host".to_string()),
-            EndpointId::NetDev("eth0".to_string()),
-            EndpointId::Overlay("overlay".to_string()),
+        let kinds = [
+            EndpointKind::Container,
+            EndpointKind::Host,
+            EndpointKind::NetDev,
+            EndpointKind::Overlay,
+            EndpointKind::Wireguard,
         ];
-        for id in ids {
-            let sub = pin_subpath(&id);
-            let parsed = PinRoot::parse_pin_subpath(&sub)
-                .unwrap_or_else(|| panic!("failed to parse {sub:?} back into an EndpointId"));
-            assert_eq!(id, parsed);
+        for kind in kinds {
+            let sub = pin_subpath(kind, "eth0");
+            let (parsed_kind, parsed_link) = PinRoot::parse_pin_subpath(&sub)
+                .unwrap_or_else(|| panic!("failed to parse {sub:?} back into a kind/link pair"));
+            assert_eq!(kind, parsed_kind);
+            assert_eq!(parsed_link, "eth0");
         }
     }
 
@@ -127,20 +95,24 @@ mod tests {
     #[test]
     fn endpoint_link_dirs_are_scoped_per_endpoint() {
         let root = PinRoot::new("/sys/fs/bpf/test");
-        let a = EndpointId::Container(ContainerId(1));
-        let b = EndpointId::Container(ContainerId(2));
 
-        assert_ne!(root.endpoint_link_dir(&a), root.endpoint_link_dir(&b));
+        assert_ne!(
+            root.endpoint_link_dir(EndpointKind::Container, "lxc00001"),
+            root.endpoint_link_dir(EndpointKind::Container, "lxc00002")
+        );
+        assert_ne!(
+            root.endpoint_link_dir(EndpointKind::Container, "eth0"),
+            root.endpoint_link_dir(EndpointKind::Host, "eth0"),
+            "the same link name under a different kind must not collide"
+        );
     }
 
     #[test]
     fn per_endpoint_map_paths_do_not_collide() {
         let root = PinRoot::new("/sys/fs/bpf/test");
-        let a = EndpointId::Container(ContainerId(1));
-        let b = EndpointId::Container(ContainerId(2));
         assert_ne!(
-            root.per_endpoint_map_dir("sarena_policy", &a),
-            root.per_endpoint_map_dir("sarena_policy", &b)
+            root.per_endpoint_map_dir("sarena_policy", "lxc00001"),
+            root.per_endpoint_map_dir("sarena_policy", "lxc00002")
         );
     }
 }
