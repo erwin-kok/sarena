@@ -1,16 +1,21 @@
 use std::{
-    net::Ipv4Addr,
+    net::{IpAddr, Ipv4Addr},
     os::fd::{AsRawFd, RawFd},
     path::Path,
 };
 
 use aya::programs::{SchedClassifier, TcAttachType};
 use futures::TryStreamExt;
-use netlink_packet_route::link::{
-    InfoData, InfoKind, InfoVeth, LinkAttribute, LinkFlags, LinkInfo, LinkMessage,
+use ipnetwork::IpNetwork;
+use netlink_packet_route::{
+    address::{AddressAttribute, AddressFlags, AddressHeaderFlags},
+    link::{InfoData, InfoKind, InfoVeth, LinkAttribute, LinkFlags, LinkInfo, LinkMessage},
+    route::{RouteAttribute, RouteMetric, RouteScope},
 };
 
-use crate::{InfraError, Link, MacAddress, Netns, PinnedTcxProgram, Res, TcxAttach, tcx};
+use crate::{
+    InfraError, Link, MacAddress, Netns, PinnedTcxProgram, Res, TcxAttach, route::Route, tcx,
+};
 
 /// Recognised `IFLA_INFO_KIND` strings mapped to typed variants.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -222,18 +227,16 @@ impl Link for NetlinkLink {
         }
     }
 
-    async fn set_addr(&mut self, ip: Ipv4Addr, prefix_len: u8) -> Res<()> {
+    async fn set_addr(&mut self, addr: IpNetwork) -> Res<()> {
         let index = self.index;
         if let Some(ns) = &self.netns {
             let netns = Netns::open(ns)?;
             netns
-                .run(move |handle| async move {
-                    link_set_addr_impl(&handle, index, ip, prefix_len).await
-                })
+                .run(move |handle| async move { link_add_addr_impl(&handle, index, addr).await })
                 .await
         } else {
             let handle = default_handle()?;
-            link_set_addr_impl(&handle, index, ip, prefix_len).await
+            link_add_addr_impl(&handle, index, addr).await
         }
     }
 
@@ -249,6 +252,72 @@ impl Link for NetlinkLink {
         } else {
             let handle = default_handle()?;
             link_add_gateway_impl(&handle, index, gateway).await
+        }
+    }
+
+    async fn add_route(&mut self, route: &Route) -> Res<()> {
+        let index = self.index;
+        let route = route.clone();
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open(ns)?;
+            netns
+                .run(move |handle| async move { link_add_route_impl(&handle, index, &route).await })
+                .await
+        } else {
+            let handle = default_handle()?;
+            link_add_route_impl(&handle, index, &route).await
+        }
+    }
+
+    async fn set_ipv4_forwarding(&mut self, enabled: bool) -> Res<()> {
+        let path = format!("/proc/sys/net/ipv4/conf/{}/forwarding", self.name);
+        let value = if enabled { "1" } else { "0" };
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open(ns)?;
+            netns
+                .run(move |_| async move { sysctl_write(&path, value) })
+                .await
+        } else {
+            sysctl_write(&path, value)
+        }
+    }
+
+    async fn set_ipv6_forwarding(&mut self, enabled: bool) -> Res<()> {
+        let path = format!("/proc/sys/net/ipv6/conf/{}/forwarding", self.name);
+        let value = if enabled { "1" } else { "0" };
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open(ns)?;
+            netns
+                .run(move |_| async move { sysctl_write(&path, value) })
+                .await
+        } else {
+            sysctl_write(&path, value)
+        }
+    }
+
+    async fn set_ipv6_disable(&mut self, disable: bool) -> Res<()> {
+        let path = format!("/proc/sys/net/ipv6/conf/{}/disable_ipv6", self.name);
+        let value = if disable { "1" } else { "0" };
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open(ns)?;
+            netns
+                .run(move |_| async move { sysctl_write(&path, value) })
+                .await
+        } else {
+            sysctl_write(&path, value)
+        }
+    }
+
+    async fn set_rp_filter(&mut self, value: u8) -> Res<()> {
+        let path = format!("/proc/sys/net/ipv4/conf/{}/rp_filter", self.name);
+        let val = value.to_string();
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open(ns)?;
+            netns
+                .run(move |_| async move { sysctl_write(&path, &val) })
+                .await
+        } else {
+            sysctl_write(&path, &val)
         }
     }
 }
@@ -495,21 +564,24 @@ async fn link_set_mac_impl(handle: &rtnetlink::Handle, index: u32, mac: MacAddre
         .map_err(InfraError::Netlink)
 }
 
-/// Set (replacing any existing matching entry) an IPv4 address on the link
-/// with the given index; called from within an active namespace.
-async fn link_set_addr_impl(
-    handle: &rtnetlink::Handle,
-    index: u32,
-    ip: Ipv4Addr,
-    prefix_len: u8,
-) -> Res<()> {
-    handle
+/// Set (replacing any existing matching entry) an address on the link with
+/// the given index; called from within an active namespace. IPv6 addresses
+/// are added with `IFA_F_NODAD` -- skipping duplicate address detection,
+/// which would otherwise leave the address `tentative` (and generally
+/// unusable) for a few seconds after being added.
+async fn link_add_addr_impl(handle: &rtnetlink::Handle, index: u32, addr: IpNetwork) -> Res<()> {
+    let mut request = handle
         .address()
-        .add(index, ip.into(), prefix_len)
-        .replace()
-        .execute()
-        .await
-        .map_err(InfraError::Netlink)
+        .add(index, addr.ip(), addr.prefix())
+        .replace();
+    if addr.is_ipv6() {
+        let message = request.message_mut();
+        message.header.flags |= AddressHeaderFlags::Nodad;
+        message
+            .attributes
+            .push(AddressAttribute::Flags(AddressFlags::Nodad));
+    }
+    request.execute().await.map_err(InfraError::Netlink)
 }
 
 /// Add (replacing any existing one) the default route via `gateway`,
@@ -531,6 +603,44 @@ async fn link_add_gateway_impl(
         .execute()
         .await
         .map_err(InfraError::Netlink)
+}
+
+/// Adds `route` via the link with the given index; called from within an
+/// active namespace.
+///
+/// Scope defaults to universe, but drops to link-local when there's no
+/// nexthop (an on-link/directly-connected route) -- this is computed from
+/// `route.nexthop`, overriding whatever `route.scope` already holds,
+/// exactly like the reference implementation this is ported from (which
+/// likewise ignores its own route's `Scope` field here in favor of
+/// deriving it from whether a nexthop is present).
+async fn link_add_route_impl(handle: &rtnetlink::Handle, index: u32, route: &Route) -> Res<()> {
+    let mut builder: rtnetlink::RouteMessageBuilder =
+        rtnetlink::RouteMessageBuilder::<IpAddr>::new()
+            .destination_prefix(route.prefix.ip(), route.prefix.prefix())
+            .map_err(|e| InfraError::InvalidRoute(e.to_string()))?
+            .output_interface(index);
+
+    builder = match route.nexthop {
+        Some(nexthop) => builder
+            .gateway(nexthop)
+            .map_err(|e| InfraError::InvalidRoute(e.to_string()))?,
+        None => builder.scope(RouteScope::Link),
+    };
+
+    if let Some(table) = route.table {
+        builder = builder.table_id(table);
+    }
+
+    let mut request = handle.route().add(builder.build()).replace();
+    if let Some(mtu) = route.mtu {
+        request
+            .message_mut()
+            .attributes
+            .push(RouteAttribute::Metrics(vec![RouteMetric::Mtu(mtu)]));
+    }
+
+    request.execute().await.map_err(InfraError::Netlink)
 }
 
 /// Rename the link with the given index; called from within an active namespace.
@@ -575,4 +685,11 @@ fn default_handle() -> Res<rtnetlink::Handle> {
     let (conn, handle, _) = rtnetlink::new_connection().map_err(InfraError::Runtime)?;
     tokio::spawn(conn);
     Ok(handle)
+}
+
+pub(crate) fn sysctl_write(path: &str, value: &str) -> Res<()> {
+    std::fs::write(path, value).map_err(|e| InfraError::Io {
+        context: format!("write {path}"),
+        source: e,
+    })
 }

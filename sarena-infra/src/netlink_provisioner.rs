@@ -1,6 +1,6 @@
 use crate::{
     Link, Netns, NetworkProvisioner, Res, VethPair, VethSpec,
-    netlink_link::{self, NetlinkLink, create_veth_pair},
+    netlink_link::{self, NetlinkLink, create_veth_pair, sysctl_write},
 };
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -16,6 +16,16 @@ impl NetworkProvisioner for NetlinkNetworkProvisioner {
     #[allow(clippy::unused_async_trait_impl)]
     async fn delete_netns(&mut self, name: &str) -> Res<()> {
         Netns::delete(name)
+    }
+
+    #[allow(clippy::unused_async_trait_impl)]
+    async fn enable_ip_forwarding(&mut self, ipv6: bool) -> Res<()> {
+        sysctl_write("/proc/sys/net/ipv4/ip_forward", "1")?;
+        sysctl_write("/proc/sys/net/ipv4/conf/all/forwarding", "1")?;
+        if ipv6 {
+            sysctl_write("/proc/sys/net/ipv6/conf/all/forwarding", "1")?;
+        }
+        Ok(())
     }
 
     async fn create_veth(&mut self, spec: VethSpec) -> Res<VethPair<Self::LinkType>> {
@@ -46,6 +56,14 @@ impl NetworkProvisioner for NetlinkNetworkProvisioner {
     async fn delete_veth(&mut self, veth_pair: &mut VethPair<Self::LinkType>) -> Res<()> {
         // deleting the host will automatically also delete the peer.
         veth_pair.host.delete().await
+    }
+
+    async fn delete_link(&self, name: &str) -> Res<()> {
+        self.get_link(name).await?.delete().await
+    }
+
+    async fn delete_link_in_ns(&self, ns: &str, name: &str) -> Res<()> {
+        self.get_link_in_ns(ns, name).await?.delete().await
     }
 
     async fn get_link(&self, name: &str) -> Res<Self::LinkType> {

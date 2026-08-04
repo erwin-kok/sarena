@@ -1,11 +1,14 @@
 use std::net::{IpAddr, Ipv4Addr};
 
 use futures::TryStreamExt;
-use netlink_packet_route::route::{RouteAddress, RouteAttribute};
+use ipnetwork::IpNetwork;
+use netlink_packet_route::route::{
+    RouteAddress, RouteAttribute, RouteMessage, RouteMetric, RouteScope,
+};
 use rtnetlink::RouteMessageBuilder;
 use sarena_infra::{
     InfraError, Link, MacAddress, NetlinkNetworkProvisioner, Netns, NetworkProvisioner, VethSpec,
-    netlink_link::LinkKind, test_support,
+    netlink_link::LinkKind, route::Route, test_support,
 };
 
 /// Raw netlink check: does namespace `ns` have address `ip/prefix_len`
@@ -55,6 +58,37 @@ async fn has_default_gateway(ns: &str, ifindex: u32, gateway: Ipv4Addr) -> bool 
                     matches!(a, RouteAttribute::Gateway(RouteAddress::Inet(gw)) if *gw == gateway)
                 });
                 via_ifindex && via_gateway
+            }))
+        })
+        .await
+        .expect("route query failed")
+}
+
+/// Raw netlink check: returns the route matching destination
+/// `prefix/prefix_len` inside namespace `ns`, if any. `sarena-infra` has no
+/// route-query API yet (only [`Link::add_route`]), so this queries
+/// directly.
+async fn find_route(ns: &str, prefix: Ipv4Addr, prefix_len: u8) -> Option<RouteMessage> {
+    Netns::open(ns)
+        .unwrap()
+        .run(move |handle| async move {
+            let routes: Vec<_> = handle
+                .route()
+                .get(RouteMessageBuilder::<Ipv4Addr>::new().build())
+                .execute()
+                .try_collect()
+                .await
+                .map_err(InfraError::Netlink)?;
+
+            Ok(routes.into_iter().find(|route| {
+                route.header.destination_prefix_length == prefix_len
+                    && route.attributes.iter().any(|a| {
+                        matches!(
+                            a,
+                            RouteAttribute::Destination(RouteAddress::Inet(addr))
+                                if *addr == prefix
+                        )
+                    })
             }))
         })
         .await
@@ -266,13 +300,14 @@ async fn set_addr_and_add_gateway_configure_the_link() {
         host.set_up().await.expect("link_set_up failed");
 
         let ip = Ipv4Addr::new(10, 99, 0, 1);
-        host.set_addr(ip, 24).await.expect("set_addr failed");
+        let addr = IpNetwork::new(IpAddr::V4(ip), 24).expect("valid IPv4 network");
+        host.set_addr(addr).await.expect("set_addr failed");
         assert!(has_address(&ns, host.ifindex(), ip, 24).await);
 
         // Idempotent: setting the exact same address again must not error
-        // -- this is exactly what `.replace()` in `link_set_addr_impl` buys
+        // -- this is exactly what `.replace()` in `link_add_addr_impl` buys
         // us.
-        host.set_addr(ip, 24).await.expect("repeat set_addr failed");
+        host.set_addr(addr).await.expect("repeat set_addr failed");
         assert!(has_address(&ns, host.ifindex(), ip, 24).await);
 
         let gateway = Ipv4Addr::new(10, 99, 0, 254);
@@ -452,6 +487,271 @@ async fn create_veth_with_duplicate_name_fails() {
         );
 
         host.delete().await.expect("cleanup delete failed");
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
+async fn delete_link_by_name_removes_it_and_its_peer() {
+    test_support::with_temp_netns("dpi-dlnm-", |ns| async move {
+        let mut provisioner = NetlinkNetworkProvisioner;
+        let name = test_support::unique_name("dpidln0-");
+        let peer_name = test_support::unique_name("dpidln1-");
+        provisioner
+            .create_veth(VethSpec {
+                host_ifname: name.clone(),
+                peer_ifname: peer_name.clone(),
+                peer_netns: ns.clone(),
+                host_mac: None,
+                peer_mac: None,
+            })
+            .await
+            .expect("create_veth failed");
+
+        provisioner
+            .delete_link(&name)
+            .await
+            .expect("delete_link failed");
+
+        assert!(provisioner.get_link(&name).await.is_err());
+        // Deleting one end of a veth pair deletes both, even when going
+        // through the by-name `delete_link` rather than `Link::delete`.
+        assert!(provisioner.get_link_in_ns(&ns, &peer_name).await.is_err());
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
+async fn delete_link_in_ns_removes_it_and_its_peer() {
+    test_support::with_temp_netns("dpi-dlin-", |ns| async move {
+        let mut provisioner = NetlinkNetworkProvisioner;
+        let name = test_support::unique_name("dpidli0-");
+        let peer_name = test_support::unique_name("dpidli1-");
+        let pair = provisioner
+            .create_veth(VethSpec {
+                host_ifname: name.clone(),
+                peer_ifname: peer_name.clone(),
+                peer_netns: ns.clone(),
+                host_mac: None,
+                peer_mac: None,
+            })
+            .await
+            .expect("create_veth failed");
+        let mut host = pair.host;
+        host.set_ns(&ns).await.expect("link_setns failed for host");
+
+        provisioner
+            .delete_link_in_ns(&ns, &name)
+            .await
+            .expect("delete_link_in_ns failed");
+
+        assert!(provisioner.get_link_in_ns(&ns, &name).await.is_err());
+        assert!(provisioner.get_link_in_ns(&ns, &peer_name).await.is_err());
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
+async fn delete_link_for_missing_name_fails() {
+    let provisioner = NetlinkNetworkProvisioner;
+    let missing = test_support::unique_name("dpidlm0-");
+
+    let err = provisioner
+        .delete_link(&missing)
+        .await
+        .expect_err("delete_link should fail for a name that was never created");
+    assert!(matches!(err, InfraError::LinkNotFound(n) if n == missing));
+}
+
+#[tokio::test]
+#[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
+async fn delete_link_in_ns_for_missing_link_fails() {
+    test_support::with_temp_netns("dpi-dlml-", |ns| async move {
+        let provisioner = NetlinkNetworkProvisioner;
+        let missing = test_support::unique_name("dpidlm1-");
+
+        let err = provisioner
+            .delete_link_in_ns(&ns, &missing)
+            .await
+            .expect_err("delete_link_in_ns should fail for a name that was never created");
+        assert!(matches!(err, InfraError::LinkNotFound(n) if n == missing));
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
+async fn delete_link_in_ns_for_missing_namespace_fails() {
+    let provisioner = NetlinkNetworkProvisioner;
+    let missing_ns = test_support::unique_name("dpi-missing-");
+    let name = test_support::unique_name("dpidlmn-");
+
+    let err = provisioner
+        .delete_link_in_ns(&missing_ns, &name)
+        .await
+        .expect_err("delete_link_in_ns should fail for a namespace that was never created");
+    assert!(matches!(err, InfraError::OpenNamespace { name, .. } if name == missing_ns));
+}
+
+/// A minimal `Route` for `prefix`, with every other field left unset --
+/// tests override just the fields they care about via `..route(prefix)`.
+fn route(prefix: IpNetwork) -> Route {
+    Route {
+        prefix,
+        nexthop: None,
+        local: None,
+        device: None,
+        mtu: None,
+        priority: None,
+        proto: None,
+        scope: None,
+        table: None,
+        kind: None,
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
+async fn add_route_without_a_nexthop_installs_an_on_link_route() {
+    test_support::with_temp_netns("dpi-rtol-", |ns| async move {
+        let mut provisioner = NetlinkNetworkProvisioner;
+        let name = test_support::unique_name("dpirt0-");
+        let peer_name = test_support::unique_name("dpirt1-");
+        let pair = provisioner
+            .create_veth(VethSpec {
+                host_ifname: name.clone(),
+                peer_ifname: peer_name.clone(),
+                peer_netns: ns.clone(),
+                host_mac: None,
+                peer_mac: None,
+            })
+            .await
+            .expect("create_veth failed");
+        let mut host = pair.host;
+        host.set_ns(&ns).await.expect("link_setns failed for host");
+        host.set_up().await.expect("link_set_up failed");
+
+        let prefix = Ipv4Addr::new(10, 77, 0, 0);
+        let network = IpNetwork::new(IpAddr::V4(prefix), 24).expect("valid IPv4 network");
+        host.add_route(&route(network))
+            .await
+            .expect("add_route failed");
+
+        let installed = find_route(&ns, prefix, 24)
+            .await
+            .expect("route should have been installed");
+        assert_eq!(installed.header.scope, RouteScope::Link);
+        assert!(
+            installed
+                .attributes
+                .iter()
+                .any(|a| matches!(a, RouteAttribute::Oif(idx) if *idx == host.ifindex()))
+        );
+        // No nexthop was given, so no gateway attribute should be present.
+        assert!(
+            !installed
+                .attributes
+                .iter()
+                .any(|a| matches!(a, RouteAttribute::Gateway(_)))
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
+async fn add_route_with_a_nexthop_installs_a_route_via_gateway() {
+    test_support::with_temp_netns("dpi-rtgw-", |ns| async move {
+        let mut provisioner = NetlinkNetworkProvisioner;
+        let name = test_support::unique_name("dpirt2-");
+        let peer_name = test_support::unique_name("dpirt3-");
+        let pair = provisioner
+            .create_veth(VethSpec {
+                host_ifname: name.clone(),
+                peer_ifname: peer_name.clone(),
+                peer_netns: ns.clone(),
+                host_mac: None,
+                peer_mac: None,
+            })
+            .await
+            .expect("create_veth failed");
+        let mut host = pair.host;
+        host.set_ns(&ns).await.expect("link_setns failed for host");
+        host.set_up().await.expect("link_set_up failed");
+
+        // The gateway has to be reachable via an already-connected subnet,
+        // or the kernel rejects the route with ENETUNREACH -- so give the
+        // link an address on the same /24 the nexthop below lives in.
+        let host_ip = Ipv4Addr::new(10, 78, 0, 1);
+        host.set_addr(IpNetwork::new(IpAddr::V4(host_ip), 24).unwrap())
+            .await
+            .expect("set_addr failed");
+
+        let nexthop = Ipv4Addr::new(10, 78, 0, 2);
+        let prefix = Ipv4Addr::new(10, 88, 0, 0);
+        let network = IpNetwork::new(IpAddr::V4(prefix), 24).expect("valid IPv4 network");
+        let mut r = route(network);
+        r.nexthop = Some(IpAddr::V4(nexthop));
+        host.add_route(&r).await.expect("add_route failed");
+
+        let installed = find_route(&ns, prefix, 24)
+            .await
+            .expect("route should have been installed");
+        // A route with a nexthop keeps the builder's default (universe)
+        // scope, unlike the on-link case above.
+        assert_eq!(installed.header.scope, RouteScope::Universe);
+        assert!(installed.attributes.iter().any(|a| matches!(
+            a,
+            RouteAttribute::Gateway(RouteAddress::Inet(gw)) if *gw == nexthop
+        )));
+
+        // Idempotent: adding the exact same route again must not error --
+        // `link_add_route_impl`'s `.replace()` is what buys us this.
+        host.add_route(&r).await.expect("repeat add_route failed");
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
+async fn add_route_sets_table_and_mtu() {
+    test_support::with_temp_netns("dpi-rttm-", |ns| async move {
+        let mut provisioner = NetlinkNetworkProvisioner;
+        let name = test_support::unique_name("dpirt4-");
+        let peer_name = test_support::unique_name("dpirt5-");
+        let pair = provisioner
+            .create_veth(VethSpec {
+                host_ifname: name.clone(),
+                peer_ifname: peer_name.clone(),
+                peer_netns: ns.clone(),
+                host_mac: None,
+                peer_mac: None,
+            })
+            .await
+            .expect("create_veth failed");
+        let mut host = pair.host;
+        host.set_ns(&ns).await.expect("link_setns failed for host");
+        host.set_up().await.expect("link_set_up failed");
+
+        let prefix = Ipv4Addr::new(10, 99, 77, 0);
+        let network = IpNetwork::new(IpAddr::V4(prefix), 24).expect("valid IPv4 network");
+        let mut r = route(network);
+        r.table = Some(100);
+        r.mtu = Some(1300);
+        host.add_route(&r).await.expect("add_route failed");
+
+        let installed = find_route(&ns, prefix, 24)
+            .await
+            .expect("route should have been installed");
+        assert_eq!(installed.header.table, 100);
+        assert!(installed.attributes.iter().any(|a| matches!(
+            a,
+            RouteAttribute::Metrics(metrics)
+                if metrics.contains(&RouteMetric::Mtu(1300))
+        )));
     })
     .await;
 }

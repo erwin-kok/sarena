@@ -22,6 +22,8 @@ pub enum Call {
     },
     UnpinMap(PathBuf),
     RemovePinDir(PathBuf),
+    StopLogging(String),
+    StopAllLogging,
 }
 
 #[derive(Default)]
@@ -71,7 +73,11 @@ impl BpfBackend for MockBackend {
         })
     }
 
-    fn load_instance(&mut self, maps: &HashMap<String, PathBuf>) -> Res<Self::Instance> {
+    fn load_instance(
+        &mut self,
+        _link: &str,
+        maps: &HashMap<String, PathBuf>,
+    ) -> Res<Self::Instance> {
         self.tick()?;
         self.calls.push(Call::LoadInstance(
             maps.iter()
@@ -126,5 +132,13 @@ impl BpfBackend for MockBackend {
             .filter(|p| p.starts_with(prefix))
             .filter_map(|p| p.strip_prefix(prefix).ok().map(|p| p.to_path_buf()))
             .collect())
+    }
+
+    fn stop_logging(&mut self, link: &str) {
+        self.calls.push(Call::StopLogging(link.to_string()));
+    }
+
+    fn stop_all_logging(&mut self) {
+        self.calls.push(Call::StopAllLogging);
     }
 }

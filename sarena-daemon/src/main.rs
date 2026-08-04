@@ -9,7 +9,7 @@ use aya::{
     maps::MapError,
     programs::{ProgramError, TcAttachType},
 };
-use env_logger::Env;
+use ipnetwork::IpNetwork;
 use sarena_infra::{
     InfraError, Link as _, NetlinkNetworkProvisioner, Netns, NetnsGuard, NetworkProvisioner as _,
     TcxAttach as _, VethSpec,
@@ -30,14 +30,15 @@ async fn main() -> Result<(), anyhow::Error> {
     // here, since `HostLink` never moves once created.
     Netns::unshare_self().await?;
 
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
+
+    tracing_log::LogTracer::init()
+        .expect("failed to install LogTracer bridging `log` records into `tracing`");
 
     info!("Application started");
 
@@ -101,16 +102,24 @@ async fn main() -> Result<(), anyhow::Error> {
     let peer2_ip = Ipv4Addr::new(192, 168, 22, 22);
 
     host1.set_up().await?;
-    host1.set_addr(host1_ip, 24).await?;
+    host1
+        .set_addr(IpNetwork::new(IpAddr::V4(host1_ip), 24)?)
+        .await?;
     host2.set_up().await?;
-    host2.set_addr(host2_ip, 24).await?;
+    host2
+        .set_addr(IpNetwork::new(IpAddr::V4(host2_ip), 24)?)
+        .await?;
 
     peer1.set_up().await?;
-    peer1.set_addr(peer1_ip, 24).await?;
+    peer1
+        .set_addr(IpNetwork::new(IpAddr::V4(peer1_ip), 24)?)
+        .await?;
     peer1.add_gateway(host1_ip).await?;
 
     peer2.set_up().await?;
-    peer2.set_addr(peer2_ip, 24).await?;
+    peer2
+        .set_addr(IpNetwork::new(IpAddr::V4(peer2_ip), 24)?)
+        .await?;
     peer2.add_gateway(host2_ip).await?;
 
     // Host ends live in this process's own namespace, so this runs

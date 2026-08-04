@@ -14,6 +14,9 @@ workspace = true
 [dependencies]
 aya = { workspace = true }
 futures = { workspace = true }
+ipnetwork = { workspace = true }
+nix = { workspace = true, features = ["sched", "mount", "fs"] }
+rand = { workspace = true, features = ["thread_rng"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync", "macros"] }
 tracing = { workspace = true }
@@ -23,9 +26,6 @@ tracing = { workspace = true }
 # netlink-packet-route, bump both together.
 rtnetlink = "0.21"
 netlink-packet-route = "0.30"
-
-# Namespace / mount / syscall primitives.
-nix = { version = "0.31", features = ["sched", "mount", "fs"] }
 
 [features]
 test = []

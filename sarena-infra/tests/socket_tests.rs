@@ -3,9 +3,16 @@ use std::{
     time::Duration,
 };
 
+use ipnetwork::IpNetwork;
 use sarena_infra::{
     InfraError, Link, NetlinkNetworkProvisioner, Netns, NetworkProvisioner, VethSpec, test_support,
 };
+
+/// Shorthand for building the `IpNetwork` [`Link::set_addr`] now takes,
+/// from the plain `Ipv4Addr` + prefix length this file otherwise deals in.
+fn v4(ip: Ipv4Addr, prefix: u8) -> IpNetwork {
+    IpNetwork::new(IpAddr::V4(ip), prefix).expect("valid IPv4 network")
+}
 
 #[tokio::test]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
@@ -35,7 +42,7 @@ async fn open_socket_on_configured_veth_peer() {
         let gateway = Ipv4Addr::new(192, 168, 20, 1);
 
         peer.set_up().await.expect("set_up failed");
-        peer.set_addr(ip, 24).await.expect("set_addr failed");
+        peer.set_addr(v4(ip, 24)).await.expect("set_addr failed");
         peer.add_gateway(gateway).await.expect("add_gateway failed");
 
         // Binding only makes sense from inside `peer_ns` -- `ip` doesn't
@@ -126,18 +133,18 @@ async fn forward_udp_packet_between_two_peer_namespaces() {
 
             host1.set_up().await.expect("host1 set_up failed");
             host1
-                .set_addr(host1_ip, 24)
+                .set_addr(v4(host1_ip, 24))
                 .await
                 .expect("host1 set_addr failed");
             host2.set_up().await.expect("host2 set_up failed");
             host2
-                .set_addr(host2_ip, 24)
+                .set_addr(v4(host2_ip, 24))
                 .await
                 .expect("host2 set_addr failed");
 
             peer1.set_up().await.expect("peer1 set_up failed");
             peer1
-                .set_addr(peer1_ip, 24)
+                .set_addr(v4(peer1_ip, 24))
                 .await
                 .expect("peer1 set_addr failed");
             peer1
@@ -147,7 +154,7 @@ async fn forward_udp_packet_between_two_peer_namespaces() {
 
             peer2.set_up().await.expect("peer2 set_up failed");
             peer2
-                .set_addr(peer2_ip, 24)
+                .set_addr(v4(peer2_ip, 24))
                 .await
                 .expect("peer2 set_addr failed");
             peer2

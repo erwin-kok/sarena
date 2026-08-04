@@ -10,7 +10,8 @@ pub trait BpfBackend {
     type LinkType;
 
     fn resolve_link(&mut self, link: &str) -> Res<Self::LinkType>;
-    fn load_instance(&mut self, maps: &HashMap<String, PathBuf>) -> Res<Self::Instance>;
+    fn load_instance(&mut self, link: &str, maps: &HashMap<String, PathBuf>)
+    -> Res<Self::Instance>;
     fn ensure_attached(
         &mut self,
         instance: &mut Self::Instance,
@@ -22,4 +23,6 @@ pub trait BpfBackend {
     fn unpin_map(&mut self, path: &Path) -> Res<()>;
     fn remove_pin_dir(&mut self, dir: &Path) -> Res<()>;
     fn list_pins(&self, prefix: &Path) -> Res<Vec<PathBuf>>;
+    fn stop_logging(&mut self, link: &str);
+    fn stop_all_logging(&mut self);
 }

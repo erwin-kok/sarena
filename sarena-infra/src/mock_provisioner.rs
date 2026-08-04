@@ -6,6 +6,7 @@ use crate::{
 pub struct MockNetworkProvisioner {
     pub netns_created: Vec<String>,
     pub netns_deleted: Vec<String>,
+    pub ipv_forwarding_calls: Vec<bool>,
     pub veths_created: Vec<VethSpec>,
     pub veths_deleted: Vec<VethPair<MockLink>>,
     pub links: Vec<MockLink>,
@@ -23,6 +24,11 @@ impl NetworkProvisioner for MockNetworkProvisioner {
 
     async fn delete_netns(&mut self, name: &str) -> Res<()> {
         self.netns_deleted.push(name.to_owned());
+        Ok(())
+    }
+
+    async fn enable_ip_forwarding(&mut self, ipv6: bool) -> Res<()> {
+        self.ipv_forwarding_calls.push(ipv6);
         Ok(())
     }
 
@@ -74,6 +80,14 @@ impl NetworkProvisioner for MockNetworkProvisioner {
         veth_pair.host.delete().await?;
         veth_pair.peer.delete().await?;
         Ok(())
+    }
+
+    async fn delete_link(&self, name: &str) -> Res<()> {
+        self.get_link_in_ns_impl(None, name)?.delete().await
+    }
+
+    async fn delete_link_in_ns(&self, ns: &str, name: &str) -> Res<()> {
+        self.get_link_in_ns_impl(Some(ns), name)?.delete().await
     }
 
     async fn get_link(&self, name: &str) -> Res<Self::LinkType> {

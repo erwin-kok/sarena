@@ -1,5 +1,7 @@
 use std::fmt;
 
+use rand::RngExt as _;
+
 use crate::InfraError;
 
 /// Six-octet Ethernet hardware address.
@@ -20,6 +22,16 @@ impl MacAddress {
         } else {
             None
         }
+    }
+
+    /// Generate a random unicast and locally administered MAC address.
+    pub fn generate_rand() -> Self {
+        let mut mac = rand::rng().random::<[u8; 6]>();
+
+        // Set locally administered addresses bit and reset multicast bit.
+        mac[0] = (mac[0] | 0x02) & 0xfe;
+
+        Self(mac)
     }
 }
 

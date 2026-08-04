@@ -16,8 +16,12 @@ default = []
 test = []
 
 [dependencies]
-aya = { workspace = true }
 sarena-infra = { path = "../sarena-infra", features = ["test"] }
+
+aya = { workspace = true }
+aya-log = { workspace = true }
+log = { workspace = true }
+nix = { workspace = true, features = ["poll"] }
 tokio = { workspace = true, features = ["rt"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }

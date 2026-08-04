@@ -39,7 +39,7 @@ impl<B: BpfBackend> Loader<B> {
     pub fn add_endpoint(&mut self, kind: EndpointKind, link: &str) -> Res<EndpointHandle> {
         let resolved = self.backend.resolve_link(link)?;
         let per_endpoint_maps = kind.map_rename(&self.pins, link);
-        let mut instance = self.backend.load_instance(&per_endpoint_maps)?;
+        let mut instance = self.backend.load_instance(link, &per_endpoint_maps)?;
         let mut failures = Vec::new();
         let link_dir = self.pins.endpoint_link_dir(kind, link);
         for hook_spec in kind.hooks() {
@@ -77,6 +77,8 @@ impl<B: BpfBackend> Loader<B> {
     }
 
     pub fn remove_endpoint(&mut self, kind: EndpointKind, link: &str) -> Res<()> {
+        self.backend.stop_logging(link);
+
         self.backend
             .remove_pin_dir(&self.pins.endpoint_link_dir(kind, link))?;
 
@@ -142,6 +144,7 @@ impl<B: BpfBackend> Loader<B> {
     }
 
     pub fn teardown_all(&mut self) -> Res<()> {
+        self.backend.stop_all_logging();
         self.backend.remove_pin_dir(&self.pins.links_dir())?;
         self.backend.remove_pin_dir(&self.pins.globals_dir())?;
         Ok(())
@@ -176,7 +179,7 @@ mod tests {
 
         // CONTAINER_PER_ENDPOINT_MAPS currently declares one map. If
         // that list changes, update this count.
-        assert_eq!(handle.map_paths.len(), 1);
+        assert_eq!(handle.map_paths.len(), 2);
 
         loader.remove_endpoint(EndpointKind::Container, &l).unwrap();
         assert_eq!(loader.list_active_endpoints().unwrap(), vec![]);

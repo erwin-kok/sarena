@@ -15,6 +15,7 @@ sarena-ebpf-common = { path = "../sarena-ebpf-common", default-features = false 
 sarena-common = { path = "../sarena-common", default-features = false }
 
 aya-ebpf = { workspace = true, default-features = false }
+aya-log-ebpf = { workspace = true }
 network-types = { workspace = true, default-features = false }
 
 [build-dependencies]

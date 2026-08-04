@@ -4,6 +4,8 @@ use std::{
 };
 
 use aya::programs::{ProgramError, TcAttachType};
+use ipnetwork::IpNetwork;
+use route::Route;
 use thiserror::Error;
 
 pub mod mac_address;
@@ -12,6 +14,7 @@ pub mod mock_provisioner;
 pub mod netlink_link;
 pub mod netlink_provisioner;
 pub mod netns;
+pub mod route;
 pub mod tcx;
 
 #[cfg(any(test, feature = "test"))]
@@ -53,12 +56,18 @@ pub trait NetworkProvisioner {
     async fn create_netns(&mut self, name: &str) -> Res<()>;
     /// Delete namespace `name`.
     async fn delete_netns(&mut self, netns: &str) -> Res<()>;
+    /// Enable global IP forwarding, when ipv6 == true, also enable ipv6 forwarding.
+    async fn enable_ip_forwarding(&mut self, ipv6: bool) -> Res<()>;
     /// Create a veth pair per `spec`, returning its host and peer ends.
     async fn create_veth(&mut self, spec: VethSpec) -> Res<VethPair<Self::LinkType>>;
     /// Deleting either end of a veth pair deletes both; takes the host end
     /// since that's the one guaranteed to still be reachable from the
     /// router's own namespace.
     async fn delete_veth(&mut self, veth_pair: &mut VethPair<Self::LinkType>) -> Res<()>;
+    /// Delete the link named `name` in the default namespace.
+    async fn delete_link(&self, name: &str) -> Res<()>;
+    /// Delete the link named `name` inside namespace *ns*.
+    async fn delete_link_in_ns(&self, ns: &str, name: &str) -> Res<()>;
     /// Look up a link by name in the default namespace.
     async fn get_link(&self, name: &str) -> Res<Self::LinkType>;
     /// Look up a link by name inside namespace *ns*.
@@ -92,11 +101,42 @@ pub trait Link {
     async fn rename(&mut self, new_name: &str) -> Res<()>;
     /// Delete this link. Deleting either end of a veth pair deletes both.
     async fn delete(&mut self) -> Res<()>;
-    /// Set this link's IPv4 address (replacing any existing matching entry).
-    async fn set_addr(&mut self, ip: Ipv4Addr, prefix_len: u8) -> Res<()>;
+    /// Set this link's address (replacing any existing matching entry).
+    /// Accepts either an IPv4 or an IPv6 network; for IPv6, the address is
+    /// added with `IFA_F_NODAD` (skipping duplicate address detection),
+    /// matching how e.g. veth ends are typically brought up.
+    async fn set_addr(&mut self, addr: IpNetwork) -> Res<()>;
     /// Add (replacing any existing one) the default route (`0.0.0.0/0`) via
     /// `gateway`, routed out through this link.
     async fn add_gateway(&mut self, gateway: Ipv4Addr) -> Res<()>;
+    /// Add (replacing any existing matching entry) `route` via this link.
+    async fn add_route(&mut self, route: &Route) -> Res<()>;
+    /// Enable or disable IPv4 forwarding on this link.
+    ///
+    /// Writes `net.ipv4.conf.<link>.forwarding`.
+    async fn set_ipv4_forwarding(&mut self, enabled: bool) -> Res<()>;
+    /// Enable or disable IPv6 forwarding on this link.
+    ///
+    /// Writes `net.ipv6.conf.<link>.forwarding`.
+    async fn set_ipv6_forwarding(&mut self, enabled: bool) -> Res<()>;
+    /// Disable (or re-enable) IPv6 on this link.
+    ///
+    /// Writes `net.ipv6.conf.<link>.disable_ipv6`.
+    /// Setting `disable = true` prevents the kernel from assigning any IPv6
+    /// addresses to the interface, which is often desirable for veth
+    /// host-ends.
+    async fn set_ipv6_disable(&mut self, disable: bool) -> Res<()>;
+    /// Set the reverse-path filter mode on this link.
+    ///
+    /// | value | meaning                                               |
+    /// |-------|-------------------------------------------------------|
+    /// | `0`   | No filtering                                         |
+    /// | `1`   | Strict mode – drop packets that wouldn't be routed   |
+    /// |       | back through the same interface (recommended)        |
+    /// | `2`   | Loose mode – drop only if there is no route at all   |
+    ///
+    /// Writes `net.ipv4.conf.<link>.rp_filter`.
+    async fn set_rp_filter(&mut self, value: u8) -> Res<()>;
 }
 
 #[derive(Debug, Clone)]
@@ -237,6 +277,9 @@ pub enum InfraError {
 
     #[error("pin error: {0}")]
     PinError(#[from] aya::pin::PinError),
+
+    #[error("invalid route: {0}")]
+    InvalidRoute(String),
 }
 
 pub type Res<T> = Result<T, InfraError>;

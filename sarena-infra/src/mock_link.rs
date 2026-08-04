@@ -1,8 +1,9 @@
 use std::{net::Ipv4Addr, path::Path};
 
 use aya::programs::TcAttachType;
+use ipnetwork::IpNetwork;
 
-use crate::{InfraError, Link, MacAddress, PinnedTcxProgram, Res, TcxAttach};
+use crate::{InfraError, Link, MacAddress, PinnedTcxProgram, Res, TcxAttach, route::Route};
 
 #[derive(Debug, Clone, Default)]
 pub struct MockProgram {
@@ -19,8 +20,13 @@ pub struct MockLink {
     pub down_calls: u32,
     pub mtu_calls: Vec<u32>,
     pub mac_calls: Vec<MacAddress>,
-    pub addr_calls: Vec<(Ipv4Addr, u8)>,
+    pub addr_calls: Vec<IpNetwork>,
     pub gateway_calls: Vec<Ipv4Addr>,
+    pub route_calls: Vec<Route>,
+    pub ipv4_forwarding_calls: Vec<bool>,
+    pub ipv6_forwarding_calls: Vec<bool>,
+    pub ipv6_disable_calls: Vec<bool>,
+    pub rp_filter_calls: Vec<u8>,
     pub rename_calls: Vec<String>,
     pub setns_calls: Vec<String>,
     pub delete_calls: u32,
@@ -83,13 +89,38 @@ impl Link for MockLink {
         Ok(())
     }
 
-    async fn set_addr(&mut self, ip: Ipv4Addr, prefix_len: u8) -> Res<()> {
-        self.addr_calls.push((ip, prefix_len));
+    async fn set_addr(&mut self, addr: IpNetwork) -> Res<()> {
+        self.addr_calls.push(addr);
         Ok(())
     }
 
     async fn add_gateway(&mut self, gateway: Ipv4Addr) -> Res<()> {
         self.gateway_calls.push(gateway);
+        Ok(())
+    }
+
+    async fn add_route(&mut self, route: &Route) -> Res<()> {
+        self.route_calls.push(route.clone());
+        Ok(())
+    }
+
+    async fn set_ipv4_forwarding(&mut self, enabled: bool) -> Res<()> {
+        self.ipv4_forwarding_calls.push(enabled);
+        Ok(())
+    }
+
+    async fn set_ipv6_forwarding(&mut self, enabled: bool) -> Res<()> {
+        self.ipv6_forwarding_calls.push(enabled);
+        Ok(())
+    }
+
+    async fn set_ipv6_disable(&mut self, disable: bool) -> Res<()> {
+        self.ipv6_disable_calls.push(disable);
+        Ok(())
+    }
+
+    async fn set_rp_filter(&mut self, value: u8) -> Res<()> {
+        self.rp_filter_calls.push(value);
         Ok(())
     }
 }

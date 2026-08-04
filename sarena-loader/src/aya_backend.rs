@@ -1,12 +1,20 @@
 use std::{
     collections::HashMap,
+    os::fd::AsFd as _,
     path::{Path, PathBuf},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread::JoinHandle,
 };
 
 use aya::{
     Ebpf, EbpfLoader,
     programs::tc::{SchedClassifier, TcAttachType},
 };
+use aya_log::EbpfLogger;
+use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 use sarena_infra::{
     Link as _, NetlinkNetworkProvisioner, NetworkProvisioner, TcxAttach as _,
     netlink_link::NetlinkLink,
@@ -18,10 +26,18 @@ use crate::{
     manifest::Hook,
 };
 
+const LOG_DRAIN_POLL_TIMEOUT_MS: u16 = 250;
+
+struct LoggerHandle {
+    stop: Arc<AtomicBool>,
+    thread: JoinHandle<()>,
+}
+
 pub struct AyaBackend {
     object_path: PathBuf,
     globals_dir: PathBuf,
     provisioner: NetlinkNetworkProvisioner,
+    loggers: HashMap<String, LoggerHandle>,
 }
 
 impl AyaBackend {
@@ -30,6 +46,7 @@ impl AyaBackend {
             object_path: object_path.into(),
             globals_dir: globals_dir.into(),
             provisioner: NetlinkNetworkProvisioner,
+            loggers: HashMap::new(),
         }
     }
 
@@ -43,6 +60,30 @@ impl AyaBackend {
                 src: "program section exists but is not a SchedClassifier (tc) program".into(),
             })?;
         Ok(sched)
+    }
+
+    fn start_logging(&mut self, link: &str, bpf: &mut Ebpf) {
+        self.stop_logging(link);
+
+        let logger = match EbpfLogger::init(bpf) {
+            Ok(logger) => logger,
+            Err(aya_log::Error::MapNotFound) => return,
+            Err(e) => {
+                tracing::warn!(link, error = %e, "failed to initialize aya-log for endpoint");
+                return;
+            }
+        };
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let thread_stop = Arc::clone(&stop);
+        let thread_link = link.to_string();
+        let thread = std::thread::Builder::new()
+            .name(format!("sarena-ebpf-log-{link}"))
+            .spawn(move || drain_logger(logger, &thread_stop, &thread_link))
+            .expect("failed to spawn eBPF log-drain thread");
+
+        self.loggers
+            .insert(link.to_string(), LoggerHandle { stop, thread });
     }
 }
 
@@ -70,13 +111,13 @@ impl BpfBackend for AyaBackend {
             })
     }
 
-    fn load_instance(&mut self, maps: &HashMap<String, PathBuf>) -> Res<Ebpf> {
+    fn load_instance(&mut self, link: &str, maps: &HashMap<String, PathBuf>) -> Res<Ebpf> {
         let mut loader = EbpfLoader::new();
         let mut loader = loader.default_map_pin_directory(&self.globals_dir);
         for (name, path) in maps {
             loader = loader.map_pin_path(name.as_str(), path);
         }
-        let bpf = loader
+        let mut bpf = loader
             .load_file(&self.object_path)
             .map_err(|e| LoaderError::ObjectLoad(e.to_string()))?;
 
@@ -85,6 +126,8 @@ impl BpfBackend for AyaBackend {
                 return Err(LoaderError::MapNotFound { name: name.clone() });
             }
         }
+
+        self.start_logging(link, &mut bpf);
 
         Ok(bpf)
     }
@@ -147,6 +190,44 @@ impl BpfBackend for AyaBackend {
             src: e.to_string(),
         })?;
         Ok(out)
+    }
+
+    fn stop_logging(&mut self, link: &str) {
+        if let Some(handle) = self.loggers.remove(link) {
+            handle.stop.store(true, Ordering::Relaxed);
+            let _ = handle.thread.join();
+        }
+    }
+
+    fn stop_all_logging(&mut self) {
+        for (_, handle) in self.loggers.drain() {
+            handle.stop.store(true, Ordering::Relaxed);
+            let _ = handle.thread.join();
+        }
+    }
+}
+
+impl Drop for AyaBackend {
+    fn drop(&mut self) {
+        BpfBackend::stop_all_logging(self);
+    }
+}
+
+fn drain_logger(mut logger: EbpfLogger<&'static dyn log::Log>, stop: &AtomicBool, link: &str) {
+    let _span = tracing::info_span!("aya_log", link).entered();
+
+    let timeout = PollTimeout::from(LOG_DRAIN_POLL_TIMEOUT_MS);
+
+    while !stop.load(Ordering::Relaxed) {
+        let mut fds = [PollFd::new(logger.as_fd(), PollFlags::POLLIN)];
+        match poll(&mut fds, timeout) {
+            Ok(_) => logger.flush(),
+            Err(nix::errno::Errno::EINTR) => {}
+            Err(e) => {
+                tracing::warn!(link, error = %e, "aya-log drain thread exiting after poll error");
+                break;
+            }
+        }
     }
 }
 
