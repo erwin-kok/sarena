@@ -11,7 +11,7 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-sarena-common = { path = "../sarena-common", features = ["std"] }
+sarena-shared = { path = "../sarena-shared", features = ["std"] }
 sarena-infra = { path = "../sarena-infra", features = ["test"] }
 sarena-loader = { path = "../sarena-loader" }
 

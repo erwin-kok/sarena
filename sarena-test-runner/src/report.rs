@@ -1,4 +1,4 @@
-use sarena_common_test::{
+use sarena_shared_test::{
     TestStatus,
     tlv_reader::{LogEntry, TestResult},
 };

@@ -12,7 +12,7 @@ workspace = true
 
 [dependencies]
 sarena-ebpf-common = { path = "../sarena-ebpf-common", default-features = false }
-sarena-common = { path = "../sarena-common", default-features = false }
+sarena-shared = { path = "../sarena-shared", default-features = false }
 
 aya-ebpf = { workspace = true, default-features = false }
 aya-log-ebpf = { workspace = true }

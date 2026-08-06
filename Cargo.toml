@@ -8,9 +8,9 @@ members = [
     "sarena-test-macros",
     "sarena-test-runner",
 
-    # Common (userspace & eBPF)
-    "sarena-common",
-    "sarena-common-test",
+    # Shared (userspace & eBPF)
+    "sarena-shared",
+    "sarena-shared-test",
     "sarena-test-scapy",
 
     # eBPF framework 
@@ -33,8 +33,8 @@ default-members = [
     "sarena-test-macros",
     "sarena-test-runner",
 
-    "sarena-common", 
-    "sarena-common-test",
+    "sarena-shared", 
+    "sarena-shared-test",
     "sarena-test-scapy",
 ]
 

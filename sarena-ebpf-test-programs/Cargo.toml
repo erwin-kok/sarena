@@ -11,8 +11,8 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-sarena-common = { path = "../sarena-common", default-features = false }
-sarena-common-test = { path = "../sarena-common-test", default-features = false }
+sarena-shared = { path = "../sarena-shared", default-features = false }
+sarena-shared-test = { path = "../sarena-shared-test", default-features = false }
 sarena-ebpf-test-framework = { path = "../sarena-ebpf-test-framework", default-features = false }
 sarena-ebpf-common = { path = "../sarena-ebpf-common", default-features = false }
 sarena-test-macros = { path = "../sarena-test-macros", default-features = false }

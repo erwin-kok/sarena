@@ -1,6 +1,5 @@
 [package]
-name = "sarena-common-test"
-publish = false
+name = "sarena-shared"
 
 edition.workspace = true
 license.workspace = true
@@ -13,12 +12,12 @@ workspace = true
 
 [features]
 default = ["std"]
-std = ["dep:aya", "dep:serde"]
+std = ["dep:aya"]
 
 [dependencies]
 aya = { workspace = true, optional = true }
 aya-ebpf = { workspace = true }
-hex = { workspace = true }
-log = { workspace = true }
 network-types = { workspace = true }
-serde = { workspace = true, optional = true }
+
+[lib]
+path = "src/lib.rs"

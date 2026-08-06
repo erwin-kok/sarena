@@ -3,7 +3,7 @@
 use std::str::Utf8Error;
 
 use aya::{EbpfError, maps::MapError, programs::ProgramError};
-use sarena_common_test::tlv_reader::ParseError;
+use sarena_shared_test::tlv_reader::ParseError;
 
 mod ebpf_test_runner;
 mod report;

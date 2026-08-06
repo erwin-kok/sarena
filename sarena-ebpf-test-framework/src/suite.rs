@@ -3,7 +3,7 @@ use aya_ebpf::{
     maps::{Array, PerCpuArray},
     programs::TcContext,
 };
-use sarena_common_test::{
+use sarena_shared_test::{
     SCAPY_ASSERT_NULL, SCAPY_MAX_ASSERTS, SCAPY_MAX_STR_LEN, ScapyAssert, TEST_RESULT_MAP_SIZE,
     Tag, TestStatus, tlv_writer::TlvWriter,
 };

@@ -1,7 +1,7 @@
 use aya_ebpf::{
     bindings::tcx_action_base::TCX_PASS, macros::map, maps::Array, programs::TcContext,
 };
-use sarena_common::EndpointConfig;
+use sarena_shared::EndpointConfig;
 
 #[map(name = "endpoint_config")]
 static ENDPOINT_CONFIG: Array<EndpointConfig> = Array::pinned(1, 0);

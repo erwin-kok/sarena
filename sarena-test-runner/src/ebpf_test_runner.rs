@@ -11,7 +11,7 @@ use aya::{
     programs::SchedClassifier,
 };
 use regex::Regex;
-use sarena_common_test::{ScapyAssert, TEST_RESULT_MAP_SIZE, TestStatus, tlv_reader};
+use sarena_shared_test::{ScapyAssert, TEST_RESULT_MAP_SIZE, TestStatus, tlv_reader};
 
 use crate::{Res, TestRunnerError, report};
 

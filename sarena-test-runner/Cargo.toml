@@ -12,7 +12,7 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-sarena-common-test = { path = "../sarena-common-test", features = ["std"] }
+sarena-shared-test = { path = "../sarena-shared-test", features = ["std"] }
 
 aya = { workspace = true }
 regex = { workspace = true }

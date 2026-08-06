@@ -1,10 +1,10 @@
 use aya_ebpf::programs::TcContext;
-use sarena_common_test::{SCAPY_ASSERT_NULL, TestStatus};
 use sarena_ebpf_common::PacketBuilder;
 use sarena_ebpf_test_framework::{
     TestSuite, assert_buffer, assert_test, status,
     suite::{SCAPY_ASSERT_MAP, SCAPY_ASSERT_MAP_COUNT, memcmp},
 };
+use sarena_shared_test::{SCAPY_ASSERT_NULL, TestStatus};
 use sarena_test_macros::{arrange, assert};
 
 #[arrange(tc, "1_basic_test_equal_bytes")]

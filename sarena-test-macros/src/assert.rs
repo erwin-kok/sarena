@@ -44,14 +44,14 @@ impl AssertProgram {
                 let ctx = unsafe { ::core::ptr::NonNull::new_unchecked(ctx) };
                 let tc_ctx = ::aya_ebpf::programs::TcContext::new(ctx);
                 let mut test_suite = match ::sarena_ebpf_test_framework::suite::TestSuite::new(#name, file!()) {
-                    None => return ::sarena_common_test::wire::TestStatus::FrameworkError as i32,
+                    None => return ::sarena_shared_test::wire::TestStatus::FrameworkError as i32,
                     Some(s) => s,
                 };
 
                 #fn_name(tc_ctx, &mut test_suite);
 
-                if test_suite.writer.write_u8(::sarena_common_test::wire::Tag::TestStatus, test_suite.status() as u8).is_none() {
-                    return ::sarena_common_test::wire::TestStatus::FrameworkError as i32;
+                if test_suite.writer.write_u8(::sarena_shared_test::wire::Tag::TestStatus, test_suite.status() as u8).is_none() {
+                    return ::sarena_shared_test::wire::TestStatus::FrameworkError as i32;
                 }
 
                 return test_suite.status() as i32;
@@ -93,14 +93,14 @@ mod tests {
                 let ctx = unsafe { ::core::ptr::NonNull::new_unchecked(ctx) };
                 let tc_ctx = ::aya_ebpf::programs::TcContext::new(ctx);
                 let mut test_suite = match ::sarena_ebpf_test_framework::suite::TestSuite::new("my_test", file!()) {
-                    None => return ::sarena_common_test::wire::TestStatus::FrameworkError as i32,
+                    None => return ::sarena_shared_test::wire::TestStatus::FrameworkError as i32,
                     Some(s) => s,
                 };
 
                 prog(tc_ctx, &mut test_suite);
 
-                if test_suite.writer.write_u8(::sarena_common_test::wire::Tag::TestStatus, test_suite.status() as u8).is_none() {
-                    return ::sarena_common_test::wire::TestStatus::FrameworkError as i32;
+                if test_suite.writer.write_u8(::sarena_shared_test::wire::Tag::TestStatus, test_suite.status() as u8).is_none() {
+                    return ::sarena_shared_test::wire::TestStatus::FrameworkError as i32;
                 }
 
                 return test_suite.status() as i32;
@@ -121,8 +121,8 @@ mod tests {
         let prog = AssertProgram::parse(
             parse_quote! { xdp, "firewall_test" },
             parse_quote! {
-                fn check(ctx: ::aya_ebpf::programs::XdpContext) -> ::sarena_common_test::wire::TestStatus {
-                    ::sarena_common_test::wire::TestStatus::Pass
+                fn check(ctx: ::aya_ebpf::programs::XdpContext) -> ::sarena_shared_test::wire::TestStatus {
+                    ::sarena_shared_test::wire::TestStatus::Pass
                 }
             },
         )
@@ -135,8 +135,8 @@ mod tests {
             fn __test_fw_assert_firewall_test(ctx: *mut ::aya_ebpf::bindings::xdp_md) -> u32 {
                 return check(::aya_ebpf::programs::XdpContext::new(ctx)) as u32;
 
-                fn check(ctx: ::aya_ebpf::programs::XdpContext) -> ::sarena_common_test::wire::TestStatus {
-                    ::sarena_common_test::wire::TestStatus::Pass
+                fn check(ctx: ::aya_ebpf::programs::XdpContext) -> ::sarena_shared_test::wire::TestStatus {
+                    ::sarena_shared_test::wire::TestStatus::Pass
                 }
             }
         };
