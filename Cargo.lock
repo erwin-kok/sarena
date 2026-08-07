@@ -286,9 +286,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.6.5"
+version = "4.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "301b56658598e48f3648647ac6fc887be7e7108eddfa4e9b63fcf3ec58c0cadf"
+checksum = "473c7e07f409a8d772161724aa8db6a765a2532a70f9667eeb7b49d3d02fbdca"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -296,9 +296,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.6.5"
+version = "4.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94a65403d1a1bd28f7dc68eb8506e8874808ee5eecb59298de588e2e1407a078"
+checksum = "7b48fea5a88e9ae728a2dcbedbfc0e730f7d60da42e1cb049a83c9fb8b789889"
 dependencies = [
  "anstream",
  "anstyle",
@@ -911,22 +911,16 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "aya",
- "aya-log",
- "clap",
  "hex",
  "ipnetwork",
  "libc",
- "log",
- "rand",
  "sarena-infra",
  "sarena-loader",
- "sarena-shared",
  "sarena-utils",
  "sha2",
  "thiserror 2.0.19",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -934,9 +928,7 @@ name = "sarena-ebpf-common"
 version = "0.1.0"
 dependencies = [
  "aya-ebpf",
- "network-types",
  "sarena-shared",
- "serde",
  "which",
 ]
 
@@ -1015,8 +1007,6 @@ name = "sarena-shared"
 version = "0.1.0"
 dependencies = [
  "aya",
- "aya-ebpf",
- "network-types",
 ]
 
 [[package]]
@@ -1026,8 +1016,6 @@ dependencies = [
  "aya",
  "aya-ebpf",
  "hex",
- "log",
- "network-types",
  "serde",
 ]
 
@@ -1450,7 +1438,6 @@ dependencies = [
  "anyhow",
  "cargo_metadata",
  "clap",
- "serde",
  "serde_json",
 ]
 
