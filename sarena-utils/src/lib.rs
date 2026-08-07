@@ -6,4 +6,4 @@ pub struct LoggingConfig {
     pub log_file: Option<String>,
 }
 
-pub use logging::init_logging;
+pub use logging::{init_logging, shutdown_logging};

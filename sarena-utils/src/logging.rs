@@ -1,4 +1,7 @@
-use std::{path::Path, sync::OnceLock};
+use std::{
+    path::Path,
+    sync::{Mutex, OnceLock},
+};
 
 use tracing::Level;
 use tracing_appender::{non_blocking::WorkerGuard, rolling};
@@ -12,7 +15,7 @@ use tracing_subscriber::{
 use crate::LoggingConfig;
 
 static LOG_INIT: OnceLock<()> = OnceLock::new();
-static LOG_GUARD: OnceLock<WorkerGuard> = OnceLock::new();
+static LOG_GUARD: Mutex<Option<WorkerGuard>> = Mutex::new(None);
 
 pub fn init_logging(config: &LoggingConfig) {
     LOG_INIT.get_or_init(|| {
@@ -36,10 +39,13 @@ pub fn init_logging(config: &LoggingConfig) {
         if let Some(log_path) = &config.log_file {
             let path = Path::new(log_path);
 
-            let dir = path.parent().unwrap_or(Path::new("."));
+            let dir = path
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(Path::new("."));
 
-            // Daily rotation: app.log -> app.log.YYYY-MM-DD
-            let file_appender = rolling::daily(dir, path);
+            let file_name_prefix = path.file_name().unwrap_or(path.as_os_str());
+            let file_appender = rolling::daily(dir, file_name_prefix);
             let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
             let file_layer = fmt::layer()
@@ -54,11 +60,16 @@ pub fn init_logging(config: &LoggingConfig) {
                 .try_init()
                 .expect("failed to initialize tracing");
 
-            LOG_GUARD
-                .set(guard)
-                .expect("Logging guard already initialized");
+            *LOG_GUARD.lock().expect("logging guard mutex poisoned") = Some(guard);
         } else {
             let _ = subscriber.try_init();
         }
     });
+}
+
+pub fn shutdown_logging() {
+    LOG_GUARD
+        .lock()
+        .expect("logging guard mutex poisoned")
+        .take();
 }
