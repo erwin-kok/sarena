@@ -5,7 +5,7 @@ use aya::{
     programs::{SchedClassifier, TcAttachType},
 };
 use sarena_infra::{
-    InfraError, Link, NetlinkNetworkProvisioner, NetworkProvisioner, TcxAttach, VethSpec,
+    InfraError, Link, NetlinkNetworkProvisioner, Netns, NetworkProvisioner, TcxAttach, VethSpec,
     tcx::{has_tcx, upsert_tcx},
     test_support,
 };
@@ -25,7 +25,8 @@ async fn attach_detach_tcx() {
         fs::create_dir_all(link_dir).unwrap();
 
         let provisioner = NetlinkNetworkProvisioner;
-        let lo = provisioner.get_link_in_ns(&ns, "lo").await.unwrap();
+        let netns = Netns::open(&ns).expect("open temp netns");
+        let lo = provisioner.get_link_in_ns(&netns, "lo").await.unwrap();
 
         // Attaching the same program twice should result in a link create,
         // then an update -- both must resolve to the same kernel link ID.

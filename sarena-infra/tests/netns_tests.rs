@@ -17,14 +17,20 @@ async fn create_and_delete_round_trip() {
 
     // create_netns should have brought lo up automatically.
     let provisioner = NetlinkNetworkProvisioner;
+    let netns = Netns::open(&name).expect("open temp netns");
     let lo = provisioner
-        .get_link_in_ns(&name, "lo")
+        .get_link_in_ns(&netns, "lo")
         .await
         .expect("failed to fetch lo in freshly created namespace");
     assert!(
         lo.is_up(),
         "lo should already be up in a namespace created by create_netns"
     );
+
+    // `Netns::delete` unmounts the namespace file -- an open fd on it (like
+    // `netns` above) keeps that mount busy, so drop it first or the
+    // `umount` fails with EBUSY.
+    drop(netns);
 
     Netns::delete(&name).expect("delete_netns failed");
 
@@ -49,8 +55,6 @@ async fn create_rejects_duplicate_name() {
         "expected NamespaceExists, got {second_attempt:?}"
     );
 
-    // The failed duplicate attempt must not have clobbered or removed the
-    // namespace created by the first call.
     let listed = Netns::list().expect("list_netns failed");
     assert!(listed.contains(&name));
 
@@ -68,10 +72,6 @@ async fn delete_nonexistent_namespace_errors() {
 #[tokio::test]
 #[ignore = "requires CAP_SYS_ADMIN and a writable /run/netns"]
 async fn run_works_across_independent_namespaces() {
-    // Regression guard for `Netns::run`'s dedicated-thread design: running
-    // a closure in one namespace must not leave any thread-local state that
-    // affects a *separate* `Netns::run` call against a different
-    // namespace, since each call gets its own one-shot thread.
     let a = test_support::unique_name("dpi-ra-");
     let b = test_support::unique_name("dpi-rb-");
     Netns::create(&a).await.expect("create ns a");

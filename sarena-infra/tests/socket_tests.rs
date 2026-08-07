@@ -22,10 +22,6 @@ async fn open_socket_on_configured_veth_peer() {
         let host_name = test_support::unique_name("dpisk0-");
         let peer_name = test_support::unique_name("dpisk1-");
 
-        // `create_veth` moves the peer end into `peer_ns` as part of
-        // creation; the host end stays in the default namespace, so it's
-        // cleaned up explicitly at the end (deleting either end of a veth
-        // pair deletes both).
         let pair = provisioner
             .create_veth(VethSpec {
                 host_ifname: host_name.clone(),
@@ -45,9 +41,6 @@ async fn open_socket_on_configured_veth_peer() {
         peer.set_addr(v4(ip, 24)).await.expect("set_addr failed");
         peer.add_gateway(gateway).await.expect("add_gateway failed");
 
-        // Binding only makes sense from inside `peer_ns` -- `ip` doesn't
-        // exist anywhere else -- so this reuses the crate's own Netns::run
-        // rather than binding from the test's ambient namespace.
         let bound_addr = Netns::open(&peer_ns)
             .unwrap()
             .run(move |_handle| async move {

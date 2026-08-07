@@ -66,16 +66,16 @@ pub trait NetworkProvisioner {
     async fn delete_veth(&mut self, veth_pair: &mut VethPair<Self::LinkType>) -> Res<()>;
     /// Delete the link named `name` in the default namespace.
     async fn delete_link(&self, name: &str) -> Res<()>;
-    /// Delete the link named `name` inside namespace *ns*.
-    async fn delete_link_in_ns(&self, ns: &str, name: &str) -> Res<()>;
+    /// Delete the link named `name` inside namespace `ns`.
+    async fn delete_link_in_ns(&self, ns: &Netns, name: &str) -> Res<()>;
     /// Look up a link by name in the default namespace.
     async fn get_link(&self, name: &str) -> Res<Self::LinkType>;
-    /// Look up a link by name inside namespace *ns*.
-    async fn get_link_in_ns(&self, ns: &str, name: &str) -> Res<Self::LinkType>;
+    /// Look up a link by name inside namespace `ns`.
+    async fn get_link_in_ns(&self, ns: &Netns, name: &str) -> Res<Self::LinkType>;
     /// List all links visible in the default namespace.
     async fn list_links(&self) -> Res<Vec<Self::LinkType>>;
-    /// List all links visible inside namespace *ns*.
-    async fn list_links_in_ns(&self, ns: &str) -> Res<Vec<Self::LinkType>>;
+    /// List all links visible inside namespace `ns`.
+    async fn list_links_in_ns(&self, ns: &Netns) -> Res<Vec<Self::LinkType>>;
 }
 
 #[allow(async_fn_in_trait)]
@@ -96,7 +96,7 @@ pub trait Link {
     /// Set this link's hardware (MAC) address.
     async fn set_mac(&mut self, mac: MacAddress) -> Res<()>;
     /// Move this link into a different network namespace.
-    async fn set_ns(&mut self, target_ns: &str) -> Res<()>;
+    async fn set_ns(&mut self, target: &Netns) -> Res<()>;
     /// Rename this link.
     async fn rename(&mut self, new_name: &str) -> Res<()>;
     /// Delete this link. Deleting either end of a veth pair deletes both.
@@ -221,7 +221,7 @@ pub enum InfraError {
     #[error(
         "cannot attach a TCX program to link {ifname:?}: it lives in namespace {netns:?}, not the caller's own"
     )]
-    TcxRequiresLocalLink { ifname: String, netns: String },
+    TcxRequiresLocalLink { ifname: String, netns: PathBuf },
 
     #[error("failed to create namespace (unshare)")]
     CreateNamespace(#[source] nix::errno::Errno),

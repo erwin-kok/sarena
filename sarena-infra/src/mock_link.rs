@@ -1,9 +1,12 @@
-use std::{net::Ipv4Addr, path::Path};
+use std::{
+    net::Ipv4Addr,
+    path::{Path, PathBuf},
+};
 
 use aya::programs::TcAttachType;
 use ipnetwork::IpNetwork;
 
-use crate::{InfraError, Link, MacAddress, PinnedTcxProgram, Res, TcxAttach, route::Route};
+use crate::{InfraError, Link, MacAddress, Netns, PinnedTcxProgram, Res, TcxAttach, route::Route};
 
 #[derive(Debug, Clone, Default)]
 pub struct MockProgram {
@@ -28,9 +31,9 @@ pub struct MockLink {
     pub ipv6_disable_calls: Vec<bool>,
     pub rp_filter_calls: Vec<u8>,
     pub rename_calls: Vec<String>,
-    pub setns_calls: Vec<String>,
+    pub setns_calls: Vec<PathBuf>,
     pub delete_calls: u32,
-    pub netns: Option<String>,
+    pub netns: Option<PathBuf>,
     pub tcx_upsert_calls: Vec<(String, TcAttachType)>,
     pub tcx_has_link_calls: Vec<(String, TcAttachType)>,
     pub has_tcx_link_result: bool,
@@ -72,9 +75,9 @@ impl Link for MockLink {
         Ok(())
     }
 
-    async fn set_ns(&mut self, target_ns: &str) -> Res<()> {
-        self.setns_calls.push(target_ns.to_owned());
-        self.netns = Some(target_ns.to_owned());
+    async fn set_ns(&mut self, target: &Netns) -> Res<()> {
+        self.setns_calls.push(target.path.clone());
+        self.netns = Some(target.path.clone());
         Ok(())
     }
 
@@ -199,7 +202,7 @@ mod tests {
     #[test]
     fn upsert_tcx_program_rejects_non_local_link() {
         let mut link = MockLink {
-            netns: Some("some-ns".to_owned()),
+            netns: Some(PathBuf::from("some-ns")),
             ..Default::default()
         };
         let mut prog = MockProgram {

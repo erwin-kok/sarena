@@ -62,15 +62,7 @@ impl Netns {
         Ok(Self { path, fd })
     }
 
-    /// Create a new, persistent network namespace named `name` and return a
-    /// handle to it, equivalent to (but one syscall cheaper than) an
-    /// immediately following `Netns::open(name)`.
-    ///
-    /// Like `open`/`open_path`, the returned handle does **not** own the
-    /// namespace's lifetime -- dropping it just closes its `fd`. The
-    /// namespace itself persists until an explicit [`Netns::delete`]; use
-    /// [`NetnsGuard`] if you want deletion tied to a Rust value's scope
-    /// instead.
+    /// Create a new, persistent network namespace named `name`.
     ///
     /// This provisions **only** a loopback interface brought up (`lo`); every
     /// fresh Linux network namespace has one, but it starts down. Anything
@@ -82,7 +74,7 @@ impl Netns {
     /// Fails with [`InfraError::NamespaceExists`] if `name` is already taken.
     /// On any failure after the namespace file is created, this rolls back
     /// (unmounts/removes it) rather than leaving a broken entry behind.
-    pub async fn create(name: &str) -> Res<Self> {
+    pub async fn create(name: &str) -> Res<()> {
         ensure_netns_dir()?;
 
         let path = Path::new(NETNS_PATH).join(name);
@@ -110,7 +102,7 @@ impl Netns {
             return Err(err);
         }
 
-        Self::open(name)
+        Ok(())
     }
 
     /// Delete the namespace named `name`, created previously via

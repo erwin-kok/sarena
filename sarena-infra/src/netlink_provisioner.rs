@@ -10,7 +10,7 @@ impl NetworkProvisioner for NetlinkNetworkProvisioner {
     type LinkType = NetlinkLink;
 
     async fn create_netns(&mut self, name: &str) -> Res<()> {
-        Netns::create(name).await.map(|_| ())
+        Netns::create(name).await
     }
 
     #[allow(clippy::unused_async_trait_impl)]
@@ -48,7 +48,8 @@ impl NetworkProvisioner for NetlinkNetworkProvisioner {
         // Move the peer *after* reading its state back -- we already have
         // what we need from the default-namespace fetch above, and
         // `set_ns` itself only needs the ifindex, which doesn't change.
-        peer.set_ns(&spec.peer_netns).await?;
+        let target = Netns::open(&spec.peer_netns)?;
+        peer.set_ns(&target).await?;
 
         Ok(VethPair { host, peer })
     }
@@ -62,7 +63,7 @@ impl NetworkProvisioner for NetlinkNetworkProvisioner {
         self.get_link(name).await?.delete().await
     }
 
-    async fn delete_link_in_ns(&self, ns: &str, name: &str) -> Res<()> {
+    async fn delete_link_in_ns(&self, ns: &Netns, name: &str) -> Res<()> {
         self.get_link_in_ns(ns, name).await?.delete().await
     }
 
@@ -70,7 +71,7 @@ impl NetworkProvisioner for NetlinkNetworkProvisioner {
         netlink_link::get_link_by_name(name).await
     }
 
-    async fn get_link_in_ns(&self, ns: &str, name: &str) -> Res<Self::LinkType> {
+    async fn get_link_in_ns(&self, ns: &Netns, name: &str) -> Res<Self::LinkType> {
         netlink_link::get_link_by_name_in_ns(ns, name).await
     }
 
@@ -78,7 +79,7 @@ impl NetworkProvisioner for NetlinkNetworkProvisioner {
         netlink_link::list_links().await
     }
 
-    async fn list_links_in_ns(&self, ns: &str) -> Res<Vec<Self::LinkType>> {
+    async fn list_links_in_ns(&self, ns: &Netns) -> Res<Vec<Self::LinkType>> {
         netlink_link::list_links_in_ns(ns).await
     }
 }

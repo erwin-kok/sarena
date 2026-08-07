@@ -55,11 +55,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let loader_handle = LoaderHandle::spawn(loader, 16);
 
     let client1_ns = "client1_ns";
-    let client1_netns = Netns::create(client1_ns).await?;
+    Netns::create(client1_ns).await?;
     let _guard1 = NetnsGuard::new(client1_ns);
 
     let client2_ns = "client2_ns";
-    let client2_netns = Netns::create(client2_ns).await?;
+    Netns::create(client2_ns).await?;
     let _guard2 = NetnsGuard::new(client2_ns);
 
     let host1_name = "host1";
@@ -153,7 +153,7 @@ async fn main() -> Result<(), anyhow::Error> {
     );
 
     let listener =
-        client1_netns
+        Netns::open(client1_ns)?
             .run(move |_handle| async move {
                 UdpSocket::bind((peer1_ip, 0)).map_err(InfraError::Runtime)
             })
@@ -163,7 +163,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let listener_addr = listener.local_addr()?;
 
     let sender =
-        client2_netns
+        Netns::open(client2_ns)?
             .run(move |_handle| async move {
                 UdpSocket::bind((peer2_ip, 0)).map_err(InfraError::Runtime)
             })

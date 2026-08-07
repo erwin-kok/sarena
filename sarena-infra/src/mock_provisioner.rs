@@ -1,5 +1,8 @@
+use std::path::{Path, PathBuf};
+
 use crate::{
-    InfraError, Link, MacAddress, NetworkProvisioner, Res, VethPair, VethSpec, mock_link::MockLink,
+    InfraError, Link, MacAddress, Netns, NetworkProvisioner, Res, VethPair, VethSpec,
+    mock_link::MockLink,
 };
 
 #[derive(Debug, Default)]
@@ -65,7 +68,7 @@ impl NetworkProvisioner for MockNetworkProvisioner {
                     peer_ifindex as u8,
                 ])),
                 peer_ifname: Some(spec.host_ifname.clone()),
-                netns: Some(spec.peer_netns.clone()),
+                netns: Some(PathBuf::from(spec.peer_netns.clone())),
                 ..Default::default()
             },
         };
@@ -86,24 +89,26 @@ impl NetworkProvisioner for MockNetworkProvisioner {
         self.get_link_in_ns_impl(None, name)?.delete().await
     }
 
-    async fn delete_link_in_ns(&self, ns: &str, name: &str) -> Res<()> {
-        self.get_link_in_ns_impl(Some(ns), name)?.delete().await
+    async fn delete_link_in_ns(&self, ns: &Netns, name: &str) -> Res<()> {
+        self.get_link_in_ns_impl(Some(&ns.path), name)?
+            .delete()
+            .await
     }
 
     async fn get_link(&self, name: &str) -> Res<Self::LinkType> {
         self.get_link_in_ns_impl(None, name)
     }
 
-    async fn get_link_in_ns(&self, ns: &str, name: &str) -> Res<Self::LinkType> {
-        self.get_link_in_ns_impl(Some(ns), name)
+    async fn get_link_in_ns(&self, ns: &Netns, name: &str) -> Res<Self::LinkType> {
+        self.get_link_in_ns_impl(Some(&ns.path), name)
     }
 
     async fn list_links(&self) -> Res<Vec<Self::LinkType>> {
         Ok(self.list_links_in_ns_impl(None))
     }
 
-    async fn list_links_in_ns(&self, ns: &str) -> Res<Vec<Self::LinkType>> {
-        Ok(self.list_links_in_ns_impl(Some(ns)))
+    async fn list_links_in_ns(&self, ns: &Netns) -> Res<Vec<Self::LinkType>> {
+        Ok(self.list_links_in_ns_impl(Some(&ns.path)))
     }
 }
 
@@ -113,7 +118,7 @@ impl MockNetworkProvisioner {
         self.links.push(link);
     }
 
-    fn get_link_in_ns_impl(&self, ns: Option<&str>, name: &str) -> Res<MockLink> {
+    fn get_link_in_ns_impl(&self, ns: Option<&Path>, name: &str) -> Res<MockLink> {
         self.links
             .iter()
             .find(|l| l.ifname == name && l.netns.as_deref() == ns)
@@ -121,7 +126,7 @@ impl MockNetworkProvisioner {
             .ok_or_else(|| InfraError::LinkNotFound(name.to_owned()))
     }
 
-    fn list_links_in_ns_impl(&self, ns: Option<&str>) -> Vec<MockLink> {
+    fn list_links_in_ns_impl(&self, ns: Option<&Path>) -> Vec<MockLink> {
         self.links
             .iter()
             .filter(|l| l.netns.as_deref() == ns)

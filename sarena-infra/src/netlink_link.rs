@@ -1,7 +1,7 @@
 use std::{
     net::{IpAddr, Ipv4Addr},
     os::fd::{AsRawFd, RawFd},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use aya::programs::{SchedClassifier, TcAttachType};
@@ -84,8 +84,9 @@ pub struct NetlinkLink {
     /// `IFLA_MASTER` – index of the bridge / bond this interface belongs to.
     pub master_index: Option<u32>,
 
-    /// Network namespace where this Link is located in, if any.
-    pub netns: Option<String>,
+    /// Absolute path to the network namespace where this Link is located,
+    /// if any (e.g. `/run/netns/<name>` or `/proc/<pid>/ns/net`).
+    pub netns: Option<PathBuf>,
 }
 
 impl NetlinkLink {
@@ -120,7 +121,7 @@ impl Link for NetlinkLink {
     async fn set_up(&mut self) -> Res<()> {
         let index = self.index;
         if let Some(ns) = &self.netns {
-            let netns = Netns::open(ns)?;
+            let netns = Netns::open_path(ns)?;
             netns
                 .run(move |handle| async move { link_set_up_impl(&handle, index).await })
                 .await
@@ -133,7 +134,7 @@ impl Link for NetlinkLink {
     async fn set_down(&mut self) -> Res<()> {
         let index = self.index;
         if let Some(ns) = &self.netns {
-            let netns = Netns::open(ns)?;
+            let netns = Netns::open_path(ns)?;
             netns
                 .run(move |handle| async move { link_set_down_impl(&handle, index).await })
                 .await
@@ -146,7 +147,7 @@ impl Link for NetlinkLink {
     async fn set_mtu(&mut self, mtu: u32) -> Res<()> {
         let index = self.index;
         if let Some(ns) = &self.netns {
-            let netns = Netns::open(ns)?;
+            let netns = Netns::open_path(ns)?;
             netns
                 .run(move |handle| async move { link_set_mtu_impl(&handle, index, mtu).await })
                 .await?;
@@ -161,7 +162,7 @@ impl Link for NetlinkLink {
     async fn set_mac(&mut self, mac: MacAddress) -> Res<()> {
         let index = self.index;
         if let Some(ns) = &self.netns {
-            let netns = Netns::open(ns)?;
+            let netns = Netns::open_path(ns)?;
             netns
                 .run(move |handle| async move { link_set_mac_impl(&handle, index, mac).await })
                 .await?;
@@ -173,26 +174,19 @@ impl Link for NetlinkLink {
         Ok(())
     }
 
-    async fn set_ns(&mut self, target_ns: &str) -> Res<()> {
-        let target = Netns::open(target_ns)?;
+    async fn set_ns(&mut self, target: &Netns) -> Res<()> {
         let target_raw_fd = target.fd.as_raw_fd();
         let index = self.index;
         if let Some(ns) = &self.netns {
-            let netns = Netns::open(ns)?;
+            let netns = Netns::open_path(ns)?;
             netns
-                .run(move |handle| async move {
-                    // Keep `target` alive so `target_raw_fd` remains valid.
-                    let _keep = target;
-                    link_setns_impl(&handle, index, target_raw_fd).await
-                })
+                .run(move |handle| async move { link_setns_impl(&handle, index, target_raw_fd).await })
                 .await?;
         } else {
             let handle = default_handle()?;
-            // Keep `target` alive so `target_raw_fd` remains valid.
-            let _keep = target;
             link_setns_impl(&handle, index, target_raw_fd).await?;
         }
-        self.netns = Some(target_ns.to_owned());
+        self.netns = Some(target.path.clone());
         Ok(())
     }
 
@@ -200,7 +194,7 @@ impl Link for NetlinkLink {
         let index = self.index;
         let owned_name = new_name.to_owned();
         if let Some(ns) = &self.netns {
-            let netns = Netns::open(ns)?;
+            let netns = Netns::open_path(ns)?;
             netns
                     .run(move |handle| async move {
                         link_rename_impl(&handle, index, &owned_name).await
@@ -217,7 +211,7 @@ impl Link for NetlinkLink {
     async fn delete(&mut self) -> Res<()> {
         let index = self.index;
         if let Some(ns) = &self.netns {
-            let netns = Netns::open(ns)?;
+            let netns = Netns::open_path(ns)?;
             netns
                 .run(move |handle| async move { link_delete_impl(&handle, index).await })
                 .await
@@ -230,7 +224,7 @@ impl Link for NetlinkLink {
     async fn set_addr(&mut self, addr: IpNetwork) -> Res<()> {
         let index = self.index;
         if let Some(ns) = &self.netns {
-            let netns = Netns::open(ns)?;
+            let netns = Netns::open_path(ns)?;
             netns
                 .run(move |handle| async move { link_add_addr_impl(&handle, index, addr).await })
                 .await
@@ -243,7 +237,7 @@ impl Link for NetlinkLink {
     async fn add_gateway(&mut self, gateway: Ipv4Addr) -> Res<()> {
         let index = self.index;
         if let Some(ns) = &self.netns {
-            let netns = Netns::open(ns)?;
+            let netns = Netns::open_path(ns)?;
             netns
                     .run(move |handle| async move {
                         link_add_gateway_impl(&handle, index, gateway).await
@@ -259,7 +253,7 @@ impl Link for NetlinkLink {
         let index = self.index;
         let route = route.clone();
         if let Some(ns) = &self.netns {
-            let netns = Netns::open(ns)?;
+            let netns = Netns::open_path(ns)?;
             netns
                 .run(move |handle| async move { link_add_route_impl(&handle, index, &route).await })
                 .await
@@ -273,7 +267,7 @@ impl Link for NetlinkLink {
         let path = format!("/proc/sys/net/ipv4/conf/{}/forwarding", self.name);
         let value = if enabled { "1" } else { "0" };
         if let Some(ns) = &self.netns {
-            let netns = Netns::open(ns)?;
+            let netns = Netns::open_path(ns)?;
             netns
                 .run(move |_| async move { sysctl_write(&path, value) })
                 .await
@@ -286,7 +280,7 @@ impl Link for NetlinkLink {
         let path = format!("/proc/sys/net/ipv6/conf/{}/forwarding", self.name);
         let value = if enabled { "1" } else { "0" };
         if let Some(ns) = &self.netns {
-            let netns = Netns::open(ns)?;
+            let netns = Netns::open_path(ns)?;
             netns
                 .run(move |_| async move { sysctl_write(&path, value) })
                 .await
@@ -299,7 +293,7 @@ impl Link for NetlinkLink {
         let path = format!("/proc/sys/net/ipv6/conf/{}/disable_ipv6", self.name);
         let value = if disable { "1" } else { "0" };
         if let Some(ns) = &self.netns {
-            let netns = Netns::open(ns)?;
+            let netns = Netns::open_path(ns)?;
             netns
                 .run(move |_| async move { sysctl_write(&path, value) })
                 .await
@@ -312,7 +306,7 @@ impl Link for NetlinkLink {
         let path = format!("/proc/sys/net/ipv4/conf/{}/rp_filter", self.name);
         let val = value.to_string();
         if let Some(ns) = &self.netns {
-            let netns = Netns::open(ns)?;
+            let netns = Netns::open_path(ns)?;
             netns
                 .run(move |_| async move { sysctl_write(&path, &val) })
                 .await
@@ -385,9 +379,9 @@ pub(crate) async fn get_link_by_name(name: &str) -> Res<NetlinkLink> {
     get_link_impl(&handle, &name).await
 }
 
-/// Return the [`Link`] with the given *name* inside namespace *ns*.
-pub(crate) async fn get_link_by_name_in_ns(ns: &str, name: &str) -> Res<NetlinkLink> {
-    let netns = Netns::open(ns)?;
+/// Return the [`Link`] with the given *name* inside namespace `ns`.
+pub(crate) async fn get_link_by_name_in_ns(ns: &Netns, name: &str) -> Res<NetlinkLink> {
+    let netns = Netns::open_path(&ns.path)?;
     let name = name.to_owned();
     let mut link = netns
         .run(move |handle| async move { get_link_impl(&handle, &name).await })
@@ -396,7 +390,7 @@ pub(crate) async fn get_link_by_name_in_ns(ns: &str, name: &str) -> Res<NetlinkL
     // way to know its own name -- stamp it here so the returned snapshot
     // actually reflects where it was fetched from, instead of always
     // looking like a default-namespace link.
-    link.netns = Some(ns.to_owned());
+    link.netns = Some(ns.path.clone());
     Ok(link)
 }
 
@@ -406,15 +400,15 @@ pub(crate) async fn list_links() -> Res<Vec<NetlinkLink>> {
     list_links_impl(&handle).await
 }
 
-/// Return all interfaces visible inside namespace *ns*.
-pub(crate) async fn list_links_in_ns(ns: &str) -> Res<Vec<NetlinkLink>> {
-    let netns = Netns::open(ns)?;
+/// Return all interfaces visible inside namespace `ns`.
+pub(crate) async fn list_links_in_ns(ns: &Netns) -> Res<Vec<NetlinkLink>> {
+    let netns = Netns::open_path(&ns.path)?;
     let mut links = netns
         .run(move |handle| async move { list_links_impl(&handle).await })
         .await?;
     // See `get_link_by_name_in_ns` -- same reasoning.
     for link in &mut links {
-        link.netns = Some(ns.to_owned());
+        link.netns = Some(ns.path.clone());
     }
     Ok(links)
 }
