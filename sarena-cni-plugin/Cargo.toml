@@ -1,0 +1,34 @@
+[package]
+name = "sarena-cni-plugin"
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sarena-infra = { path = "../sarena-infra", features = ["test"] }
+sarena-utils = { path = "../sarena-utils" }
+
+async-trait = { workspace = true }
+ipnetwork = { workspace = true }
+rscni-plugin = { workspace = true, features = ["async"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "net",
+    "signal",
+] }
+uuid = { workspace = true }
+
+[[bin]]
+name = "sarena-cni"
+path = "src/main.rs"
