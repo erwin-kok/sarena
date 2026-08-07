@@ -14,6 +14,7 @@ workspace = true
 sarena-shared = { path = "../sarena-shared", features = ["std"] }
 sarena-infra = { path = "../sarena-infra", features = ["test"] }
 sarena-loader = { path = "../sarena-loader" }
+sarena-utils = { path = "../sarena-utils" }
 
 anyhow = { workspace = true, default-features = true }
 aya = { workspace = true }
@@ -25,7 +26,6 @@ log = { workspace = true }
 rand = { workspace = true, features = ["thread_rng"] }
 sha2 = { workspace = true }
 tracing = { workspace = true }
-tracing-log = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "ansi"] }
 tokio = { workspace = true, features = [
     "macros",

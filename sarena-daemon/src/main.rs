@@ -15,6 +15,7 @@ use sarena_infra::{
     TcxAttach as _, VethSpec,
 };
 use sarena_loader::{AyaBackend, EndpointKind, Loader, LoaderHandle};
+use sarena_utils::{LoggingConfig, logging};
 use tokio::signal;
 use tracing::info;
 
@@ -30,15 +31,10 @@ async fn main() -> Result<(), anyhow::Error> {
     // here, since `HostLink` never moves once created.
     Netns::unshare_self().await?;
 
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
-
-    tracing_log::LogTracer::init()
-        .expect("failed to install LogTracer bridging `log` records into `tracing`");
+    logging::init_logging(&LoggingConfig {
+        enable_debug: true,
+        log_file: None,
+    });
 
     info!("Application started");
 
