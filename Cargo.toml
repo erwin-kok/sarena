@@ -85,6 +85,7 @@ thiserror = { version = "2" }
 tokio = { version = "1.40.0" }
 tracing = { version = "0.1" }
 tracing-appender = "0.2"
+tracing-log = "0.2"
 tracing-subscriber = { version = "0.3", default-features = false }
 uuid = { version = "1", features = ["v4"] }
 which = { version = "8" }

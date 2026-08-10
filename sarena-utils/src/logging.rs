@@ -19,6 +19,8 @@ static LOG_GUARD: Mutex<Option<WorkerGuard>> = Mutex::new(None);
 
 pub fn init_logging(config: &LoggingConfig) {
     LOG_INIT.get_or_init(|| {
+        let _ = tracing_log::LogTracer::init();
+
         let level = if config.enable_debug {
             Level::DEBUG
         } else {

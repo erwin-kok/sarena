@@ -1,0 +1,30 @@
+{
+    // rust-analyzer's default flycheck runs `cargo check --workspace`, which
+    // force-includes the #![no_std] eBPF crates (sarena-ebpf-programs,
+    // sarena-ebpf-test-programs) on the host target. That causes their
+    // `sarena-shared` dependency to unify features with `sarena-core`
+    // (which needs `std`), leaking `std` into the no_std crates and
+    // colliding with their `#[panic_handler]` (E0152 duplicate lang item
+    // `panic_impl`). Those crates are only ever meant to be built
+    // cross-compiled to `bpfel-unknown-none` via `cargo xtask build-ebpf`
+    // (see `just build-ebpf`), not on the host target.
+    //
+    // Plain `cargo check` (no --workspace) respects `default-members` in
+    // the root Cargo.toml, which already excludes both eBPF crates — same
+    // as `just check`. Overriding flycheck to use that avoids the bogus
+    // diagnostic.
+    "rust-analyzer.check.overrideCommand": [
+        "cargo",
+        "check",
+        "--all-features",
+        "--message-format=json"
+    ],
+
+    // Without this, rust-analyzer's own semantic analysis (hover, go-to-def,
+    // completion — separate from the flycheck diagnostics above) only sees
+    // each crate's default features. sarena-cni-plugin/src/test_daemon.rs
+    // (and other feature-gated test-only code, e.g. sarena-infra/sarena-loader's
+    // "test" feature) is behind non-default features, so without this it's
+    // treated as dead cfg'd-out code and none of it resolves.
+    "rust-analyzer.cargo.features": "all"
+}

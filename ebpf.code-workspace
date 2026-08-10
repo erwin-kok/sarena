@@ -1,0 +1,33 @@
+{
+    // A separate rust-analyzer window for the two #![no_std] eBPF crates.
+    // They only ever build cross-compiled to `bpfel-unknown-none` with
+    // `-Z build-std=core` (see `cargo xtask build-ebpf` / `just build-ebpf`),
+    // which is fundamentally incompatible with the rest of the workspace
+    // (host target, full `std`). rust-analyzer's `cargo.target`/`cargo.buildStd`
+    // settings apply to the whole RA instance, so they can't be set in the
+    // main repo window without breaking analysis of everything else --
+    // hence this separate window, opened just for these two crates.
+    "folders": [
+        { "name": "sarena-ebpf-programs", "path": "sarena-ebpf-programs" },
+        { "name": "sarena-ebpf-test-programs", "path": "sarena-ebpf-test-programs" }
+    ],
+    "settings": {
+        "rust-analyzer.cargo.target": "bpfel-unknown-none",
+        "rust-analyzer.cargo.buildStd": ["core"],
+        "rust-analyzer.check.overrideCommand": [
+            "cargo",
+            "check",
+            "-p",
+            "sarena-ebpf-programs",
+            "-p",
+            "sarena-ebpf-test-programs",
+            "--profile",
+            "ebpf",
+            "--target",
+            "bpfel-unknown-none",
+            "-Z",
+            "build-std=core",
+            "--message-format=json"
+        ]
+    }
+}
