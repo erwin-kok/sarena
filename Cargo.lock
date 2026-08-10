@@ -976,6 +976,7 @@ dependencies = [
  "libc",
  "sarena-infra",
  "sarena-loader",
+ "sarena-shared",
  "sarena-utils",
  "sha2",
  "thiserror 2.0.19",

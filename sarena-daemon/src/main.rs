@@ -4,19 +4,16 @@ use std::{
     time::Duration,
 };
 
-use aya::{
-    EbpfError,
-    maps::MapError,
-    programs::{ProgramError, TcAttachType},
-};
+use aya::maps::{Array, Map, MapData};
 use ipnetwork::IpNetwork;
+use sarena_daemon::{add::endpoint_to_ifname, ipam::ipv4_routes, types::CmdArgs};
 use sarena_infra::{
-    InfraError, Link as _, NetlinkNetworkProvisioner, Netns, NetnsGuard, NetworkProvisioner as _,
-    TcxAttach as _, VethSpec,
+    InfraError, Link as _, MacAddress, NetlinkNetworkProvisioner, Netns, NetnsGuard,
+    NetworkProvisioner as _, VethSpec, netlink_link::NetlinkLink,
 };
 use sarena_loader::{AyaBackend, EndpointKind, Loader, LoaderHandle};
+use sarena_shared::EndpointConfig;
 use sarena_utils::{LoggingConfig, logging};
-use tokio::signal;
 use tracing::info;
 
 const PIN_ROOT: &str = "/sys/fs/bpf/test";
@@ -32,7 +29,7 @@ async fn main() -> Result<(), anyhow::Error> {
     Netns::unshare_self().await?;
 
     logging::init_logging(&LoggingConfig {
-        enable_debug: true,
+        enable_debug: false,
         log_file: None,
     });
 
@@ -50,103 +47,61 @@ async fn main() -> Result<(), anyhow::Error> {
     let loader = Loader::new(backend, PIN_ROOT);
     let loader_handle = LoaderHandle::spawn(loader, 16);
 
+    let mut provisioner = NetlinkNetworkProvisioner;
+    provisioner.enable_ip_forwarding(false).await.expect("");
+
+    let gateway_ip = Ipv4Addr::new(1, 2, 3, 4);
+
     let client1_ns = "client1_ns";
     Netns::create(client1_ns).await?;
     let _guard1 = NetnsGuard::new(client1_ns);
+
+    let host1_name = "host1";
+    let args1 = CmdArgs {
+        container_id: "111".to_string(),
+        netns: client1_ns.to_string(),
+        if_name: host1_name.to_string(),
+        args: None,
+        path: String::new(),
+        stdin_data: vec![],
+        netns_override: None,
+    };
+
+    let peer1_ip = Ipv4Addr::new(192, 168, 21, 21);
+
+    let (mut host1, _) = create_endpoint(
+        &mut provisioner,
+        &loader_handle,
+        &args1,
+        gateway_ip,
+        peer1_ip,
+    )
+    .await?;
 
     let client2_ns = "client2_ns";
     Netns::create(client2_ns).await?;
     let _guard2 = NetnsGuard::new(client2_ns);
 
-    let host1_name = "host1";
-    let peer1_name = "peer1";
-
     let host2_name = "host2";
-    let peer2_name = "peer2";
+    let args2 = CmdArgs {
+        container_id: "222".to_string(),
+        netns: client2_ns.to_string(),
+        if_name: host2_name.to_string(),
+        args: None,
+        path: String::new(),
+        stdin_data: vec![],
+        netns_override: None,
+    };
 
-    let mut provisioner = NetlinkNetworkProvisioner;
-
-    // Pair 1: host1 <-> peer1. `create_veth` moves the peer end into
-    // `client1_ns` as part of creation; the host end stays in this
-    // process's own namespace (`HostLink` never moves).
-    let pair1 = provisioner
-        .create_veth(VethSpec {
-            host_ifname: host1_name.to_string(),
-            peer_ifname: peer1_name.to_string(),
-            peer_netns: client1_ns.to_string(),
-            host_mac: None,
-            peer_mac: None,
-        })
-        .await?;
-    let (mut host1, mut peer1) = (pair1.host, pair1.peer);
-
-    // Pair 2: host2 <-> peer2.
-    let pair2 = provisioner
-        .create_veth(VethSpec {
-            host_ifname: host2_name.to_string(),
-            peer_ifname: peer2_name.to_string(),
-            peer_netns: client2_ns.to_string(),
-            host_mac: None,
-            peer_mac: None,
-        })
-        .await?;
-    let (mut host2, mut peer2) = (pair2.host, pair2.peer);
-
-    let host1_ip = Ipv4Addr::new(192, 168, 21, 1);
-    let peer1_ip = Ipv4Addr::new(192, 168, 21, 21);
-    let host2_ip = Ipv4Addr::new(192, 168, 22, 1);
     let peer2_ip = Ipv4Addr::new(192, 168, 22, 22);
-
-    host1.set_up().await?;
-    host1
-        .set_addr(IpNetwork::new(IpAddr::V4(host1_ip), 24)?)
-        .await?;
-    host2.set_up().await?;
-    host2
-        .set_addr(IpNetwork::new(IpAddr::V4(host2_ip), 24)?)
-        .await?;
-
-    peer1.set_up().await?;
-    peer1
-        .set_addr(IpNetwork::new(IpAddr::V4(peer1_ip), 24)?)
-        .await?;
-    peer1.add_gateway(host1_ip).await?;
-
-    peer2.set_up().await?;
-    peer2
-        .set_addr(IpNetwork::new(IpAddr::V4(peer2_ip), 24)?)
-        .await?;
-    peer2.add_gateway(host2_ip).await?;
-
-    // Host ends live in this process's own namespace, so this runs
-    // directly -- no namespace switch needed.
-    std::fs::write("/proc/sys/net/ipv4/ip_forward", b"1")?;
-    std::fs::write(
-        format!("/proc/sys/net/ipv4/conf/{host1_name}/forwarding"),
-        b"1",
-    )?;
-    std::fs::write(
-        format!("/proc/sys/net/ipv4/conf/{host2_name}/forwarding"),
-        b"1",
-    )?;
-
-    info!("host1 index: {}", host1.ifindex());
-    info!("host2 index: {}", host2.ifindex());
-
-    loader_handle
-        .add_endpoint(EndpointKind::Host, host1_name)
-        .await
-        .expect("add_endpoint (host1) failed");
-    loader_handle
-        .add_endpoint(EndpointKind::Host, host2_name)
-        .await
-        .expect("add_endpoint (host2) failed");
-
-    assert!(
-        host1
-            .has_tcx_link("from_host", TcAttachType::Ingress)
-            .expect("expect program")
-    );
+    let (mut host2, _) = create_endpoint(
+        &mut provisioner,
+        &loader_handle,
+        &args2,
+        gateway_ip,
+        peer2_ip,
+    )
+    .await?;
 
     let listener =
         Netns::open(client1_ns)?
@@ -175,11 +130,6 @@ async fn main() -> Result<(), anyhow::Error> {
     assert_eq!(&buf[..n], payload);
     assert_eq!(from.ip(), IpAddr::V4(peer2_ip));
 
-    let ctrl_c = signal::ctrl_c();
-    info!("Waiting for Ctrl-C...");
-    ctrl_c.await?;
-    info!("Exiting...");
-
     loader_handle.teardown_all().await.expect("teardown failed");
 
     host1.delete().await?;
@@ -188,22 +138,65 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum DaemonError {
-    #[error("eBPF program error: {0}")]
-    EbpfError(#[from] EbpfError),
+async fn create_endpoint(
+    provisioner: &mut NetlinkNetworkProvisioner,
+    loader_handle: &LoaderHandle,
+    args: &CmdArgs,
+    gateway_ip: Ipv4Addr,
+    peer_ip: Ipv4Addr,
+) -> Result<(NetlinkLink, NetlinkLink), anyhow::Error> {
+    let lxc_ifname = endpoint_to_ifname(&format!("{}:{}", args.container_id, args.if_name));
+    let host_mac = MacAddress::generate_rand();
+    let lxc_mac = MacAddress::generate_rand();
+    let pair = provisioner
+        .create_veth(VethSpec {
+            host_ifname: lxc_ifname.clone(),
+            peer_ifname: args.if_name.clone(),
+            peer_netns: args.netns.clone(),
+            host_mac: Some(host_mac),
+            peer_mac: Some(lxc_mac),
+        })
+        .await?;
+    let (mut host, mut peer) = (pair.host, pair.peer);
 
-    #[error("eBPF program error: {0}")]
-    ProgramError(#[from] ProgramError),
+    host.set_rp_filter(0).await?;
 
-    #[error("Program {0} not found")]
-    ProgramNotFound(String),
+    host.set_mtu(1500).await?;
+    peer.set_mtu(1500).await?;
 
-    #[error("eBPF map error: {0}")]
-    MapError(#[from] MapError),
+    host.set_up().await?;
+    peer.set_up().await?; // Should we bring up immediately, or when completely configured?
 
-    #[error("Map {0} not found")]
-    MapNotFound(String),
+    peer.set_addr(IpNetwork::new(IpAddr::V4(peer_ip), 24)?)
+        .await?;
+
+    let routes = ipv4_routes(gateway_ip, 1500);
+
+    for r in routes {
+        peer.add_route(&r).await.expect("failed to add route");
+    }
+
+    info!(
+        "new endpoint -- host_iface = {} (mac: {}), peer_iface = {} (mac: {}, ip: {})",
+        lxc_ifname, host_mac, args.if_name, lxc_mac, peer_ip
+    );
+
+    let handle = loader_handle
+        .add_endpoint(EndpointKind::Container, &lxc_ifname)
+        .await?;
+
+    let path = &handle.map_paths["endpoint_config"];
+    let map_data = MapData::from_pin(path)?;
+    let map = Map::Array(map_data);
+    let mut array: Array<_, EndpointConfig> = Array::try_from(map)?;
+    array.set(
+        0,
+        EndpointConfig {
+            mac: [1u8, 2u8, 3u8, 4u8, 5u8, 6u8], // node mac
+            ipv4: peer_ip,
+        },
+        0,
+    )?;
+
+    Ok((host, peer))
 }
-
-pub type Res<T> = Result<T, DaemonError>;

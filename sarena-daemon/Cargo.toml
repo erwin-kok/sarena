@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 sarena-infra = { path = "../sarena-infra", features = ["test"] }
 sarena-loader = { path = "../sarena-loader" }
+sarena-shared = { path = "../sarena-shared" }
 sarena-utils = { path = "../sarena-utils" }
 
 anyhow = { workspace = true, default-features = true }
