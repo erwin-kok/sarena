@@ -6,12 +6,16 @@ use std::{
 };
 
 use aya::{
-    Ebpf, TestRun, TestRunOptions,
-    maps::{Array, MapData},
+    Ebpf, EbpfLoader, TestRun, TestRunOptions,
+    maps::{Array, MapData, ProgramArray},
     programs::SchedClassifier,
 };
 use regex::Regex;
-use sarena_shared_test::{ScapyAssert, TEST_RESULT_MAP_SIZE, TestStatus, tlv_reader};
+use sarena_shared_test::{
+    FROM_CONTAINER, FROM_HOST, FROM_NETDEV, FROM_OVERLAY, FROM_WIREGUARD, ScapyAssert,
+    TEST_RESULT_MAP_SIZE, TO_CONTAINER, TO_HOST, TO_NETDEV, TO_OVERLAY, TO_WIREGUARD, TestStatus,
+    tlv_reader,
+};
 
 use crate::{Res, TestRunnerError, report};
 
@@ -19,6 +23,8 @@ const PAGE_SIZE: usize = 4096;
 const CTX_SIZE: usize = 256;
 const HEADROOM: usize = 256;
 const TAILROOM: usize = 320;
+
+const PIN_DIR: &str = "/sys/fs/bpf/sarena-test-runner";
 
 #[derive(Default)]
 struct ProgramSet {
@@ -35,11 +41,59 @@ fn ebpf_test_runner() -> Res<()> {
 
     let dir = std::env::var("EBPF_DIR").unwrap_or_else(|_| "/usr/lib/sarena/ebpf".into());
 
-    let mut prod_bpf = Ebpf::load_file(format!("{dir}/sarena-ebpf-programs.o"))?;
-    let mut test_bpf = Ebpf::load_file(format!("{dir}/sarena-ebpf-test-programs.o"))?;
+    reset_pin_dir(PIN_DIR)?;
+
+    let mut prod_bpf = EbpfLoader::new()
+        .default_map_pin_directory(format!("{PIN_DIR}/prod"))
+        .load_file(format!("{dir}/sarena-ebpf-programs.o"))?;
+    let mut test_bpf = EbpfLoader::new()
+        .default_map_pin_directory(format!("{PIN_DIR}/test"))
+        .load_file(format!("{dir}/sarena-ebpf-test-programs.o"))?;
+
+    fill_entry_call_map(&mut prod_bpf, &mut test_bpf)?;
 
     run_test(&mut test_bpf)?;
 
+    Ok(())
+}
+
+/// Every production classifier that the test programs may tail-call into
+/// via `entry_call_map`, and the slot each one belongs in. Keep this in
+/// sync with `sarena-ebpf-programs/src/main.rs`'s `#[classifier]` fns and
+/// `sarena-shared-test/src/constants.rs`'s slot constants.
+const ENTRY_CALL_PROGRAMS: &[(u32, &str)] = &[
+    (FROM_CONTAINER, "from_container"),
+    (TO_CONTAINER, "to_container"),
+    (FROM_HOST, "from_host"),
+    (TO_HOST, "to_host"),
+    (FROM_NETDEV, "from_netdev"),
+    (TO_NETDEV, "to_netdev"),
+    (FROM_OVERLAY, "from_overlay"),
+    (TO_OVERLAY, "to_overlay"),
+    (FROM_WIREGUARD, "from_wireguard"),
+    (TO_WIREGUARD, "to_wireguard"),
+];
+
+/// Loads every production classifier `prod_bpf` provides and installs each
+/// one's fd into `test_bpf`'s `entry_call_map` at its slot, so the test
+/// programs' `bpf_tail_call`s reach the real production code under test.
+///
+/// Returns the `ProgramArray` -- the caller must keep it alive at least as
+/// long as any program that still needs to be loaded with a tail call into
+/// this map (see the comment at the call site).
+fn fill_entry_call_map(prod_bpf: &mut Ebpf, test_bpf: &mut Ebpf) -> Res<()> {
+    let map_name = "entry_call_map";
+    let map = test_bpf
+        .map_mut(map_name)
+        .ok_or_else(|| TestRunnerError::MapNotFound(map_name.to_owned()))?;
+    let mut program_array = ProgramArray::try_from(map)?;
+
+    for &(slot, name) in ENTRY_CALL_PROGRAMS {
+        load_bpf_program(prod_bpf, name)?;
+        let prog = get_sched_classifier(prod_bpf, name)?;
+        let fd = prog.fd()?;
+        program_array.set(slot, fd, 0)?;
+    }
     Ok(())
 }
 
@@ -332,4 +386,18 @@ fn process_asserts(
 
 fn test_error(ret: u32) -> bool {
     return ret == TestStatus::Fail as u32 || ret == TestStatus::FrameworkError as u32;
+}
+
+/// Removes any pins left over from a previous run and recreates the
+/// (empty) `prod`/`test` subdirectories `EbpfLoader::default_map_pin_directory`
+/// expects to already exist.
+fn reset_pin_dir(dir: &str) -> Res<()> {
+    match std::fs::remove_dir_all(dir) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e.into()),
+    }
+    std::fs::create_dir_all(format!("{dir}/prod"))?;
+    std::fs::create_dir_all(format!("{dir}/test"))?;
+    Ok(())
 }
