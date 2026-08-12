@@ -1,9 +1,11 @@
-use aya_ebpf::{bindings::tcx_action_base::TCX_PASS, programs::TcContext};
+use aya_ebpf::programs::TcContext;
 
-pub fn try_from_netdev(_ctx: TcContext) -> Result<i32, i32> {
-    Ok(TCX_PASS)
+use crate::error::{EbpfReturn, Res};
+
+pub fn try_from_netdev(_ctx: TcContext) -> Res<EbpfReturn> {
+    Ok(EbpfReturn::Pass)
 }
 
-pub fn try_to_netdev(_ctx: TcContext) -> Result<i32, i32> {
-    Ok(TCX_PASS)
+pub fn try_to_netdev(_ctx: TcContext) -> Res<EbpfReturn> {
+    Ok(EbpfReturn::Pass)
 }

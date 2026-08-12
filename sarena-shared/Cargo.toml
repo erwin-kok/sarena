@@ -16,6 +16,7 @@ std = ["dep:aya"]
 
 [dependencies]
 aya = { workspace = true, optional = true }
+network-types = { workspace = true }
 
 [lib]
 path = "src/lib.rs"

@@ -1,4 +1,4 @@
-use aya_ebpf::{bindings::tcx_action_base::TCX_NEXT, programs::TcContext};
+use aya_ebpf::programs::TcContext;
 use aya_log_ebpf::{debug, info};
 use network_types::{arp::ArpHdr, eth::EthHdr};
 use sarena_ebpf_common::{bpf_memcmp, ptr_at};
@@ -6,16 +6,17 @@ use sarena_shared::EndpointConfig;
 
 use crate::{
     constants::{ARPHRD_ETHER, ARPOP_REPLY, ARPOP_REQUEST, ETH_BROADCAST},
+    error::{EbpfReturn, Res},
     skb::{ctx_get_ifindex, ctx_redirect_peer},
 };
 
 #[inline(always)]
-pub fn process_arp(ctx: &TcContext, config: &EndpointConfig) -> Result<i32, ()> {
+pub fn process_arp(ctx: &TcContext, config: &EndpointConfig) -> Res<EbpfReturn> {
     let ethhdr: *const EthHdr = unsafe { ptr_at(&ctx, 0)? };
     let arphdr: *const ArpHdr = unsafe { ptr_at(&ctx, EthHdr::LEN)? };
 
     if !arp_matches(&ctx, ethhdr, arphdr, &config.mac) {
-        return Err(());
+        return Ok(EbpfReturn::Pass);
     }
 
     let eth = unsafe { &*ethhdr };
@@ -24,15 +25,8 @@ pub fn process_arp(ctx: &TcContext, config: &EndpointConfig) -> Result<i32, ()> 
     let spa = arp.spa();
     let tpa = arp.tpa();
 
-    info!(
-        &ctx,
-        "endpoint config: {:mac}, ip: {:i}", config.mac, config.ipv4
-    );
-
-    info!(&ctx, "smac: {:mac}, spa: {:i}, tpa: {:i}", smac, spa, tpa);
-
     if tpa == config.ipv4.octets() {
-        return Ok(TCX_NEXT);
+        return Ok(EbpfReturn::Next);
     }
 
     info!(
@@ -46,7 +40,7 @@ pub fn process_arp(ctx: &TcContext, config: &EndpointConfig) -> Result<i32, ()> 
 
     let ifindex = ctx_get_ifindex(ctx);
     let ret = ctx_redirect_peer(ifindex, 0);
-    Ok(ret as i32)
+    Ok(EbpfReturn::Custom(ret as i32))
 }
 
 fn arp_matches(ctx: &TcContext, eth: *const EthHdr, arp: *const ArpHdr, mac: &[u8; 6]) -> bool {

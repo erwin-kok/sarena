@@ -4,6 +4,7 @@
 mod arp;
 mod constants;
 mod container;
+mod error;
 mod host;
 mod netdev;
 mod overlay;

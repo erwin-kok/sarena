@@ -17,6 +17,7 @@ sarena-shared = { path = "../sarena-shared", default-features = false }
 aya-ebpf = { workspace = true, default-features = false }
 aya-log-ebpf = { workspace = true }
 network-types = { workspace = true, default-features = false }
+thiserror = { workspace = true, default-features = false }
 
 [build-dependencies]
 which = { workspace = true }
