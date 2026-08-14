@@ -44,6 +44,10 @@ impl PinRoot {
         self.globals_dir().join(format!("{map_name}_{link}"))
     }
 
+    pub fn global_map_dir(&self, map_name: &str) -> PathBuf {
+        self.globals_dir().join(map_name)
+    }
+
     pub fn parse_pin_subpath(path: &Path) -> Option<(EndpointKind, String)> {
         let mut components = path.components();
         let kind_str = components.next()?.as_os_str().to_str()?;
@@ -113,6 +117,15 @@ mod tests {
         assert_ne!(
             root.per_endpoint_map_dir("sarena_policy", "lxc00001"),
             root.per_endpoint_map_dir("sarena_policy", "lxc00002")
+        );
+    }
+
+    #[test]
+    fn global_map_path_does_not_collide_with_per_endpoint_paths() {
+        let root = PinRoot::new("/sys/fs/bpf/test");
+        assert_ne!(
+            root.global_map_dir("conntrack_tcp"),
+            root.per_endpoint_map_dir("conntrack_tcp", "lxc00001")
         );
     }
 }

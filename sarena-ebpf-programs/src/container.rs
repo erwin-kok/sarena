@@ -9,6 +9,7 @@ use sarena_shared::{EndpointConfig, Ipv4Key, Ipv4KeyExt as _};
 
 use crate::{
     arp::process_arp,
+    conntrack::ConnTrackInfo,
     error::{EbpfError::InternalError, EbpfReturn, Res},
 };
 
@@ -61,6 +62,9 @@ fn process_ipv4(ctx: &TcContext, _config: &EndpointConfig) -> Res<EbpfReturn> {
 
     let src_ip = Ipv4Key::from_octets(ipv4.src_addr);
     let dst_ip = Ipv4Key::from_octets(ipv4.dst_addr);
+
+    let cn_info = ConnTrackInfo::new(ctx)?;
+    cn_info.key.print_key();
 
     info!(
         &ctx,

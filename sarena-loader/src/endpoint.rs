@@ -2,9 +2,10 @@ use std::{collections::HashMap, path::PathBuf};
 
 use crate::{
     manifest::{
-        CONTAINER_HOOKS, CONTAINER_PER_ENDPOINT_MAPS, HOST_HOOKS, HOST_PER_ENDPOINT_MAPS, HookSpec,
-        NETDEV_HOOKS, NETDEV_PER_ENDPOINT_MAPS, OVERLAY_HOOKS, OVERLAY_PER_ENDPOINT_MAPS,
-        WIREGUARD_HOOKS, WIREGUARD_PER_ENDPOINT_MAPS,
+        CONTAINER_GLOBAL_MAPS, CONTAINER_HOOKS, CONTAINER_PER_ENDPOINT_MAPS, HOST_GLOBAL_MAPS,
+        HOST_HOOKS, HOST_PER_ENDPOINT_MAPS, HookSpec, NETDEV_GLOBAL_MAPS, NETDEV_HOOKS,
+        NETDEV_PER_ENDPOINT_MAPS, OVERLAY_GLOBAL_MAPS, OVERLAY_HOOKS, OVERLAY_PER_ENDPOINT_MAPS,
+        WIREGUARD_GLOBAL_MAPS, WIREGUARD_HOOKS, WIREGUARD_PER_ENDPOINT_MAPS,
     },
     pin::PinRoot,
 };
@@ -49,6 +50,16 @@ impl EndpointKind {
             EndpointKind::NetDev => NETDEV_PER_ENDPOINT_MAPS,
             EndpointKind::Overlay => OVERLAY_PER_ENDPOINT_MAPS,
             EndpointKind::Wireguard => WIREGUARD_PER_ENDPOINT_MAPS,
+        }
+    }
+
+    pub(crate) fn global_map_names(self) -> &'static [&'static str] {
+        match self {
+            EndpointKind::Container => CONTAINER_GLOBAL_MAPS,
+            EndpointKind::Host => HOST_GLOBAL_MAPS,
+            EndpointKind::NetDev => NETDEV_GLOBAL_MAPS,
+            EndpointKind::Overlay => OVERLAY_GLOBAL_MAPS,
+            EndpointKind::Wireguard => WIREGUARD_GLOBAL_MAPS,
         }
     }
 

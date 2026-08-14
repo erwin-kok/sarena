@@ -1000,6 +1000,7 @@ dependencies = [
  "aya-ebpf",
  "aya-log-ebpf",
  "network-types",
+ "num-traits",
  "sarena-ebpf-common",
  "sarena-shared",
  "thiserror 2.0.20",

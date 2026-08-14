@@ -1,6 +1,9 @@
 [alias]
 xtask = "run --release --package xtask --"
 
+[target.bpfel-unknown-none]
+rustflags = ["-C", "target-cpu=v3", "-C", "link-arg=--btf"]
+
 [target.armv7-unknown-linux-gnueabi]
 linker = "arm-linux-gnueabi-gcc"
 
@@ -24,3 +27,6 @@ linker = "mips-linux-gnu-gcc"
 
 [target.mips64-unknown-linux-gnuabi64]
 linker = "mips64-linux-gnuabi64-gcc"
+
+#[target."cfg(all())"]
+#runner = "sudo -E"

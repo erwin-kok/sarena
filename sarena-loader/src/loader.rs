@@ -14,10 +14,10 @@ use crate::{
 /// Returned from a successful `add_endpoint`. Map paths, not map
 /// handles or map content - the caller opens these itself with
 /// whatever map wrapper it likes. Only *per-endpoint* maps are
-/// reported here (see `endpoint::map_rename`) - a global map resolves
-/// to the same path for every endpoint via `AyaBackend`'s own
-/// `default_map_pin_directory` fallback, so this crate has no
-/// per-endpoint bookkeeping reason to track it.
+/// reported here (see `endpoint::map_rename`) - global maps (see
+/// `EndpointKind::global_map_names`) resolve to the same path for every
+/// endpoint of that kind, so this crate has no per-endpoint bookkeeping
+/// reason to track them.
 #[derive(Debug, Default)]
 pub struct EndpointHandle {
     pub map_paths: HashMap<String, PathBuf>,
@@ -39,7 +39,13 @@ impl<B: BpfBackend> Loader<B> {
     pub fn add_endpoint(&mut self, kind: EndpointKind, link: &str) -> Res<EndpointHandle> {
         let resolved = self.backend.resolve_link(link)?;
         let per_endpoint_maps = kind.map_rename(&self.pins, link);
-        let mut instance = self.backend.load_instance(link, &per_endpoint_maps)?;
+        let mut maps = per_endpoint_maps.clone();
+        maps.extend(
+            kind.global_map_names()
+                .iter()
+                .map(|name| (name.to_string(), self.pins.global_map_dir(name))),
+        );
+        let mut instance = self.backend.load_instance(link, &maps)?;
         let mut failures = Vec::new();
         let link_dir = self.pins.endpoint_link_dir(kind, link);
         for hook_spec in kind.hooks() {
