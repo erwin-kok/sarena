@@ -33,6 +33,9 @@ pub enum EbpfError {
 
     #[error("IpError: {0}")]
     IpError(#[from] IpError),
+
+    #[error("Protocol not supported: {0}")]
+    UnsupportedProtocol(u8),
 }
 
 pub type Res<T> = Result<T, EbpfError>;

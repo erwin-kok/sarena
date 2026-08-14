@@ -11,8 +11,6 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-sarena-shared = { path = "../sarena-shared", default-features = false }
-
 aya-ebpf = { workspace = true, default-features = false }
 thiserror = { workspace = true, default-features = false }
 

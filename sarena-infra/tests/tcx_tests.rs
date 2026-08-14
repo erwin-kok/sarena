@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 
 use aya::{
-    Ebpf,
+    Ebpf, EbpfLoader,
     programs::{SchedClassifier, TcAttachType},
 };
 use sarena_infra::{
@@ -13,8 +13,8 @@ use sarena_infra::{
 #[tokio::test]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn attach_detach_tcx() {
-    let dir = std::env::var("EBPF_DIR").unwrap_or_else(|_| "/usr/lib/sarena/ebpf".into());
-    let mut test_bpf = Ebpf::load_file(format!("{dir}/sarena-ebpf-test-programs.o")).unwrap();
+    let map_pin_dir = Path::new("/sys/fs/bpf/sarena-test-attach-detach-tcx-maps");
+    let mut test_bpf = load_test_bpf(map_pin_dir);
     let program = test_bpf.program_mut("dummy_test").unwrap();
     let program: &mut SchedClassifier = program.try_into().unwrap();
     program.load().unwrap();
@@ -43,13 +43,15 @@ async fn attach_detach_tcx() {
         fs::remove_dir_all(link_dir).unwrap();
     })
     .await;
+
+    fs::remove_dir_all(map_pin_dir).unwrap();
 }
 
 #[tokio::test]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn upsert_tcx_recovers_from_a_defunct_pin_after_device_replacement() {
-    let dir = std::env::var("EBPF_DIR").unwrap_or_else(|_| "/usr/lib/sarena/ebpf".into());
-    let mut test_bpf = Ebpf::load_file(format!("{dir}/sarena-ebpf-test-programs.o")).unwrap();
+    let map_pin_dir = Path::new("/sys/fs/bpf/sarena-test-tcx-enolink-maps");
+    let mut test_bpf = load_test_bpf(map_pin_dir);
     let program = test_bpf.program_mut("dummy_test").unwrap();
     let program: &mut SchedClassifier = program.try_into().unwrap();
     program.load().unwrap();
@@ -113,13 +115,15 @@ async fn upsert_tcx_recovers_from_a_defunct_pin_after_device_replacement() {
         fs::remove_dir_all(link_dir).unwrap();
     })
     .await;
+
+    fs::remove_dir_all(map_pin_dir).unwrap();
 }
 
 #[tokio::test]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn upsert_tcx_program_rejects_non_local_link() {
-    let dir = std::env::var("EBPF_DIR").unwrap_or_else(|_| "/usr/lib/sarena/ebpf".into());
-    let mut test_bpf = Ebpf::load_file(format!("{dir}/sarena-ebpf-test-programs.o")).unwrap();
+    let map_pin_dir = Path::new("/sys/fs/bpf/sarena-test-tcx-reject-maps");
+    let mut test_bpf = load_test_bpf(map_pin_dir);
     let program = test_bpf.program_mut("dummy_test").unwrap();
     let program: &mut SchedClassifier = program.try_into().unwrap();
     program.load().unwrap();
@@ -162,4 +166,16 @@ async fn upsert_tcx_program_rejects_non_local_link() {
         host.delete().await.expect("cleanup delete failed");
     })
     .await;
+
+    fs::remove_dir_all(map_pin_dir).unwrap();
+}
+
+fn load_test_bpf(map_pin_dir: &Path) -> Ebpf {
+    let dir = std::env::var("EBPF_DIR").unwrap_or_else(|_| "/usr/lib/sarena/ebpf".into());
+    let _ = fs::remove_dir_all(map_pin_dir);
+    fs::create_dir_all(map_pin_dir).unwrap();
+    EbpfLoader::new()
+        .default_map_pin_directory(map_pin_dir)
+        .load_file(format!("{dir}/sarena-ebpf-test-programs.o"))
+        .unwrap()
 }

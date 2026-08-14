@@ -1,6 +1,6 @@
 use core::net::Ipv4Addr;
 
-#[repr(C, packed)]
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct EndpointConfig {
     pub mac: [u8; 6],
@@ -8,4 +8,8 @@ pub struct EndpointConfig {
 }
 
 #[cfg(feature = "std")]
-unsafe impl aya::Pod for EndpointConfig {}
+mod pod_impls {
+    use super::EndpointConfig;
+
+    unsafe impl aya::Pod for EndpointConfig {}
+}

@@ -16,7 +16,7 @@ use sarena_shared::EndpointConfig;
 use sarena_utils::{LoggingConfig, logging};
 use tracing::info;
 
-const PIN_ROOT: &str = "/sys/fs/bpf/test";
+const PIN_ROOT: &str = "/sys/fs/bpf/sarena";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), anyhow::Error> {

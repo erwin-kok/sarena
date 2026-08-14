@@ -656,9 +656,9 @@ dependencies = [
 
 [[package]]
 name = "netlink-proto"
-version = "0.12.1"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6f7398dddf5f152d2a91a2921a134c6097056e292c0d4b9906007855e7cece6"
+checksum = "93af8261786086024cd5e96e0a991dd65ced07bbf7c233a487bbc96b971d5539"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -989,7 +989,6 @@ name = "sarena-ebpf-common"
 version = "0.1.0"
 dependencies = [
  "aya-ebpf",
- "sarena-shared",
  "thiserror 2.0.20",
  "which",
 ]
@@ -1070,7 +1069,6 @@ name = "sarena-shared"
 version = "0.1.0"
 dependencies = [
  "aya",
- "network-types",
 ]
 
 [[package]]
