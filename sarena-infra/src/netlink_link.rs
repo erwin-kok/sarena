@@ -62,10 +62,10 @@ impl From<&InfoKind> for LinkKind {
 pub struct NetlinkLink {
     /// Kernel interface index (`ifindex`).  Stable for the lifetime of the
     /// interface inside the namespace.
-    pub index: u32,
+    index: u32,
 
     /// Interface name, e.g. `eth0`, `veth0a2f`.  Up to `IFNAMSIZ - 1` bytes.
-    pub name: String,
+    name: String,
 
     /// Raw `IFF_*` bitfield from the `ifinfomsg` header.
     /// Common bits: `IFF_UP = 0x1`, `IFF_RUNNING = 0x40`,

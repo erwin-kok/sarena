@@ -17,3 +17,4 @@ pub use endpoint::EndpointKind;
 pub use error::{HookFailure, LoaderError};
 pub use loader::{EndpointHandle, Loader};
 pub use manifest::Hook;
+pub use pin::PinRoot;

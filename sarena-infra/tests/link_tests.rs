@@ -144,7 +144,7 @@ async fn veth_pair_create_and_configure() {
         assert!(!refreshed.is_up());
 
         let links = provisioner.list_links().await.expect("list_links failed");
-        let names: Vec<_> = links.iter().map(|l| l.name.as_str()).collect();
+        let names: Vec<_> = links.iter().map(|l| l.ifname()).collect();
         assert!(names.contains(&name.as_str()));
         assert!(!names.contains(&peer_name.as_str()));
 
@@ -232,7 +232,7 @@ async fn link_setns_moves_only_the_moved_end() {
                 .get_link_in_ns(&netns_a, &peer_name)
                 .await
                 .expect("peer should still be in ns_a");
-            assert_eq!(still_there.index, peer.ifindex());
+            assert_eq!(still_there.ifindex(), peer.ifindex());
         })
         .await;
     })
@@ -266,7 +266,7 @@ async fn list_links_includes_loopback_and_veth() {
             .list_links_in_ns(&netns)
             .await
             .expect("list_links failed");
-        let names: Vec<_> = links.iter().map(|l| l.name.as_str()).collect();
+        let names: Vec<_> = links.iter().map(|l| l.ifname()).collect();
 
         assert!(names.contains(&"lo"));
         assert!(names.contains(&name.as_str()));

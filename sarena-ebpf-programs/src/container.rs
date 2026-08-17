@@ -1,4 +1,4 @@
-use aya_ebpf::{macros::map, maps::Array, programs::TcContext};
+use aya_ebpf::{helpers::generated::bpf_redirect, macros::map, maps::Array, programs::TcContext};
 use aya_log_ebpf::{debug, info};
 use network_types::{
     eth::{EthHdr, EtherType},
@@ -9,7 +9,7 @@ use sarena_shared::{EndpointConfig, Ipv4Key, Ipv4KeyExt as _};
 
 use crate::{
     arp::process_arp,
-    conntrack::ConnTrackInfo,
+    endpoint::lookup_ipv4_endpoint,
     error::{EbpfError::InternalError, EbpfReturn, Res},
 };
 
@@ -63,9 +63,6 @@ fn process_ipv4(ctx: &TcContext, _config: &EndpointConfig) -> Res<EbpfReturn> {
     let src_ip = Ipv4Key::from_octets(ipv4.src_addr);
     let dst_ip = Ipv4Key::from_octets(ipv4.dst_addr);
 
-    let cn_info = ConnTrackInfo::new(ctx)?;
-    cn_info.key.print_key();
-
     info!(
         &ctx,
         "IPv4 -- dst-mac: {:mac}, src-mac: {:mac}, src-ip: {:i}, dst-ip: {:i}",
@@ -74,6 +71,12 @@ fn process_ipv4(ctx: &TcContext, _config: &EndpointConfig) -> Res<EbpfReturn> {
         src_ip.to_addr(),
         dst_ip.to_addr(),
     );
+
+    if let Some(ep) = lookup_ipv4_endpoint(dst_ip) {
+        let ifindex = unsafe { (*ep).if_index };
+        let ret = unsafe { bpf_redirect(ifindex, 0) };
+        return Ok(EbpfReturn::Custom(ret as i32));
+    }
 
     Ok(EbpfReturn::Pass)
 }
