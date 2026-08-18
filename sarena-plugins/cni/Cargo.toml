@@ -17,7 +17,6 @@ sarena-utils = { path = "../../sarena-utils" }
 async-trait = { workspace = true }
 hex = { workspace = true, features = ["std"] }
 ipnet = { workspace = true }
-ipnetwork = { workspace = true }
 libc = { workspace = true }
 rscni-plugin = { workspace = true, features = ["async"] }
 serde = { workspace = true }

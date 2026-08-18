@@ -4,17 +4,13 @@ use std::{
     net::{IpAddr, Ipv4Addr},
 };
 
-use ipnetwork::{IpNetwork, Ipv4Network};
+use ipnet::{IpNet, Ipv4Net};
 use netlink_packet_route::route::{RouteProtocol, RouteScope, RouteType};
 
 /// The IPv4 "everything" prefix (`0.0.0.0/0`), built at compile time: if
 /// the prefix were ever invalid, the crate would fail to build rather than
 /// panicking at runtime.
-const DEFAULT_PREFIX: IpNetwork =
-    IpNetwork::V4(match Ipv4Network::new_checked(Ipv4Addr::UNSPECIFIED, 0) {
-        Some(network) => network,
-        None => unreachable!(),
-    });
+const DEFAULT_PREFIX: IpNet = IpNet::V4(Ipv4Net::new_assert(Ipv4Addr::UNSPECIFIED, 0));
 
 /// A single IP route: the local intent for what should be installed,
 /// independent of which link or namespace it ends up added to (those are
@@ -22,7 +18,7 @@ const DEFAULT_PREFIX: IpNetwork =
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Route {
     /// Destination network this route matches.
-    pub prefix: IpNetwork,
+    pub prefix: IpNet,
     /// Gateway to route through. `None` means an on-link/directly-connected
     /// route (no next hop) -- e.g. the subnet a link is itself attached to.
     pub nexthop: Option<IpAddr>,
@@ -90,7 +86,7 @@ impl fmt::Display for Route {
 /// implementation in Go) purely to give the standard sort function
 /// something to call back into.
 pub fn sort_by_mask_narrowest_first(routes: &mut [Route]) {
-    routes.sort_by_key(|route| Reverse(route.prefix.prefix()));
+    routes.sort_by_key(|route| Reverse(route.prefix.prefix_len()));
 }
 
 #[cfg(test)]
@@ -122,7 +118,7 @@ mod tests {
 
         sort_by_mask_narrowest_first(&mut routes);
 
-        let prefixes: Vec<_> = routes.iter().map(|r| r.prefix.prefix()).collect();
+        let prefixes: Vec<_> = routes.iter().map(|r| r.prefix.prefix_len()).collect();
         assert_eq!(prefixes, vec![32, 16, 8]);
     }
 }

@@ -4,7 +4,7 @@ use std::{
 };
 
 use futures::TryStreamExt;
-use ipnetwork::IpNetwork;
+use ipnet::IpNet;
 use netlink_packet_route::route::{
     RouteAddress, RouteAttribute, RouteMessage, RouteMetric, RouteScope,
 };
@@ -303,7 +303,7 @@ async fn set_addr_and_add_gateway_configure_the_link() {
         host.set_up().await.expect("link_set_up failed");
 
         let ip = Ipv4Addr::new(10, 99, 0, 1);
-        let addr = IpNetwork::new(IpAddr::V4(ip), 24).expect("valid IPv4 network");
+        let addr = IpNet::new(IpAddr::V4(ip), 24).expect("valid IPv4 network");
         host.set_addr(addr).await.expect("set_addr failed");
         assert!(has_address(&ns, host.ifindex(), ip, 24).await);
 
@@ -583,7 +583,7 @@ async fn delete_link_in_ns_for_missing_namespace_fails() {
 
 /// A minimal `Route` for `prefix`, with every other field left unset --
 /// tests override just the fields they care about via `..route(prefix)`.
-fn route(prefix: IpNetwork) -> Route {
+fn route(prefix: IpNet) -> Route {
     Route {
         prefix,
         nexthop: None,
@@ -623,7 +623,7 @@ async fn add_route_without_a_nexthop_installs_an_on_link_route() {
         host.set_up().await.expect("link_set_up failed");
 
         let prefix = Ipv4Addr::new(10, 77, 0, 0);
-        let network = IpNetwork::new(IpAddr::V4(prefix), 24).expect("valid IPv4 network");
+        let network = IpNet::new(IpAddr::V4(prefix), 24).expect("valid IPv4 network");
         host.add_route(&route(network))
             .await
             .expect("add_route failed");
@@ -677,13 +677,13 @@ async fn add_route_with_a_nexthop_installs_a_route_via_gateway() {
         // or the kernel rejects the route with ENETUNREACH -- so give the
         // link an address on the same /24 the nexthop below lives in.
         let host_ip = Ipv4Addr::new(10, 78, 0, 1);
-        host.set_addr(IpNetwork::new(IpAddr::V4(host_ip), 24).unwrap())
+        host.set_addr(IpNet::new(IpAddr::V4(host_ip), 24).unwrap())
             .await
             .expect("set_addr failed");
 
         let nexthop = Ipv4Addr::new(10, 78, 0, 2);
         let prefix = Ipv4Addr::new(10, 88, 0, 0);
-        let network = IpNetwork::new(IpAddr::V4(prefix), 24).expect("valid IPv4 network");
+        let network = IpNet::new(IpAddr::V4(prefix), 24).expect("valid IPv4 network");
         let mut r = route(network);
         r.nexthop = Some(IpAddr::V4(nexthop));
         host.add_route(&r).await.expect("add_route failed");
@@ -729,7 +729,7 @@ async fn add_route_sets_table_and_mtu() {
         host.set_up().await.expect("link_set_up failed");
 
         let prefix = Ipv4Addr::new(10, 99, 77, 0);
-        let network = IpNetwork::new(IpAddr::V4(prefix), 24).expect("valid IPv4 network");
+        let network = IpNet::new(IpAddr::V4(prefix), 24).expect("valid IPv4 network");
         let mut r = route(network);
         r.table = Some(100);
         r.mtu = Some(1300);

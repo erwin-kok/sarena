@@ -14,7 +14,7 @@ workspace = true
 [dependencies]
 aya = { workspace = true }
 futures = { workspace = true }
-ipnetwork = { workspace = true }
+ipnet = { workspace = true }
 nix = { workspace = true, features = ["sched", "mount", "fs"] }
 rand = { workspace = true, features = ["thread_rng"] }
 thiserror = { workspace = true }

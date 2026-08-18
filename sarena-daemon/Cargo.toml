@@ -19,7 +19,7 @@ sarena-utils = { path = "../sarena-utils" }
 anyhow = { workspace = true, default-features = true }
 aya = { workspace = true }
 hex = { workspace = true, features = ["std"] }
-ipnetwork = { workspace = true }
+ipnet = { workspace = true }
 libc = { workspace = true }
 sha2 = { workspace = true }
 tracing = { workspace = true }

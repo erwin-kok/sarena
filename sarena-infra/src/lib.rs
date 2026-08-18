@@ -4,7 +4,7 @@ use std::{
 };
 
 use aya::programs::{ProgramError, TcAttachType};
-use ipnetwork::IpNetwork;
+use ipnet::IpNet;
 use route::Route;
 use thiserror::Error;
 
@@ -105,7 +105,7 @@ pub trait Link {
     /// Accepts either an IPv4 or an IPv6 network; for IPv6, the address is
     /// added with `IFA_F_NODAD` (skipping duplicate address detection),
     /// matching how e.g. veth ends are typically brought up.
-    async fn set_addr(&mut self, addr: IpNetwork) -> Res<()>;
+    async fn set_addr(&mut self, addr: IpNet) -> Res<()>;
     /// Add (replacing any existing one) the default route (`0.0.0.0/0`) via
     /// `gateway`, routed out through this link.
     async fn add_gateway(&mut self, gateway: Ipv4Addr) -> Res<()>;

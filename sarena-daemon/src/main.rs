@@ -5,7 +5,7 @@ use std::{
 };
 
 use aya::maps::{Array, Map, MapData};
-use ipnetwork::IpNetwork;
+use ipnet::IpNet;
 use sarena_daemon::{add::endpoint_to_ifname, ipam::ipv4_routes, types::CmdArgs};
 use sarena_infra::{
     InfraError, Link as _, MacAddress, NetlinkNetworkProvisioner, Netns, NetnsGuard,
@@ -167,8 +167,7 @@ async fn create_endpoint(
     host.set_up().await?;
     peer.set_up().await?; // Should we bring up immediately, or when completely configured?
 
-    peer.set_addr(IpNetwork::new(IpAddr::V4(peer_ip), 24)?)
-        .await?;
+    peer.set_addr(IpNet::new(IpAddr::V4(peer_ip), 24)?).await?;
 
     let routes = ipv4_routes(gateway_ip, 1500);
 

@@ -3,15 +3,15 @@ use std::{
     time::Duration,
 };
 
-use ipnetwork::IpNetwork;
+use ipnet::IpNet;
 use sarena_infra::{
     InfraError, Link, NetlinkNetworkProvisioner, Netns, NetworkProvisioner, VethSpec, test_support,
 };
 
 /// Shorthand for building the `IpNetwork` [`Link::set_addr`] now takes,
 /// from the plain `Ipv4Addr` + prefix length this file otherwise deals in.
-fn v4(ip: Ipv4Addr, prefix: u8) -> IpNetwork {
-    IpNetwork::new(IpAddr::V4(ip), prefix).expect("valid IPv4 network")
+fn v4(ip: Ipv4Addr, prefix: u8) -> IpNet {
+    IpNet::new(IpAddr::V4(ip), prefix).expect("valid IPv4 network")
 }
 
 #[tokio::test]

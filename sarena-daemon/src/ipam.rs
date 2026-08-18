@@ -1,19 +1,10 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use ipnetwork::{IpNetwork, Ipv4Network, Ipv6Network};
+use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use sarena_infra::route::Route;
 
-const IPV4_DEFAULT_ROUTE: IpNetwork =
-    IpNetwork::V4(match Ipv4Network::new_checked(Ipv4Addr::UNSPECIFIED, 0) {
-        Some(network) => network,
-        None => unreachable!(),
-    });
-
-const IPV6_DEFAULT_ROUTE: IpNetwork =
-    IpNetwork::V6(match Ipv6Network::new_checked(Ipv6Addr::UNSPECIFIED, 0) {
-        Some(network) => network,
-        None => unreachable!(),
-    });
+const IPV4_DEFAULT_ROUTE: IpNet = IpNet::V4(Ipv4Net::new_assert(Ipv4Addr::UNSPECIFIED, 0));
+const IPV6_DEFAULT_ROUTE: IpNet = IpNet::V6(Ipv6Net::new_assert(Ipv6Addr::UNSPECIFIED, 0));
 
 /// Routes to be installed in an endpoint's networking namespace: a host
 /// route to the node's own IPv4 address, plus a default route via it.
@@ -21,7 +12,7 @@ pub fn ipv4_routes(ip: Ipv4Addr, link_mtu: u32) -> Vec<Route> {
     let ip = IpAddr::V4(ip);
     vec![
         Route {
-            prefix: IpNetwork::from(ip),
+            prefix: IpNet::from(ip),
             ..Default::default()
         },
         Route {
@@ -39,7 +30,7 @@ pub fn ipv6_routes(ip: Ipv6Addr, link_mtu: u32) -> Vec<Route> {
     let ip = IpAddr::V6(ip);
     vec![
         Route {
-            prefix: IpNetwork::from(ip),
+            prefix: IpNet::from(ip),
             ..Default::default()
         },
         Route {

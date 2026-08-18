@@ -6,7 +6,7 @@ use std::{
 
 use aya::programs::{SchedClassifier, TcAttachType};
 use futures::TryStreamExt;
-use ipnetwork::IpNetwork;
+use ipnet::IpNet;
 use netlink_packet_route::{
     address::{AddressAttribute, AddressFlags, AddressHeaderFlags},
     link::{InfoData, InfoKind, InfoVeth, LinkAttribute, LinkFlags, LinkInfo, LinkMessage},
@@ -221,7 +221,7 @@ impl Link for NetlinkLink {
         }
     }
 
-    async fn set_addr(&mut self, addr: IpNetwork) -> Res<()> {
+    async fn set_addr(&mut self, addr: IpNet) -> Res<()> {
         let index = self.index;
         if let Some(ns) = &self.netns {
             let netns = Netns::open_path(ns)?;
@@ -563,12 +563,12 @@ async fn link_set_mac_impl(handle: &rtnetlink::Handle, index: u32, mac: MacAddre
 /// are added with `IFA_F_NODAD` -- skipping duplicate address detection,
 /// which would otherwise leave the address `tentative` (and generally
 /// unusable) for a few seconds after being added.
-async fn link_add_addr_impl(handle: &rtnetlink::Handle, index: u32, addr: IpNetwork) -> Res<()> {
+async fn link_add_addr_impl(handle: &rtnetlink::Handle, index: u32, ip: IpNet) -> Res<()> {
     let mut request = handle
         .address()
-        .add(index, addr.ip(), addr.prefix())
+        .add(index, ip.addr(), ip.prefix_len())
         .replace();
-    if addr.is_ipv6() {
+    if ip.addr().is_ipv6() {
         let message = request.message_mut();
         message.header.flags |= AddressHeaderFlags::Nodad;
         message
@@ -611,7 +611,7 @@ async fn link_add_gateway_impl(
 async fn link_add_route_impl(handle: &rtnetlink::Handle, index: u32, route: &Route) -> Res<()> {
     let mut builder: rtnetlink::RouteMessageBuilder =
         rtnetlink::RouteMessageBuilder::<IpAddr>::new()
-            .destination_prefix(route.prefix.ip(), route.prefix.prefix())
+            .destination_prefix(route.prefix.addr(), route.prefix.prefix_len())
             .map_err(|e| InfraError::InvalidRoute(e.to_string()))?
             .output_interface(index);
 
