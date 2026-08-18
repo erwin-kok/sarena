@@ -84,8 +84,7 @@ pub(crate) const NETDEV_PER_ENDPOINT_MAPS: &[&str] = &["calls_map"];
 pub(crate) const OVERLAY_PER_ENDPOINT_MAPS: &[&str] = &["calls_map"];
 pub(crate) const WIREGUARD_PER_ENDPOINT_MAPS: &[&str] = &["calls_map"];
 
-pub(crate) const CONTAINER_GLOBAL_MAPS: &[&str] =
-    &["conntrack_tcp_buffer", "conntrack_any_buffer", "lxc_map"];
+pub(crate) const CONTAINER_GLOBAL_MAPS: &[&str] = &[];
 pub(crate) const HOST_GLOBAL_MAPS: &[&str] = &[];
 pub(crate) const NETDEV_GLOBAL_MAPS: &[&str] = &[];
 pub(crate) const OVERLAY_GLOBAL_MAPS: &[&str] = &[];

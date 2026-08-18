@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 aya-ebpf = { workspace = true, default-features = false }
+network-types = { workspace = true, default-features = false }
 thiserror = { workspace = true, default-features = false }
 
 [build-dependencies]

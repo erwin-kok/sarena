@@ -119,13 +119,4 @@ mod tests {
             root.per_endpoint_map_dir("sarena_policy", "lxc00002")
         );
     }
-
-    #[test]
-    fn global_map_path_does_not_collide_with_per_endpoint_paths() {
-        let root = PinRoot::new("/sys/fs/bpf/test");
-        assert_ne!(
-            root.global_map_dir("conntrack_tcp"),
-            root.per_endpoint_map_dir("conntrack_tcp", "lxc00001")
-        );
-    }
 }

@@ -41,7 +41,7 @@ async fn open_socket_on_configured_veth_peer() {
         peer.set_addr(v4(ip, 24)).await.expect("set_addr failed");
         peer.add_gateway(gateway).await.expect("add_gateway failed");
 
-        let bound_addr = Netns::open(&peer_ns)
+        let bound_addr = Netns::open_path(&peer_ns)
             .unwrap()
             .run(move |_handle| async move {
                 let listener = TcpListener::bind((ip, 0)).map_err(InfraError::Runtime)?;
@@ -176,7 +176,7 @@ async fn forward_udp_packet_between_two_peer_namespaces() {
             // -- so both sockets get created inside their respective
             // peer namespaces here, then driven directly from the
             // ambient (ignoring-namespaces) code below.
-            let listener = Netns::open(&peer1_ns)
+            let listener = Netns::open_path(&peer1_ns)
                 .unwrap()
                 .run(move |_handle| async move {
                     UdpSocket::bind((peer1_ip, 0)).map_err(InfraError::Runtime)
@@ -188,7 +188,7 @@ async fn forward_udp_packet_between_two_peer_namespaces() {
                 .expect("set_read_timeout failed");
             let listener_addr = listener.local_addr().expect("local_addr failed");
 
-            let sender = Netns::open(&peer2_ns)
+            let sender = Netns::open_path(&peer2_ns)
                 .unwrap()
                 .run(move |_handle| async move {
                     UdpSocket::bind((peer2_ip, 0)).map_err(InfraError::Runtime)

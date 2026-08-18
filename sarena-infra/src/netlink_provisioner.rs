@@ -48,7 +48,7 @@ impl NetworkProvisioner for NetlinkNetworkProvisioner {
         // Move the peer *after* reading its state back -- we already have
         // what we need from the default-namespace fetch above, and
         // `set_ns` itself only needs the ifindex, which doesn't change.
-        let target = Netns::open(&spec.peer_netns)?;
+        let target = Netns::open_path(&spec.peer_netns)?;
         peer.set_ns(&target).await?;
 
         Ok(VethPair { host, peer })

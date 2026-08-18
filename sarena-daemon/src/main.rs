@@ -4,15 +4,15 @@ use std::{
     time::Duration,
 };
 
-use aya::maps::{Array, HashMap, Map, MapData};
+use aya::maps::{Array, Map, MapData};
 use ipnetwork::IpNetwork;
 use sarena_daemon::{add::endpoint_to_ifname, ipam::ipv4_routes, types::CmdArgs};
 use sarena_infra::{
     InfraError, Link as _, MacAddress, NetlinkNetworkProvisioner, Netns, NetnsGuard,
     NetworkProvisioner as _, VethSpec, netlink_link::NetlinkLink,
 };
-use sarena_loader::{AyaBackend, EndpointHandle, EndpointKind, Loader, LoaderHandle, PinRoot};
-use sarena_shared::{EndpointConfig, EndpointInfo, Ipv4Key, Ipv4KeyExt as _};
+use sarena_loader::{AyaBackend, EndpointHandle, EndpointKind, Loader, LoaderHandle};
+use sarena_shared::EndpointConfig;
 use sarena_utils::{LoggingConfig, logging};
 use tracing::info;
 
@@ -59,7 +59,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let host1_name = "host1";
     let args1 = CmdArgs {
         container_id: "111".to_string(),
-        netns: client1_ns.to_string(),
+        netns: Netns::path_for(client1_ns),
         if_name: host1_name.to_string(),
         args: None,
         path: String::new(),
@@ -85,7 +85,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let host2_name = "host2";
     let args2 = CmdArgs {
         container_id: "222".to_string(),
-        netns: client2_ns.to_string(),
+        netns: Netns::path_for(client2_ns),
         if_name: host2_name.to_string(),
         args: None,
         path: String::new(),
@@ -194,8 +194,6 @@ async fn create_endpoint(
 
     set_endpoint_config(&handle, peer_ip)?;
 
-    insert_endpoint_info(peer_ip, &host)?;
-
     Ok((host, peer))
 }
 
@@ -212,23 +210,6 @@ fn set_endpoint_config(handle: &EndpointHandle, peer_ip: Ipv4Addr) -> Result<(),
         },
         0,
     )?;
-
-    Ok(())
-}
-
-fn insert_endpoint_info(peer_ip: Ipv4Addr, link: &NetlinkLink) -> Result<(), anyhow::Error> {
-    let pin_root = PinRoot::new(PIN_ROOT);
-    let path = pin_root.global_map_dir("lxc_map");
-    let map_data = MapData::from_pin(path)?;
-    let map = Map::from_map_data(map_data)?;
-
-    let mut lxc_map: HashMap<_, Ipv4Key, EndpointInfo> = HashMap::try_from(map)?;
-
-    let key = Ipv4Key::from_addr(peer_ip);
-    let value = EndpointInfo {
-        if_index: link.ifindex(),
-    };
-    lxc_map.insert(key, value, 0)?;
 
     Ok(())
 }

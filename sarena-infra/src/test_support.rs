@@ -1,16 +1,12 @@
 use std::{
     future::Future,
+    path::PathBuf,
     process,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use crate::{Netns, NetnsGuard};
 
-/// A short, likely-unique name for a test-owned namespace or link.
-///
-/// Not cryptographically unique -- just process id + a timestamp -- which
-/// is enough to avoid collisions between concurrent `cargo test` runs on
-/// the same machine without pulling in a `rand` dependency just for tests.
 pub fn unique_name(prefix: &str) -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -21,17 +17,10 @@ pub fn unique_name(prefix: &str) -> String {
     format!("{prefix}{:x}", (process::id() ^ nanos) & 0xffff)
 }
 
-/// Creates a throwaway namespace, runs `body` with its name, and deletes
-/// the namespace afterwards regardless of whether `body` panicked --
-/// mirroring this crate's own philosophy of best-effort cleanup even on
-/// failure.
-///
-/// Note: if `body` panics, cleanup still runs (via a drop guard), but the
-/// panic itself still propagates so the test still fails.
 #[allow(dead_code)]
 pub async fn with_temp_netns<F, Fut, T>(prefix: &str, body: F) -> T
 where
-    F: FnOnce(String) -> Fut,
+    F: FnOnce(PathBuf) -> Fut,
     Fut: Future<Output = T>,
 {
     let name = unique_name(prefix);
@@ -41,5 +30,5 @@ where
 
     let _guard = NetnsGuard::new(name.clone());
 
-    body(name).await
+    body(Netns::path_for(&name)).await
 }

@@ -172,7 +172,7 @@ mod tests {
             .create_veth(VethSpec {
                 host_ifname: "veth-test0".to_owned(),
                 peer_ifname: "veth-test1".to_owned(),
-                peer_netns: peer_netns.to_owned(),
+                peer_netns: Netns::path_for(peer_netns),
                 host_mac: Some(MacAddress([0x02, 0x00, 0x00, 0x00, 0x00, 0x01])),
                 peer_mac: None,
             })

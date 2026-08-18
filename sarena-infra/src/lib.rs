@@ -35,7 +35,7 @@ pub struct VethSpec {
 
     pub peer_ifname: String,
     pub peer_mac: Option<MacAddress>,
-    pub peer_netns: String,
+    pub peer_netns: PathBuf,
 }
 
 /// What `create_veth` hands back.

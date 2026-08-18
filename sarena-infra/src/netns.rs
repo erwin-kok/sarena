@@ -41,9 +41,15 @@ pub struct Netns {
 }
 
 impl Netns {
+    /// The path a namespace named `name` lives at (`/run/netns/<name>`),
+    /// without opening anything.
+    pub fn path_for(name: &str) -> PathBuf {
+        Path::new(NETNS_PATH).join(name)
+    }
+
     /// Open the namespace `/run/netns/<name>`.
     pub fn open(name: &str) -> Res<Self> {
-        let path = Path::new(NETNS_PATH).join(name);
+        let path = Self::path_for(name);
         let fd = File::open(&path).map_err(|e| InfraError::OpenNamespace {
             name: name.to_owned(),
             source: e,

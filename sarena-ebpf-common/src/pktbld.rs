@@ -1,11 +1,38 @@
+use core::mem;
+
 use aya_ebpf::{cty::c_long, programs::TcContext};
+use network_types::eth::EthHdr;
 
 use crate::bpf_memcpy;
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
+// 3 outer headers + {VXLAN, GENEVE} + 3 inner headers.
 pub const PKT_BUILDER_LAYERS: usize = 7;
 pub const MAX_PACKET_OFF: u64 = 0xffff;
+pub const IPV6_DEFAULT_HOPLIMIT: u8 = 64;
+
+// IPv6 next-header values for extension headers
+pub const NEXTHDR_HOP: u8 = 0; // Hop-by-hop option header
+pub const NEXTHDR_TCP: u8 = 6; // TCP segment
+pub const NEXTHDR_UDP: u8 = 17; // UDP message
+pub const NEXTHDR_IPV6: u8 = 41; // IPv6 in IPv6 
+pub const NEXTHDR_ROUTING: u8 = 43; // Routing header
+pub const NEXTHDR_FRAGMENT: u8 = 44; // Fragmentation/reassembly header
+pub const NEXTHDR_GRE: u8 = 47; // GRE header
+pub const NEXTHDR_ESP: u8 = 50; // Encapsulating security payload.
+pub const NEXTHDR_AUTH: u8 = 51; // Authentication header
+pub const NEXTHDR_ICMP: u8 = 58; // ICMP for IPv6
+pub const NEXTHDR_NONE: u8 = 59; // No next header
+pub const NEXTHDR_DEST: u8 = 60; // Destination options header
+pub const NEXTHDR_SCTP: u8 = 132; // SCTP message
+pub const NEXTHDR_MOBILITY: u8 = 135; // Mobility header
+
+pub const NEXTHDR_MAX: u8 = 255;
+
+pub const ETH_P_IP: u16 = 0x0800;
+pub const ETH_P_IPV6: u16 = 0x86DD;
+pub const ETH_P_ARP: u16 = 0x0806;
 
 // ─── layer enum ──────────────────────────────────────────────────────────────
 
@@ -13,6 +40,35 @@ pub const MAX_PACKET_OFF: u64 = 0xffff;
 #[repr(u8)]
 pub enum PktLayer {
     None,
+
+    // L2 layers
+    Eth,
+    Dot1Q,
+
+    // L3 layers
+    Ipv4,
+    Ipv6,
+    Arp,
+
+    // IPv6 extension headers
+    Ipv6HopByHop,
+    Ipv6Routing,
+    Ipv6Auth,
+    Ipv6Dest,
+    Ipv6Fragment,
+
+    // L4 layers
+    Tcp,
+    Udp,
+    Icmp,
+    Icmpv6,
+    Sctp,
+    Esp,
+    Igmp,
+
+    // Tunnel layers
+    Geneve,
+    Vxlan,
 
     // Raw payload
     Data,
@@ -108,10 +164,38 @@ impl<'a> PacketBuilder<'a> {
         while i < PKT_BUILDER_LAYERS {
             match self.layers[i] {
                 PktLayer::None => return, // end of stack
+                PktLayer::Eth => self.finish_eth(i),
                 _ => {}
             }
             i += 1;
         }
+    }
+
+    // ─── finish helpers ───────────────────────────────────────────────────────
+
+    #[inline]
+    fn finish_eth(&self, i: usize) {
+        let layer_off = self.layer_offsets[i];
+        if layer_off >= MAX_PACKET_OFF - mem::size_of::<EthHdr>() as u64 {
+            return;
+        }
+        let data = self.ctx.data();
+        let data_end = self.ctx.data_end();
+        let eth_layer = data + layer_off as usize;
+        if eth_layer + mem::size_of::<EthHdr>() > data_end {
+            return;
+        }
+        if i + 1 >= PKT_BUILDER_LAYERS {
+            return;
+        }
+        let eth_layer = eth_layer as *mut EthHdr;
+        let eth_type = match self.layers[i + 1] {
+            PktLayer::Ipv4 => ETH_P_IP.to_be(),
+            PktLayer::Ipv6 => ETH_P_IPV6.to_be(),
+            PktLayer::Arp => ETH_P_ARP.to_be(),
+            _ => return,
+        };
+        unsafe { (*eth_layer).ether_type = eth_type };
     }
 }
 

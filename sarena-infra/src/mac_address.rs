@@ -37,6 +37,7 @@ impl MacAddress {
 
 impl TryFrom<&[u8]> for MacAddress {
     type Error = InfraError;
+
     fn try_from(b: &[u8]) -> Result<Self, Self::Error> {
         if b.len() != 6 {
             return Err(InfraError::InvalidMac(b.len()));

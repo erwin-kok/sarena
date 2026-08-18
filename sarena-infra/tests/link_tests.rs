@@ -1,4 +1,7 @@
-use std::net::{IpAddr, Ipv4Addr};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    path::Path,
+};
 
 use futures::TryStreamExt;
 use ipnetwork::IpNetwork;
@@ -14,8 +17,8 @@ use sarena_infra::{
 /// Raw netlink check: does namespace `ns` have address `ip/prefix_len`
 /// configured on interface `ifindex`? `sarena-infra` has no address-query
 /// API yet (only [`Link::set_addr`]), so this queries directly.
-async fn has_address(ns: &str, ifindex: u32, ip: Ipv4Addr, prefix_len: u8) -> bool {
-    Netns::open(ns)
+async fn has_address(ns: &Path, ifindex: u32, ip: Ipv4Addr, prefix_len: u8) -> bool {
+    Netns::open_path(ns)
         .unwrap()
         .run(move |handle| async move {
             let addrs: Vec<_> = handle
@@ -37,8 +40,8 @@ async fn has_address(ns: &str, ifindex: u32, ip: Ipv4Addr, prefix_len: u8) -> bo
 /// Raw netlink check: does namespace `ns` have a default route out through
 /// `ifindex` via `gateway`? `sarena-infra` has no route-query API yet (only
 /// [`Link::add_gateway`]), so this queries directly.
-async fn has_default_gateway(ns: &str, ifindex: u32, gateway: Ipv4Addr) -> bool {
-    Netns::open(ns)
+async fn has_default_gateway(ns: &Path, ifindex: u32, gateway: Ipv4Addr) -> bool {
+    Netns::open_path(ns)
         .unwrap()
         .run(move |handle| async move {
             let routes: Vec<_> = handle
@@ -68,8 +71,8 @@ async fn has_default_gateway(ns: &str, ifindex: u32, gateway: Ipv4Addr) -> bool 
 /// `prefix/prefix_len` inside namespace `ns`, if any. `sarena-infra` has no
 /// route-query API yet (only [`Link::add_route`]), so this queries
 /// directly.
-async fn find_route(ns: &str, prefix: Ipv4Addr, prefix_len: u8) -> Option<RouteMessage> {
-    Netns::open(ns)
+async fn find_route(ns: &Path, prefix: Ipv4Addr, prefix_len: u8) -> Option<RouteMessage> {
+    Netns::open_path(ns)
         .unwrap()
         .run(move |handle| async move {
             let routes: Vec<_> = handle
@@ -100,7 +103,7 @@ async fn find_route(ns: &str, prefix: Ipv4Addr, prefix_len: u8) -> Option<RouteM
 async fn veth_pair_create_and_configure() {
     test_support::with_temp_netns("dpid-peer-", |peer_ns| async move {
         let mut provisioner = NetlinkNetworkProvisioner;
-        let peer_netns = Netns::open(&peer_ns).expect("open temp netns");
+        let peer_netns = Netns::open_path(&peer_ns).expect("open temp netns");
         let name = test_support::unique_name("dpid0-");
         let peer_name = test_support::unique_name("dpid1-");
         let pair = provisioner
@@ -202,8 +205,8 @@ async fn link_setns_moves_only_the_moved_end() {
     test_support::with_temp_netns("dpi-mva-", |ns_a| async move {
         test_support::with_temp_netns("dpi-mvb-", |ns_b| async move {
             let mut provisioner = NetlinkNetworkProvisioner;
-            let netns_a = Netns::open(&ns_a).expect("open temp netns");
-            let netns_b = Netns::open(&ns_b).expect("open temp netns");
+            let netns_a = Netns::open_path(&ns_a).expect("open temp netns");
+            let netns_b = Netns::open_path(&ns_b).expect("open temp netns");
             let host_name = test_support::unique_name("dpimv0-");
             let peer_name = test_support::unique_name("dpimv1-");
             let pair = provisioner
@@ -244,7 +247,7 @@ async fn link_setns_moves_only_the_moved_end() {
 async fn list_links_includes_loopback_and_veth() {
     test_support::with_temp_netns("dpi-list-", |ns| async move {
         let mut provisioner = NetlinkNetworkProvisioner;
-        let netns = Netns::open(&ns).expect("open temp netns");
+        let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpils0-");
         let peer_name = test_support::unique_name("dpils1-");
         let pair = provisioner
@@ -280,7 +283,7 @@ async fn list_links_includes_loopback_and_veth() {
 async fn set_addr_and_add_gateway_configure_the_link() {
     test_support::with_temp_netns("dpi-addr-", |ns| async move {
         let mut provisioner = NetlinkNetworkProvisioner;
-        let netns = Netns::open(&ns).expect("open temp netns");
+        let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpiad0-");
         let peer_name = test_support::unique_name("dpiad1-");
         let pair = provisioner
@@ -375,7 +378,7 @@ async fn set_ns_to_missing_namespace_fails_without_moving_the_link() {
 async fn rename_to_existing_name_fails() {
     test_support::with_temp_netns("dpi-rnerr-", |ns| async move {
         let mut provisioner = NetlinkNetworkProvisioner;
-        let netns = Netns::open(&ns).expect("open temp netns");
+        let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpirn0-");
         let peer_name = test_support::unique_name("dpirn1-");
         let pair = provisioner
@@ -470,7 +473,7 @@ async fn create_veth_with_duplicate_name_fails() {
 async fn delete_link_by_name_removes_it_and_its_peer() {
     test_support::with_temp_netns("dpi-dlnm-", |ns| async move {
         let mut provisioner = NetlinkNetworkProvisioner;
-        let netns = Netns::open(&ns).expect("open temp netns");
+        let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpidln0-");
         let peer_name = test_support::unique_name("dpidln1-");
         provisioner
@@ -505,7 +508,7 @@ async fn delete_link_by_name_removes_it_and_its_peer() {
 async fn delete_link_in_ns_removes_it_and_its_peer() {
     test_support::with_temp_netns("dpi-dlin-", |ns| async move {
         let mut provisioner = NetlinkNetworkProvisioner;
-        let netns = Netns::open(&ns).expect("open temp netns");
+        let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpidli0-");
         let peer_name = test_support::unique_name("dpidli1-");
         let pair = provisioner
@@ -557,7 +560,7 @@ async fn delete_link_for_missing_name_fails() {
 async fn delete_link_in_ns_for_missing_link_fails() {
     test_support::with_temp_netns("dpi-dlml-", |ns| async move {
         let provisioner = NetlinkNetworkProvisioner;
-        let netns = Netns::open(&ns).expect("open temp netns");
+        let netns = Netns::open_path(&ns).expect("open temp netns");
         let missing = test_support::unique_name("dpidlm1-");
 
         let err = provisioner
@@ -600,7 +603,7 @@ fn route(prefix: IpNetwork) -> Route {
 async fn add_route_without_a_nexthop_installs_an_on_link_route() {
     test_support::with_temp_netns("dpi-rtol-", |ns| async move {
         let mut provisioner = NetlinkNetworkProvisioner;
-        let netns = Netns::open(&ns).expect("open temp netns");
+        let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpirt0-");
         let peer_name = test_support::unique_name("dpirt1-");
         let pair = provisioner
@@ -651,7 +654,7 @@ async fn add_route_without_a_nexthop_installs_an_on_link_route() {
 async fn add_route_with_a_nexthop_installs_a_route_via_gateway() {
     test_support::with_temp_netns("dpi-rtgw-", |ns| async move {
         let mut provisioner = NetlinkNetworkProvisioner;
-        let netns = Netns::open(&ns).expect("open temp netns");
+        let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpirt2-");
         let peer_name = test_support::unique_name("dpirt3-");
         let pair = provisioner
@@ -706,7 +709,7 @@ async fn add_route_with_a_nexthop_installs_a_route_via_gateway() {
 async fn add_route_sets_table_and_mtu() {
     test_support::with_temp_netns("dpi-rttm-", |ns| async move {
         let mut provisioner = NetlinkNetworkProvisioner;
-        let netns = Netns::open(&ns).expect("open temp netns");
+        let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpirt4-");
         let peer_name = test_support::unique_name("dpirt5-");
         let pair = provisioner

@@ -11,22 +11,20 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-sarena-infra = { path = "../sarena-infra", features = ["test"] }
-sarena-utils = { path = "../sarena-utils" }
+sarena-infra = { path = "../../sarena-infra", features = ["test"] }
+sarena-utils = { path = "../../sarena-utils" }
 
 async-trait = { workspace = true }
+hex = { workspace = true, features = ["std"] }
+ipnet = { workspace = true }
 ipnetwork = { workspace = true }
+libc = { workspace = true }
 rscni-plugin = { workspace = true, features = ["async"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
 tracing = { workspace = true }
-tokio = { workspace = true, features = [
-    "macros",
-    "rt",
-    "rt-multi-thread",
-    "net",
-    "signal",
-] }
 uuid = { workspace = true }
 
 [[bin]]

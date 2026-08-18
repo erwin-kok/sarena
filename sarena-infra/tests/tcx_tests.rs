@@ -25,7 +25,7 @@ async fn attach_detach_tcx() {
         fs::create_dir_all(link_dir).unwrap();
 
         let provisioner = NetlinkNetworkProvisioner;
-        let netns = Netns::open(&ns).expect("open temp netns");
+        let netns = Netns::open_path(&ns).expect("open temp netns");
         let lo = provisioner.get_link_in_ns(&netns, "lo").await.unwrap();
 
         // Attaching the same program twice should result in a link create,

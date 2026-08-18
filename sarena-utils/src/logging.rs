@@ -32,7 +32,7 @@ pub fn init_logging(config: &LoggingConfig) {
         let stderr_layer = fmt::layer()
             .with_writer(std::io::stderr)
             .pretty()
-            .with_span_events(FmtSpan::ACTIVE);
+            .with_span_events(FmtSpan::CLOSE);
 
         let subscriber = tracing_subscriber::registry()
             .with(env_filter)

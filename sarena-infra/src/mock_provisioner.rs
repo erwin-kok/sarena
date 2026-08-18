@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::{
     InfraError, Link, MacAddress, Netns, NetworkProvisioner, Res, VethPair, VethSpec,
@@ -68,7 +68,7 @@ impl NetworkProvisioner for MockNetworkProvisioner {
                     peer_ifindex as u8,
                 ])),
                 peer_ifname: Some(spec.host_ifname.clone()),
-                netns: Some(PathBuf::from(spec.peer_netns.clone())),
+                netns: Some(spec.peer_netns.clone()),
                 ..Default::default()
             },
         };
@@ -148,7 +148,7 @@ mod tests {
             .create_veth(VethSpec {
                 host_ifname: "veth-test0".to_owned(),
                 peer_ifname: "veth-test1".to_owned(),
-                peer_netns: peer_netns.to_owned(),
+                peer_netns: Netns::path_for(peer_netns),
                 host_mac: Some(MacAddress([0x02, 0x00, 0x00, 0x00, 0x00, 0x01])),
                 peer_mac: None,
             })
