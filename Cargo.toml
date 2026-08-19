@@ -2,6 +2,8 @@
 members = [
     "sarena-plugins/cni",
     "sarena-daemon",
+    "sarena-api/types/v1",
+    "sarena-api/client",
     "sarena-infra",
     "sarena-loader",
     "sarena-utils",
@@ -30,6 +32,8 @@ members = [
 default-members = [
     "sarena-plugins/cni",
     "sarena-daemon",
+    "sarena-api/types/v1",
+    "sarena-api/client",
     "sarena-infra",
     "sarena-loader",
     "sarena-utils",

@@ -1,0 +1,13 @@
+[package]
+name = "sarena-api-server"
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
