@@ -4,9 +4,11 @@ use std::{
 };
 
 use aya::programs::TcAttachType;
-use ipnet::IpNet;
 
-use crate::{InfraError, Link, MacAddress, Netns, PinnedTcxProgram, Res, TcxAttach, route::Route};
+use crate::{
+    InfraError, InterfaceAddress, Link, MacAddress, Netns, PinnedTcxProgram, Res, TcxAttach,
+    route::Route,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct MockProgram {
@@ -23,7 +25,7 @@ pub struct MockLink {
     pub down_calls: u32,
     pub mtu_calls: Vec<u32>,
     pub mac_calls: Vec<MacAddress>,
-    pub addr_calls: Vec<IpNet>,
+    pub addr_calls: Vec<InterfaceAddress>,
     pub gateway_calls: Vec<Ipv4Addr>,
     pub route_calls: Vec<Route>,
     pub ipv4_forwarding_calls: Vec<bool>,
@@ -92,7 +94,7 @@ impl Link for MockLink {
         Ok(())
     }
 
-    async fn set_addr(&mut self, addr: IpNet) -> Res<()> {
+    async fn set_addr(&mut self, addr: InterfaceAddress) -> Res<()> {
         self.addr_calls.push(addr);
         Ok(())
     }

@@ -10,8 +10,8 @@ use netlink_packet_route::route::{
 };
 use rtnetlink::RouteMessageBuilder;
 use sarena_infra::{
-    InfraError, Link, MacAddress, NetlinkNetworkProvisioner, Netns, NetworkProvisioner, VethSpec,
-    netlink_link::LinkKind, route::Route, test_support,
+    InfraError, InterfaceAddress, Link, MacAddress, NetlinkNetworkProvisioner, Netns,
+    NetworkProvisioner, VethSpec, netlink_link::LinkKind, route::Route, test_support,
 };
 
 /// Raw netlink check: does namespace `ns` have address `ip/prefix_len`
@@ -303,7 +303,7 @@ async fn set_addr_and_add_gateway_configure_the_link() {
         host.set_up().await.expect("link_set_up failed");
 
         let ip = Ipv4Addr::new(10, 99, 0, 1);
-        let addr = IpNet::new(IpAddr::V4(ip), 24).expect("valid IPv4 network");
+        let addr = InterfaceAddress::new(IpAddr::V4(ip), 24).expect("valid IPv4 network");
         host.set_addr(addr).await.expect("set_addr failed");
         assert!(has_address(&ns, host.ifindex(), ip, 24).await);
 
@@ -677,7 +677,7 @@ async fn add_route_with_a_nexthop_installs_a_route_via_gateway() {
         // or the kernel rejects the route with ENETUNREACH -- so give the
         // link an address on the same /24 the nexthop below lives in.
         let host_ip = Ipv4Addr::new(10, 78, 0, 1);
-        host.set_addr(IpNet::new(IpAddr::V4(host_ip), 24).unwrap())
+        host.set_addr(InterfaceAddress::new(IpAddr::V4(host_ip), 24).unwrap())
             .await
             .expect("set_addr failed");
 

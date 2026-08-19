@@ -6,7 +6,6 @@ use std::{
 
 use aya::programs::{SchedClassifier, TcAttachType};
 use futures::TryStreamExt;
-use ipnet::IpNet;
 use netlink_packet_route::{
     address::{AddressAttribute, AddressFlags, AddressHeaderFlags},
     link::{InfoData, InfoKind, InfoVeth, LinkAttribute, LinkFlags, LinkInfo, LinkMessage},
@@ -14,7 +13,8 @@ use netlink_packet_route::{
 };
 
 use crate::{
-    InfraError, Link, MacAddress, Netns, PinnedTcxProgram, Res, TcxAttach, route::Route, tcx,
+    InfraError, InterfaceAddress, Link, MacAddress, Netns, PinnedTcxProgram, Res, TcxAttach,
+    route::Route, tcx,
 };
 
 /// Recognised `IFLA_INFO_KIND` strings mapped to typed variants.
@@ -221,7 +221,7 @@ impl Link for NetlinkLink {
         }
     }
 
-    async fn set_addr(&mut self, addr: IpNet) -> Res<()> {
+    async fn set_addr(&mut self, addr: InterfaceAddress) -> Res<()> {
         let index = self.index;
         if let Some(ns) = &self.netns {
             let netns = Netns::open_path(ns)?;
@@ -563,12 +563,16 @@ async fn link_set_mac_impl(handle: &rtnetlink::Handle, index: u32, mac: MacAddre
 /// are added with `IFA_F_NODAD` -- skipping duplicate address detection,
 /// which would otherwise leave the address `tentative` (and generally
 /// unusable) for a few seconds after being added.
-async fn link_add_addr_impl(handle: &rtnetlink::Handle, index: u32, ip: IpNet) -> Res<()> {
+async fn link_add_addr_impl(
+    handle: &rtnetlink::Handle,
+    index: u32,
+    addr: InterfaceAddress,
+) -> Res<()> {
     let mut request = handle
         .address()
-        .add(index, ip.addr(), ip.prefix_len())
+        .add(index, addr.ip, addr.prefix_len)
         .replace();
-    if ip.addr().is_ipv6() {
+    if addr.ip.is_ipv6() {
         let message = request.message_mut();
         message.header.flags |= AddressHeaderFlags::Nodad;
         message

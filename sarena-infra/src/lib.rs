@@ -4,10 +4,10 @@ use std::{
 };
 
 use aya::programs::{ProgramError, TcAttachType};
-use ipnet::IpNet;
 use route::Route;
 use thiserror::Error;
 
+pub mod address;
 pub mod mac_address;
 pub mod mock_link;
 pub mod mock_provisioner;
@@ -20,6 +20,7 @@ pub mod tcx;
 #[cfg(any(test, feature = "test"))]
 pub mod test_support;
 
+pub use address::InterfaceAddress;
 pub use mac_address::MacAddress;
 pub use mock_provisioner::MockNetworkProvisioner;
 pub use netlink_provisioner::NetlinkNetworkProvisioner;
@@ -105,7 +106,7 @@ pub trait Link {
     /// Accepts either an IPv4 or an IPv6 network; for IPv6, the address is
     /// added with `IFA_F_NODAD` (skipping duplicate address detection),
     /// matching how e.g. veth ends are typically brought up.
-    async fn set_addr(&mut self, addr: IpNet) -> Res<()>;
+    async fn set_addr(&mut self, addr: InterfaceAddress) -> Res<()>;
     /// Add (replacing any existing one) the default route (`0.0.0.0/0`) via
     /// `gateway`, routed out through this link.
     async fn add_gateway(&mut self, gateway: Ipv4Addr) -> Res<()>;
@@ -280,6 +281,9 @@ pub enum InfraError {
 
     #[error("invalid route: {0}")]
     InvalidRoute(String),
+
+    #[error("invalid prefix: {0} (max: {1})")]
+    PrefixLenError(u8, u8),
 }
 
 pub type Res<T> = Result<T, InfraError>;
