@@ -54,7 +54,6 @@ where
         .config()
         .ok_or_else(|| Error::InvalidNetworkConfig("failed to load netconf".to_string()))?;
     init_logging(net_conf);
-    let chained = net_conf.prev_result.is_some();
 
     let cni_args = load_args::<ArgsSpec>(args.args.as_ref())?;
     let span = make_span(command, &args, &cni_args);
@@ -62,13 +61,11 @@ where
     async move {
         debug!(?args, "processing CNI {command} request");
 
-        if chained {
-            return Err(Error::InvalidNetworkConfig(
-                "chaining is currently not supported".to_string(),
-            ));
-        }
+        let result = handler(args, cni_args).await;
 
-        handler(args, cni_args).await
+        debug!("CNI {command} processing complete");
+
+        result
     }
     .instrument(span)
     .await

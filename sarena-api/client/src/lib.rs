@@ -6,3 +6,5 @@ mod ipam;
 mod transport;
 
 pub use api_client::{ApiClient, RetryPolicy};
+pub use endpoint::attachment_id;
+pub use transport::Transport;

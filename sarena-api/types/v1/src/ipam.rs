@@ -32,6 +32,18 @@ pub struct HostAddressing {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ContainerAddressing {
-    #[serde(rename = "ip", skip_serializing_if = "Option::is_none")]
-    pub ip: Option<String>,
+    #[serde(rename = "ip")]
+    pub ip: String,
+
+    #[serde(rename = "pool", skip_serializing_if = "Option::is_none")]
+    pub pool: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct IpamReleaseRequest {
+    #[serde(rename = "ip")]
+    pub ip: String,
+
+    #[serde(rename = "pool", skip_serializing_if = "Option::is_none")]
+    pub pool: Option<String>,
 }

@@ -81,8 +81,12 @@ run-daemon:
         | jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable')
     sudo "$exe"
 
+
+# Run the sarena-cni-test integration test (requires root)
+cni-test: (_root-test "sarena-cni-test")
+
 # Full workflow: build, test, install eBPF programs, run eBPF tests
-all: build test install-ebpf infra-test loader-test ebpf-test
+all: build test install-ebpf infra-test loader-test cni-test ebpf-test
 
 # Run all `#[ignore]`d integration tests (requiring root/CAP_NET_ADMIN) for `package`
 _root-test package: netns-clean

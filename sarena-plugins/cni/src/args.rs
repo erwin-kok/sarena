@@ -5,6 +5,7 @@ use serde::{Deserialize, de::DeserializeOwned};
 
 use crate::Res;
 
+#[allow(clippy::struct_field_names)]
 #[derive(Debug, Deserialize, Default)]
 pub struct ArgsSpec {
     #[serde(rename = "K8S_POD_NAME")]
@@ -12,7 +13,7 @@ pub struct ArgsSpec {
     #[serde(rename = "K8S_POD_NAMESPACE")]
     pub k8s_pod_namespace: String,
     #[serde(rename = "K8S_POD_UID")]
-    pub _k8s_pod_uid: String,
+    pub k8s_pod_uid: String,
 }
 
 pub fn load_args<T>(args: Option<&String>) -> Res<T>

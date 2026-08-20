@@ -1,5 +1,5 @@
 [package]
-name = "sarena-cni-plugin"
+name = "sarena-cni-test"
 
 edition.workspace = true
 license.workspace = true
@@ -10,21 +10,21 @@ version.workspace = true
 [lints]
 workspace = true
 
+[features]
+test = []
+
 [dependencies]
 sarena-api-types-v1 = { path = "../../sarena-api/types/v1" }
-sarena-api-client = { path = "../../sarena-api/client" }
-sarena-common-plugin = { path = "../common" }
-sarena-infra = { path = "../../sarena-infra" }
+sarena-cni-plugin = { path = "../../sarena-plugins/cni" }
+sarena-infra = { path = "../../sarena-infra", features = ["test"] }
+sarena-loader = { path = "../../sarena-loader" }
+sarena-shared = { path = "../../sarena-shared" }
 sarena-utils = { path = "../../sarena-utils" }
 
-async-trait = { workspace = true }
+aya = { workspace = true }
+axum = { workspace = true }
+ipnet = { workspace = true }
 rscni-plugin = { workspace = true, features = ["async"] }
-serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
 tracing = { workspace = true }
-uuid = { workspace = true }
-
-[[bin]]
-name = "sarena-cni"
-path = "src/main.rs"

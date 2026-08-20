@@ -156,7 +156,24 @@ impl<T: Transport> ApiClientInner<T> {
         serde_json::from_slice(resp.body()).map_err(TransportError::Json)
     }
 
-    async fn send_and_check(
+    pub(crate) async fn delete_api_data<V>(&self, endpoint: &str, data: &V) -> Res<()>
+    where
+        V: Serialize,
+    {
+        let body = serde_json::to_vec(data)
+            .map(Bytes::from)
+            .map_err(TransportError::Json)?;
+        self.send_and_check(Method::DELETE, endpoint, Some(body))
+            .await?;
+        Ok(())
+    }
+
+    pub(crate) async fn delete_api_data_no_body(&self, endpoint: &str) -> Res<()> {
+        self.send_and_check(Method::DELETE, endpoint, None).await?;
+        Ok(())
+    }
+
+    pub(crate) async fn send_and_check(
         &self,
         method: Method,
         endpoint: &str,

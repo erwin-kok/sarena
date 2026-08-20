@@ -30,7 +30,6 @@ tokio = { workspace = true, features = [
     "net",
     "signal",
 ] }
-thiserror = { workspace = true }
 
 [[bin]]
 name = "sarena-daemon"

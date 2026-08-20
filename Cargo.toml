@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "sarena-plugins/cni",
+    "sarena-plugins/common",
     "sarena-daemon",
     "sarena-api/types/v1",
     "sarena-api/client",
@@ -17,6 +18,9 @@ members = [
     "sarena-shared-test",
     "sarena-test-scapy",
 
+    # Integration tests
+    "tests/cni",
+
     # eBPF framework 
     "sarena-ebpf-common",
     "sarena-ebpf-test-framework",
@@ -31,6 +35,7 @@ members = [
 
 default-members = [
     "sarena-plugins/cni",
+    "sarena-plugins/common",
     "sarena-daemon",
     "sarena-api/types/v1",
     "sarena-api/client",
@@ -38,12 +43,18 @@ default-members = [
     "sarena-loader",
     "sarena-utils",
 
+    # Test infrastructure
     "sarena-test-macros",
     "sarena-test-runner",
 
+    # Shared (userspace & eBPF)
     "sarena-shared", 
     "sarena-shared-test",
     "sarena-test-scapy",
+
+    # Integration tests is not included here because it needs previleges to run.
+    # eBPF crates are not included because these are build separately by xtask
+    # the xtask is also not included because its a build crate
 ]
 
 resolver = "2"
