@@ -15,7 +15,7 @@ use sarena_api_types_v1::{
 };
 use sarena_common_plugin::{
     ipam::{ipv4_routes, ipv6_routes},
-    names::endpoint_to_ifname,
+    names::{endpoint_to_ifname, endpoint_to_temp_ifname},
 };
 use sarena_infra::{
     InfraError, InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, Netns,
@@ -288,13 +288,15 @@ async fn setup_veth(
     peer_netns_path: &Path,
     device_mtu: u32,
 ) -> Res<(NetlinkLink, NetlinkLink)> {
-    let lxc_ifname = endpoint_to_ifname(&format!("{container_id}:{ifname}"));
+    let endpoint_id = format!("{container_id}:{ifname}");
+    let lxc_ifname = endpoint_to_ifname(&endpoint_id);
+    let tmp_peer_ifname = endpoint_to_temp_ifname(&endpoint_id);
     let host_mac = MacAddress::generate_rand();
     let lxc_mac = MacAddress::generate_rand();
     let pair = network_provisioner
         .create_veth(VethSpec {
             host_ifname: lxc_ifname.clone(),
-            peer_ifname: ifname.to_string(),
+            peer_ifname: tmp_peer_ifname,
             peer_netns: peer_netns_path.to_path_buf(),
             host_mac: Some(host_mac),
             peer_mac: Some(lxc_mac),
@@ -302,6 +304,10 @@ async fn setup_veth(
         .await
         .map_err(|e| Error::InvalidNetworkConfig(format!("could not create veth pair: {e}")))?;
     let (mut host, mut peer) = (pair.host, pair.peer);
+
+    peer.rename(ifname).await.map_err(|e| {
+        Error::InvalidNetworkConfig(format!("could not rename peer interface: {e}"))
+    })?;
 
     host.set_rp_filter(0)
         .await
