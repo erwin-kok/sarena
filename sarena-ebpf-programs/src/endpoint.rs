@@ -7,6 +7,7 @@ const ENDPOINTS_MAP_SIZE: usize = 65536;
 static LXC_MAP: HashMap<Ipv4Key, EndpointInfo, ENDPOINTS_MAP_SIZE, { BPF_F_NO_PREALLOC as usize }> =
     HashMap::new();
 
+#[inline(always)]
 pub fn lookup_ipv4_endpoint(ip: Ipv4Key) -> Option<*const EndpointInfo> {
     LXC_MAP.get_ptr(ip)
 }

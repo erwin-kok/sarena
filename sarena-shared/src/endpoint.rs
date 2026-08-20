@@ -10,11 +10,14 @@ pub struct EndpointConfig {
     pub ipv4: Ipv4Addr,
 }
 
-// This info is a struct intended for public information.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct EndpointInfo {
+    // The HOST-side veth ifindex, valid in the node's default namespace.
     pub if_index: u32,
+    // The PEER-side MAC, i.e. the endpoint's own interface address as seen
+    // from inside its netns.
+    pub mac: [u8; 6],
 }
 
 #[cfg(feature = "std")]

@@ -4,14 +4,14 @@ use std::{
     time::Duration,
 };
 
-use aya::maps::{Array, Map, MapData};
+use aya::maps::{Array, HashMap, Map, MapData};
 use sarena_daemon::{add::endpoint_to_ifname, ipam::ipv4_routes, types::CmdArgs};
 use sarena_infra::{
     InfraError, InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, Netns,
     NetnsGuard, NetworkProvisioner as _, VethSpec, netlink_link::NetlinkLink,
 };
-use sarena_loader::{AyaBackend, EndpointHandle, EndpointKind, Loader, LoaderHandle};
-use sarena_shared::EndpointConfig;
+use sarena_loader::{AyaBackend, EndpointHandle, EndpointKind, Loader, LoaderHandle, PinRoot};
+use sarena_shared::{EndpointConfig, EndpointInfo, Ipv4Key, Ipv4KeyExt as _};
 use sarena_utils::{LoggingConfig, logging};
 use tracing::info;
 
@@ -49,7 +49,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut provisioner = NetlinkNetworkProvisioner;
     provisioner.enable_ip_forwarding(false).await.expect("");
 
-    let gateway_ip = Ipv4Addr::new(1, 2, 3, 4);
+    let gateway_ip = Ipv4Addr::new(10, 0, 0, 5);
 
     let client1_ns = "client1_ns";
     Netns::create(client1_ns).await?;
@@ -66,7 +66,7 @@ async fn main() -> Result<(), anyhow::Error> {
         netns_override: None,
     };
 
-    let peer1_ip = Ipv4Addr::new(192, 168, 21, 21);
+    let peer1_ip = Ipv4Addr::new(192, 168, 1, 10);
 
     let (mut host1, _) = create_endpoint(
         &mut provisioner,
@@ -92,7 +92,7 @@ async fn main() -> Result<(), anyhow::Error> {
         netns_override: None,
     };
 
-    let peer2_ip = Ipv4Addr::new(192, 168, 22, 22);
+    let peer2_ip = Ipv4Addr::new(192, 168, 2, 20);
     let (mut host2, _) = create_endpoint(
         &mut provisioner,
         &loader_handle,
@@ -191,12 +191,18 @@ async fn create_endpoint(
 
     info!("endpoint maps: {:?}", handle.map_paths);
 
-    set_endpoint_config(&handle, peer_ip)?;
+    set_endpoint_config(&handle, host_mac, peer_ip)?;
+
+    insert_endpoint_info(peer_ip, &host, peer.mac())?;
 
     Ok((host, peer))
 }
 
-fn set_endpoint_config(handle: &EndpointHandle, peer_ip: Ipv4Addr) -> Result<(), anyhow::Error> {
+fn set_endpoint_config(
+    handle: &EndpointHandle,
+    host_mac: MacAddress,
+    peer_ip: Ipv4Addr,
+) -> Result<(), anyhow::Error> {
     let path = &handle.map_paths["endpoint_config"];
     let map_data = MapData::from_pin(path)?;
     let map = Map::Array(map_data);
@@ -204,11 +210,32 @@ fn set_endpoint_config(handle: &EndpointHandle, peer_ip: Ipv4Addr) -> Result<(),
     array.set(
         0,
         EndpointConfig {
-            mac: [1u8, 2u8, 3u8, 4u8, 5u8, 6u8], // node mac
+            mac: host_mac.0,
             ipv4: peer_ip,
         },
         0,
     )?;
+
+    Ok(())
+}
+
+fn insert_endpoint_info(
+    peer_ip: Ipv4Addr,
+    link: &NetlinkLink,
+    peer_mac: MacAddress,
+) -> Result<(), anyhow::Error> {
+    let pin_root = PinRoot::new(PIN_ROOT);
+    let path = pin_root.global_map_dir("lxc_map");
+    let map_data = MapData::from_pin(path)?;
+    let map = Map::from_map_data(map_data)?;
+
+    let mut lxc_map: HashMap<_, Ipv4Key, EndpointInfo> = HashMap::try_from(map)?;
+    let key = Ipv4Key::from_addr(peer_ip);
+    let value = EndpointInfo {
+        if_index: link.ifindex(),
+        mac: peer_mac.0,
+    };
+    lxc_map.insert(key, value, 0)?;
 
     Ok(())
 }

@@ -7,14 +7,14 @@ use std::{
 use aya::programs::{SchedClassifier, TcAttachType};
 use futures::TryStreamExt;
 use netlink_packet_route::{
-    address::{AddressAttribute, AddressFlags, AddressHeaderFlags},
+    address::{AddressAttribute, AddressFlags, AddressHeaderFlags, AddressMessage},
     link::{InfoData, InfoKind, InfoVeth, LinkAttribute, LinkFlags, LinkInfo, LinkMessage},
     route::{RouteAttribute, RouteMetric, RouteScope},
 };
 
 use crate::{
-    InfraError, InterfaceAddress, Link, MacAddress, Netns, PinnedTcxProgram, Res, TcxAttach,
-    route::Route, tcx,
+    AddressFamily, InfraError, InterfaceAddress, Link, MacAddress, Netns, PinnedTcxProgram, Res,
+    TcxAttach, route::Route, tcx,
 };
 
 /// Recognised `IFLA_INFO_KIND` strings mapped to typed variants.
@@ -231,6 +231,19 @@ impl Link for NetlinkLink {
         } else {
             let handle = default_handle()?;
             link_add_addr_impl(&handle, index, addr).await
+        }
+    }
+
+    async fn addresses(&self, family: Option<AddressFamily>) -> Res<Vec<InterfaceAddress>> {
+        let index = self.index;
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open_path(ns)?;
+            netns
+                .run(move |handle| async move { link_addresses_impl(&handle, index, family).await })
+                .await
+        } else {
+            let handle = default_handle()?;
+            link_addresses_impl(&handle, index, family).await
         }
     }
 
@@ -463,6 +476,31 @@ fn parse_link(msg: LinkMessage) -> NetlinkLink {
     }
 }
 
+/// Convert a raw `RTM_NEWADDR` message into an [`InterfaceAddress`].
+/// `IFA_LOCAL` (this interface's own address) is preferred over
+/// `IFA_ADDRESS` (which, for point-to-point links, is the *peer's*
+/// address instead) -- the two coincide for ordinary broadcast-type
+/// interfaces such as veth/ethernet. Returns `None` if neither attribute
+/// is present, or if the kernel-reported prefix length is invalid for the
+/// address family (neither should happen in practice).
+fn parse_address(msg: AddressMessage) -> Option<InterfaceAddress> {
+    let ip = msg
+        .attributes
+        .iter()
+        .find_map(|attr| match attr {
+            AddressAttribute::Local(ip) => Some(*ip),
+            _ => None,
+        })
+        .or_else(|| {
+            msg.attributes.iter().find_map(|attr| match attr {
+                AddressAttribute::Address(ip) => Some(*ip),
+                _ => None,
+            })
+        })?;
+
+    InterfaceAddress::new(ip, msg.header.prefix_len).ok()
+}
+
 /// Fetch a single link by name; called from within an active namespace.
 async fn get_link_impl(handle: &rtnetlink::Handle, name: &str) -> Res<NetlinkLink> {
     // `match_name` makes this a targeted (non-dump) RTM_GETLINK: a name the
@@ -580,6 +618,31 @@ async fn link_add_addr_impl(
             .push(AddressAttribute::Flags(AddressFlags::Nodad));
     }
     request.execute().await.map_err(InfraError::Netlink)
+}
+
+/// List addresses configured on the link with the given index, optionally
+/// filtered to a single address family; called from within an active
+/// namespace.
+async fn link_addresses_impl(
+    handle: &rtnetlink::Handle,
+    index: u32,
+    family: Option<AddressFamily>,
+) -> Res<Vec<InterfaceAddress>> {
+    let addrs: Vec<Option<InterfaceAddress>> = handle
+        .address()
+        .get()
+        .set_link_index_filter(index)
+        .execute()
+        .map_ok(parse_address)
+        .try_collect()
+        .await
+        .map_err(InfraError::Netlink)?;
+
+    Ok(addrs
+        .into_iter()
+        .flatten()
+        .filter(|addr| family.is_none_or(|f| f.matches(&addr.ip)))
+        .collect())
 }
 
 /// Add (replacing any existing one) the default route via `gateway`,

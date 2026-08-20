@@ -47,7 +47,7 @@ pub fn try_to_container(_ctx: TcContext) -> Res<EbpfReturn> {
 }
 
 #[inline(always)]
-fn process_ipv4(ctx: &TcContext, _config: &EndpointConfig) -> Res<EbpfReturn> {
+fn process_ipv4(ctx: &TcContext, config: &EndpointConfig) -> Res<EbpfReturn> {
     let ethhdr: *const EthHdr = unsafe { ptr_at(&ctx, 0)? };
     let ipv4hdr: *const Ipv4Hdr = unsafe { ptr_at(&ctx, EthHdr::LEN)? };
 
@@ -74,6 +74,14 @@ fn process_ipv4(ctx: &TcContext, _config: &EndpointConfig) -> Res<EbpfReturn> {
 
     if let Some(ep) = lookup_ipv4_endpoint(dst_ip) {
         let ifindex = unsafe { (*ep).if_index };
+        let dst_mac = unsafe { (*ep).mac };
+
+        let eth_mut = ethhdr as *mut EthHdr;
+        unsafe {
+            (*eth_mut).dst_addr = dst_mac;
+            (*eth_mut).src_addr = config.mac;
+        }
+
         let ret = unsafe { bpf_redirect(ifindex, 0) };
         return Ok(EbpfReturn::Custom(ret as i32));
     }

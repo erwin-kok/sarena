@@ -20,7 +20,7 @@ pub mod tcx;
 #[cfg(any(test, feature = "test"))]
 pub mod test_support;
 
-pub use address::InterfaceAddress;
+pub use address::{AddressFamily, InterfaceAddress};
 pub use mac_address::MacAddress;
 pub use mock_provisioner::MockNetworkProvisioner;
 pub use netlink_provisioner::NetlinkNetworkProvisioner;
@@ -107,6 +107,9 @@ pub trait Link {
     /// added with `IFA_F_NODAD` (skipping duplicate address detection),
     /// matching how e.g. veth ends are typically brought up.
     async fn set_addr(&mut self, addr: InterfaceAddress) -> Res<()>;
+    /// All addresses currently configured on this link, optionally
+    /// filtered to a single address family (`None` returns both).
+    async fn addresses(&self, family: Option<AddressFamily>) -> Res<Vec<InterfaceAddress>>;
     /// Add (replacing any existing one) the default route (`0.0.0.0/0`) via
     /// `gateway`, routed out through this link.
     async fn add_gateway(&mut self, gateway: Ipv4Addr) -> Res<()>;
@@ -284,6 +287,9 @@ pub enum InfraError {
 
     #[error("invalid prefix: {0} (max: {1})")]
     PrefixLenError(u8, u8),
+
+    #[error("error parsing interface address: {0}")]
+    InterfaceAddressParseError(String),
 }
 
 pub type Res<T> = Result<T, InfraError>;

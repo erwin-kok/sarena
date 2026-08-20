@@ -6,8 +6,8 @@ use std::{
 use aya::programs::TcAttachType;
 
 use crate::{
-    InfraError, InterfaceAddress, Link, MacAddress, Netns, PinnedTcxProgram, Res, TcxAttach,
-    route::Route,
+    AddressFamily, InfraError, InterfaceAddress, Link, MacAddress, Netns, PinnedTcxProgram, Res,
+    TcxAttach, route::Route,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -97,6 +97,15 @@ impl Link for MockLink {
     async fn set_addr(&mut self, addr: InterfaceAddress) -> Res<()> {
         self.addr_calls.push(addr);
         Ok(())
+    }
+
+    async fn addresses(&self, family: Option<AddressFamily>) -> Res<Vec<InterfaceAddress>> {
+        Ok(self
+            .addr_calls
+            .iter()
+            .copied()
+            .filter(|addr| family.is_none_or(|f| f.matches(&addr.ip)))
+            .collect())
     }
 
     async fn add_gateway(&mut self, gateway: Ipv4Addr) -> Res<()> {
