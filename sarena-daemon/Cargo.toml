@@ -11,17 +11,8 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-sarena-infra = { path = "../sarena-infra", features = ["test"] }
-sarena-loader = { path = "../sarena-loader" }
-sarena-shared = { path = "../sarena-shared" }
 sarena-utils = { path = "../sarena-utils" }
 
-anyhow = { workspace = true, default-features = true }
-aya = { workspace = true }
-hex = { workspace = true, features = ["std"] }
-ipnet = { workspace = true }
-libc = { workspace = true }
-sha2 = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = [
     "macros",

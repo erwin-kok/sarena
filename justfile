@@ -1,5 +1,8 @@
 export PATH := justfile_directory() / "scapyenv/bin" + ":" + env_var("PATH")
 
+default:
+  @just --list
+
 setup:
     python -m venv scapyenv
     scapyenv/bin/pip install -r scapy/requirements.txt
@@ -82,11 +85,14 @@ run-daemon:
     sudo "$exe"
 
 
+# Run the sarena-basic-test integration test (requires root)
+basic-test: (_root-test "sarena-basic-test")
+
 # Run the sarena-cni-test integration test (requires root)
 cni-test: (_root-test "sarena-cni-test")
 
 # Full workflow: build, test, install eBPF programs, run eBPF tests
-all: build test install-ebpf infra-test loader-test cni-test ebpf-test
+all: build test install-ebpf infra-test loader-test basic-test cni-test ebpf-test
 
 # Run all `#[ignore]`d integration tests (requiring root/CAP_NET_ADMIN) for `package`
 _root-test package: netns-clean

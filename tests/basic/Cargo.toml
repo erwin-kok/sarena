@@ -1,0 +1,25 @@
+[package]
+name = "sarena-basic-test"
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+test = []
+
+[dependencies]
+sarena-infra = { path = "../../sarena-infra", features = ["test"] }
+sarena-loader = { path = "../../sarena-loader" }
+sarena-shared = { path = "../../sarena-shared" }
+sarena-utils = { path = "../../sarena-utils" }
+
+aya = { workspace = true }
+ipnet = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "net"] }
+tracing = { workspace = true }

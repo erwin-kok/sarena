@@ -1168,6 +1168,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "sarena-basic-test"
+version = "0.1.0"
+dependencies = [
+ "aya",
+ "ipnet",
+ "sarena-infra",
+ "sarena-loader",
+ "sarena-shared",
+ "sarena-utils",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "sarena-cni-plugin"
 version = "0.1.0"
 dependencies = [
@@ -1219,16 +1233,7 @@ dependencies = [
 name = "sarena-daemon"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "aya",
- "hex",
- "ipnet",
- "libc",
- "sarena-infra",
- "sarena-loader",
- "sarena-shared",
  "sarena-utils",
- "sha2",
  "tokio",
  "tracing",
 ]

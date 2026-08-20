@@ -19,6 +19,7 @@ members = [
     "sarena-test-scapy",
 
     # Integration tests
+    "tests/basic",
     "tests/cni",
 
     # eBPF framework 
