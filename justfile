@@ -62,6 +62,13 @@ netns-clean:
     echo "warning: could not fully clean up mounts under /run/netns:" >&2
     awk '{print $5}' /proc/self/mountinfo | grep -E '^/run/netns(/|$)' >&2 || true
     exit 1
+# Run the sarena-daemon (requires sudo: it manages netns/BPF attachments)
+run-daemon:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    exe=$(cargo build -p sarena-daemon --message-format=json \
+        | jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable')
+    sudo "$exe"
     
 # Run all integration tests in the sarena-infra package (requires root)
 infra-test: (_root-test "sarena-infra")
@@ -75,15 +82,6 @@ ebpf-test:
     exe=$(cargo test --no-run -p sarena-test-runner --message-format=json \
         | jq -r 'select(.profile.test == true) | .executable')
     sudo "$exe" --no-capture
-
-# Run the sarena-daemon (requires sudo: it manages netns/BPF attachments)
-run-daemon:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    exe=$(cargo build -p sarena-daemon --message-format=json \
-        | jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable')
-    sudo "$exe"
-
 
 # Run the sarena-basic-test integration test (requires root)
 basic-test: (_root-test "sarena-basic-test")
