@@ -23,7 +23,7 @@ use sarena_infra::{
     netlink_link::NetlinkLink,
     route::{Route, sort_by_mask_narrowest_first},
 };
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, instrument, warn};
 
 use crate::{Res, args::ArgsSpec};
 
@@ -124,9 +124,7 @@ pub async fn add(args: Args, cni_args: ArgsSpec) -> Res<CNIResult> {
         }
     }
 
-    let api_client = ApiClient::new_default_client()
-        .map(Arc::new)
-        .map_err(|_| Error::PluginNotAvailable("DaemonDown".to_string()))?;
+    let api_client = Arc::new(crate::client::build_api_client(&args)?);
 
     let daemon_config = api_client
         .daemon()
@@ -140,6 +138,12 @@ pub async fn add(args: Args, cni_args: ArgsSpec) -> Res<CNIResult> {
         .allocate(pod_name.clone(), None)
         .await
         .map_err(|_| Error::PluginNotAvailable("could not allocate ip".to_string()))?;
+
+    if ipam_response.ipv4.is_none() && ipam_response.ipv6.is_none() {
+        return Err(Error::PluginNotAvailable(
+            "ipam should return valid addressing".to_string(),
+        ));
+    }
 
     let mut lease = IpamLease::new(
         Arc::clone(&api_client),
@@ -247,6 +251,7 @@ pub async fn add(args: Args, cni_args: ArgsSpec) -> Res<CNIResult> {
         .await
         .map_err(|_| Error::PluginNotAvailable("could not create endpoint".to_string()))?;
 
+    // Disarm lease
     lease.keep = true;
 
     let cni_host_interface = Interface {
@@ -274,9 +279,6 @@ pub async fn add(args: Args, cni_args: ArgsSpec) -> Res<CNIResult> {
         routes: cni_routes,
         ..Default::default()
     };
-
-    let json = serde_json::to_string_pretty(&result).unwrap();
-    info!("CNI ADD result: {json}");
 
     Ok(result)
 }

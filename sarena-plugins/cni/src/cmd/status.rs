@@ -1,11 +1,9 @@
 use rscni_plugin::{error::Error, types::Args};
-use sarena_api_client::ApiClient;
 
 use crate::{Res, args::ArgsSpec};
 
-pub(crate) async fn status(_args: Args, _cni_args: ArgsSpec) -> Res<()> {
-    let api_client = ApiClient::new_default_client()
-        .map_err(|_| Error::PluginNotAvailable("DaemonDown".to_string()))?;
+pub(crate) async fn status(args: Args, _cni_args: ArgsSpec) -> Res<()> {
+    let api_client = crate::client::build_api_client(&args)?;
 
     api_client
         .daemon()

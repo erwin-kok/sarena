@@ -93,8 +93,8 @@ libc = "0.2"
 log = { version = "0.4", default-features = false }
 network-types = { version = "0.2.0", default-features = false }
 nix = { version = "0.31", features = ["poll"] }
-num-traits = { version = "0.2", default-features = false }
 num-derive = { version = "0.5", default-features = false }
+num-traits = { version = "0.2", default-features = false }
 proc-macro2 = { version = "1", default-features = false }
 proc-macro2-diagnostics = { version = "0.10.1", default-features = false }
 quote = { version = "1", default-features = false }
@@ -108,6 +108,7 @@ syn = { version = "2", default-features = false }
 thiserror = { version = "2" }
 tokio = { version = "1.40" }
 tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6.8", features = ["trace"] }
 tracing = { version = "0.1" }
 tracing-appender = "0.2"
 tracing-log = "0.2"

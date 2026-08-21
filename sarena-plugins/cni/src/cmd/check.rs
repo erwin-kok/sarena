@@ -4,7 +4,7 @@ use rscni_plugin::{
     error::Error,
     types::{Args, CNIResult},
 };
-use sarena_api_client::{ApiClient, attachment_id};
+use sarena_api_client::attachment_id;
 use sarena_api_types_v1::endpoint;
 use sarena_infra::{InterfaceAddress, Link, NetlinkNetworkProvisioner, Netns, NetworkProvisioner};
 
@@ -33,8 +33,7 @@ pub(crate) async fn check(args: Args, _cni_args: ArgsSpec) -> Res<CNIResult> {
         ));
     };
 
-    let api_client = ApiClient::new_default_client()
-        .map_err(|_| Error::PluginNotAvailable("DaemonDown".to_string()))?;
+    let api_client = crate::client::build_api_client(&args)?;
 
     let response = api_client
         .endpoint()

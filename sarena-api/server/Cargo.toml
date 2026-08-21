@@ -11,3 +11,20 @@ version.workspace = true
 workspace = true
 
 [dependencies]
+sarena-api-types-v1 = { path = "../../sarena-api/types/v1" }
+sarena-infra = { path = "../../sarena-infra", features = ["test"] }
+sarena-loader = { path = "../../sarena-loader" }
+sarena-shared = { path = "../../sarena-shared" }
+
+anyhow = { workspace = true }
+axum = { workspace = true }
+aya = { workspace = true }
+http = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }

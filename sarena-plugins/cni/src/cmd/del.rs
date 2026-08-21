@@ -2,7 +2,7 @@ use rscni_plugin::{
     error::Error,
     types::{Args, CNIResult},
 };
-use sarena_api_client::{ApiClient, attachment_id};
+use sarena_api_client::attachment_id;
 use sarena_infra::{InfraError, NetlinkNetworkProvisioner, Netns, NetworkProvisioner as _};
 use tracing::debug;
 
@@ -23,8 +23,7 @@ pub(crate) async fn del(args: Args, _cni_args: ArgsSpec) -> Res<CNIResult> {
         ));
     };
 
-    let api_client = ApiClient::new_default_client()
-        .map_err(|_| Error::PluginNotAvailable("DaemonDown".to_string()))?;
+    let api_client = crate::client::build_api_client(&args)?;
 
     // We delete the endpoint here best effort. If the daemon is not available, or not responsive,
     // the endpoint is still present at the daemon. It would be better, to queue endpoint deletion,

@@ -11,16 +11,15 @@ version.workspace = true
 workspace = true
 
 [dependencies]
+sarena-infra = { path = "../sarena-infra", features = ["test"] }
+sarena-loader = { path = "../sarena-loader" }
+sarena-shared = { path = "../sarena-shared" }
 sarena-utils = { path = "../sarena-utils" }
+sarena-api-server = { path = "../sarena-api/server" }
 
+anyhow = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
 tracing = { workspace = true }
-tokio = { workspace = true, features = [
-    "macros",
-    "rt",
-    "rt-multi-thread",
-    "net",
-    "signal",
-] }
 
 [[bin]]
 name = "sarena-daemon"

@@ -1161,6 +1161,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "sarena-api-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "aya",
+ "http",
+ "hyper",
+ "hyper-util",
+ "sarena-api-types-v1",
+ "sarena-infra",
+ "sarena-loader",
+ "sarena-shared",
+ "serde_json",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "sarena-api-types-v1"
 version = "0.1.0"
 dependencies = [
@@ -1233,6 +1255,11 @@ dependencies = [
 name = "sarena-daemon"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "sarena-api-server",
+ "sarena-infra",
+ "sarena-loader",
+ "sarena-shared",
  "sarena-utils",
  "tokio",
  "tracing",
@@ -1662,6 +1689,22 @@ dependencies = [
  "pin-project-lite",
  "sync_wrapper",
  "tokio",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
+name = "tower-http"
+version = "0.6.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cfcf7e2740e6fc6d4d688b4ef00650406bb94adf4731e43c096c3a19fe40840"
+dependencies = [
+ "bitflags",
+ "bytes",
+ "http",
+ "http-body",
+ "pin-project-lite",
  "tower-layer",
  "tower-service",
  "tracing",
