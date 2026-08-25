@@ -22,7 +22,7 @@ impl<T: Transport + 'static> DaemonClient<T> {
 
     pub async fn health(&self) -> Res<()> {
         self.inner
-            .send_and_check(Method::GET, "/daemon/health", None)
+            .send_and_check(Method::GET, "/daemon/health", None, None)
             .await?;
         Ok(())
     }

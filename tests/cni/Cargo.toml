@@ -25,6 +25,7 @@ aya = { workspace = true }
 axum = { workspace = true }
 ipnet = { workspace = true }
 rscni-plugin = { workspace = true, features = ["async"] }
+serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
 tracing = { workspace = true }

@@ -8,6 +8,9 @@ members = [
     "sarena-api/server",
     "sarena-infra",
     "sarena-loader",
+    "sarena-services/daemon",
+    "sarena-services/endpoint",
+    "sarena-services/ipam",
     "sarena-utils",
 
     # Test infrastructure
@@ -44,6 +47,9 @@ default-members = [
     "sarena-api/server",
     "sarena-infra",
     "sarena-loader",
+    "sarena-services/daemon",
+    "sarena-services/endpoint",
+    "sarena-services/ipam",
     "sarena-utils",
 
     # Test infrastructure
@@ -51,7 +57,7 @@ default-members = [
     "sarena-test-runner",
 
     # Shared (userspace & eBPF)
-    "sarena-shared", 
+    "sarena-shared",
     "sarena-shared-test",
     "sarena-test-scapy",
 

@@ -1,0 +1,25 @@
+[package]
+name = "sarena-services-endpoint"
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+test-util = []
+
+[dependencies]
+sarena-api-types-v1 = { path = "../../sarena-api/types/v1" }
+sarena-infra = { path = "../../sarena-infra" }
+sarena-loader = { path = "../../sarena-loader" }
+sarena-shared = { path = "../../sarena-shared" }
+
+async-trait = { workspace = true }
+aya = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

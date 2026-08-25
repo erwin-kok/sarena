@@ -62,6 +62,27 @@ netns-clean:
     echo "warning: could not fully clean up mounts under /run/netns:" >&2
     awk '{print $5}' /proc/self/mountinfo | grep -E '^/run/netns(/|$)' >&2 || true
     exit 1
+
+kind-up:
+    bash "{{justfile_directory()}}/scripts/kind-up.sh"
+
+kind-down:
+    bash "{{justfile_directory()}}/scripts/kind-down.sh"
+
+kind-install: build build-ebpf
+    bash "{{justfile_directory()}}/scripts/kind-install.sh"
+
+kind-run-daemon: build build-ebpf
+    bash "{{justfile_directory()}}/scripts/kind-install.sh" --skip-daemon
+    bash "{{justfile_directory()}}/scripts/kind-run-daemon.sh"
+
+kind-cni-logs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    node_name="sarena-control-plane"
+    log_file="/var/log/sarena-cni.log.$(date +%F)"
+    docker exec "${node_name}" sh -c "touch '${log_file}' && tail -f '${log_file}'"
+
 # Run the sarena-daemon (requires sudo: it manages netns/BPF attachments)
 run-daemon:
     #!/usr/bin/env bash

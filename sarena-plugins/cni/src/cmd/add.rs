@@ -135,7 +135,7 @@ pub async fn add(args: Args, cni_args: ArgsSpec) -> Res<CNIResult> {
     let pod_name = format!("{}/{}", cni_args.k8s_pod_namespace, cni_args.k8s_pod_name);
     let ipam_response = api_client
         .ipam()
-        .allocate(pod_name.clone(), None)
+        .allocate(None, Some(pod_name), None, true)
         .await
         .map_err(|_| Error::PluginNotAvailable("could not allocate ip".to_string()))?;
 

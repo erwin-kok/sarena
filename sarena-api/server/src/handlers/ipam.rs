@@ -1,64 +1,78 @@
-use std::{collections::HashMap, net::Ipv4Addr, sync::LazyLock};
+use std::{collections::HashMap, net::IpAddr};
 
 use axum::{
     Json, Router,
-    extract::State,
-    routing::{delete, put},
+    extract::{Path, Query, State},
+    routing::{delete, get, put},
 };
-use http::StatusCode;
+use http::HeaderMap;
 use sarena_api_types_v1::ipam;
-use tracing::info;
+use serde::Deserialize;
 
-use crate::{error::ApiResult, state::AppState};
+use crate::{
+    error::{ApiError, ApiResult, ApiStatus, Res},
+    state::AppState,
+};
 
-static POD_IPS: LazyLock<HashMap<&'static str, Ipv4Addr>> = LazyLock::new(|| {
-    HashMap::from([
-        ("demo/pod1", Ipv4Addr::new(192, 168, 1, 10)),
-        ("demo/pod2", Ipv4Addr::new(192, 168, 2, 20)),
-    ])
-});
-
-const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(10, 0, 0, 5);
+#[derive(Debug, Deserialize)]
+pub struct IpamQuery {
+    family: Option<String>,
+    owner: Option<String>,
+    pool: Option<String>,
+}
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/", put(allocate_ip))
-        .route("/", delete(delete_ip))
+        .route("/", put(allocate))
+        .route("/{ip}", put(allocate_ip))
+        .route("/{ip}", delete(release_ip))
+        .route("/dump", get(dump))
 }
 
-pub async fn allocate_ip(
-    State(_state): State<AppState>,
-    Json(params): Json<ipam::IpamAllocateRequest>,
+pub async fn allocate(
+    State(state): State<AppState>,
+    Query(query): Query<IpamQuery>,
+    headers: HeaderMap,
 ) -> ApiResult<ipam::IpamAllocateResponse> {
-    info!("allocate ip: {:?}", params);
-
-    let ipv4 = POD_IPS
-        .get(params.owner.as_str())
-        .copied()
-        .map(|ip| ipam::ContainerAddressing {
-            ip: ip.to_string(),
-            pool: None,
-        });
-
-    let response = ipam::IpamAllocateResponse {
-        host_addressing: ipam::HostAddressing {
-            ipv4: Some(GATEWAY_IP.to_string()),
-            ipv6: None,
-        },
-        ipv4,
-        ipv6: None,
-    };
-
-    info!("allocate ip response: {:?}", response);
-
+    let expiration = headers
+        .get("expiration")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<bool>().ok())
+        .unwrap_or(false);
+    let response = state
+        .ipam
+        .allocate(query.family, query.owner, query.pool, expiration)
+        .await?;
     Ok(Json(response))
 }
 
-pub async fn delete_ip(
-    State(_state): State<AppState>,
-    Json(params): Json<ipam::IpamReleaseRequest>,
-) -> StatusCode {
-    info!("release ip: {:?}", params);
+pub async fn allocate_ip(
+    State(state): State<AppState>,
+    Path(ip): Path<String>,
+    Query(query): Query<IpamQuery>,
+) -> Res<ApiStatus> {
+    let ip: IpAddr = ip
+        .parse()
+        .map_err(|_| ApiError::bad_request(format!("Invalid IP address: {ip}")))?;
+    state.ipam.allocate_ip(ip, query.owner, query.pool).await?;
+    Ok(ApiStatus::Ok)
+}
 
-    StatusCode::NO_CONTENT
+pub async fn release_ip(
+    State(state): State<AppState>,
+    Path(ip): Path<String>,
+    Query(query): Query<IpamQuery>,
+) -> Res<ApiStatus> {
+    let ip: IpAddr = ip
+        .parse()
+        .map_err(|_| ApiError::bad_request(format!("Invalid IP address: {ip}")))?;
+    state.ipam.release(ip, query.pool).await?;
+    Ok(ApiStatus::NoContent)
+}
+
+pub async fn dump(
+    State(state): State<AppState>,
+) -> ApiResult<(HashMap<String, String>, HashMap<String, String>, String)> {
+    let response = state.ipam.dump().await?;
+    Ok(Json(response))
 }

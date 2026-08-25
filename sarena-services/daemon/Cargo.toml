@@ -1,0 +1,21 @@
+[package]
+name = "sarena-services-daemon"
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+test-util = []
+
+[dependencies]
+sarena-api-types-v1 = { path = "../../sarena-api/types/v1" }
+
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

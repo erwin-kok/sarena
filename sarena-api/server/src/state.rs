@@ -1,20 +1,26 @@
-use sarena_infra::NetlinkNetworkProvisioner;
-use sarena_loader::LoaderHandle;
+use std::sync::Arc;
+
+use sarena_services_daemon::DaemonService;
+use sarena_services_endpoint::EndpointService;
+use sarena_services_ipam::IpamService;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub loader_handle: LoaderHandle,
-    pub netlink_provisioner: NetlinkNetworkProvisioner,
+    pub ipam: Arc<dyn IpamService>,
+    pub endpoint: Arc<dyn EndpointService>,
+    pub daemon: Arc<dyn DaemonService>,
 }
 
 impl AppState {
     pub fn new(
-        loader_handle: LoaderHandle,
-        netlink_provisioner: NetlinkNetworkProvisioner,
+        ipam: Arc<dyn IpamService>,
+        endpoint: Arc<dyn EndpointService>,
+        daemon: Arc<dyn DaemonService>,
     ) -> Self {
         Self {
-            loader_handle,
-            netlink_provisioner,
+            ipam,
+            endpoint,
+            daemon,
         }
     }
 }

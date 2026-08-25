@@ -1,4 +1,4 @@
-use std::{env, sync::Arc, time::Duration};
+use std::{collections::HashMap, env, sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use http::{Method, Request, Response, StatusCode, Uri, header};
@@ -15,8 +15,9 @@ use crate::{
     transport::{TcpTransport, Transport, TransportKind, UnixTransport},
 };
 
-const DEFAULT_SOCKET_PATH: &str = "/tmp/sarena.sock";
 const X_REQUEST_ID: &str = "x-request-id";
+
+const DEFAULT_SOCKET_PATH: &str = "/tmp/sarena.sock";
 const DEFAULT_RETRY_ATTEMPTS: u32 = 3;
 const DEFAULT_RETRY_INTERVAL: Duration = Duration::from_millis(500);
 
@@ -138,7 +139,9 @@ impl<T: Transport> ApiClientInner<T> {
     where
         U: DeserializeOwned,
     {
-        let resp = self.send_and_check(Method::GET, endpoint, None).await?;
+        let resp = self
+            .send_and_check(Method::GET, endpoint, None, None)
+            .await?;
         serde_json::from_slice(resp.body()).map_err(TransportError::Json)
     }
 
@@ -151,25 +154,28 @@ impl<T: Transport> ApiClientInner<T> {
             .map(Bytes::from)
             .map_err(TransportError::Json)?;
         let resp = self
-            .send_and_check(Method::PUT, endpoint, Some(body))
+            .send_and_check(Method::PUT, endpoint, Some(body), None)
             .await?;
         serde_json::from_slice(resp.body()).map_err(TransportError::Json)
     }
 
-    pub(crate) async fn delete_api_data<V>(&self, endpoint: &str, data: &V) -> Res<()>
+    pub(crate) async fn put_api_data_with_headers<U>(
+        &self,
+        endpoint: &str,
+        headers: Option<HashMap<String, String>>,
+    ) -> Res<U>
     where
-        V: Serialize,
+        U: DeserializeOwned,
     {
-        let body = serde_json::to_vec(data)
-            .map(Bytes::from)
-            .map_err(TransportError::Json)?;
-        self.send_and_check(Method::DELETE, endpoint, Some(body))
+        let resp = self
+            .send_and_check(Method::PUT, endpoint, None, headers.as_ref())
             .await?;
-        Ok(())
+        serde_json::from_slice(resp.body()).map_err(TransportError::Json)
     }
 
     pub(crate) async fn delete_api_data_no_body(&self, endpoint: &str) -> Res<()> {
-        self.send_and_check(Method::DELETE, endpoint, None).await?;
+        self.send_and_check(Method::DELETE, endpoint, None, None)
+            .await?;
         Ok(())
     }
 
@@ -178,11 +184,15 @@ impl<T: Transport> ApiClientInner<T> {
         method: Method,
         endpoint: &str,
         body: Option<Bytes>,
+        headers: Option<&HashMap<String, String>>,
     ) -> Res<Response<Bytes>> {
         let attempts = self.retry.max_attempts.max(1);
         let mut attempt = 1;
         loop {
-            match self.try_send(method.clone(), endpoint, body.clone()).await {
+            match self
+                .try_send(method.clone(), endpoint, body.clone(), headers)
+                .await
+            {
                 Ok(resp) => return Ok(resp),
                 Err(e) if attempt < attempts && is_retryable(&e) => {
                     debug!(endpoint, attempt, error = %e, "retrying after transient error");
@@ -199,8 +209,9 @@ impl<T: Transport> ApiClientInner<T> {
         method: Method,
         endpoint: &str,
         body: Option<Bytes>,
+        headers: Option<&HashMap<String, String>>,
     ) -> Res<Response<Bytes>> {
-        let req = self.request(method, endpoint, body)?;
+        let req = self.request(method, endpoint, body, headers)?;
         let resp = self.transport.send(req).await?;
 
         if !resp.status().is_success() {
@@ -215,14 +226,20 @@ impl<T: Transport> ApiClientInner<T> {
         method: Method,
         path: &str,
         body: Option<Bytes>,
+        headers: Option<&HashMap<String, String>>,
     ) -> Res<Request<Bytes>> {
-        Ok(Request::builder()
+        let mut builder = Request::builder()
             .method(method)
             .uri(self.join_uri(path)?)
             .header(header::ACCEPT, "application/json")
             .header(header::CONTENT_TYPE, "application/json")
-            .header(X_REQUEST_ID, Uuid::new_v4().to_string())
-            .body(body.unwrap_or_default())?)
+            .header(X_REQUEST_ID, Uuid::new_v4().to_string());
+
+        for (name, value) in headers.into_iter().flatten() {
+            builder = builder.header(name.as_str(), value.as_str());
+        }
+
+        Ok(builder.body(body.unwrap_or_default())?)
     }
 
     fn join_uri(&self, path: &str) -> Res<Uri> {

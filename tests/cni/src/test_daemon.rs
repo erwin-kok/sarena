@@ -8,7 +8,7 @@ use std::{
 
 use axum::{
     Json, Router,
-    extract::{Path as AxumPath, State},
+    extract::{Path as AxumPath, Query, State},
     http::StatusCode,
     routing::{delete, get, put},
 };
@@ -20,6 +20,7 @@ use sarena_infra::{
 };
 use sarena_loader::{AyaBackend, EndpointHandle, EndpointKind, Loader, LoaderHandle, PinRoot};
 use sarena_shared::{EndpointConfig, EndpointInfo, Ipv4Key, Ipv4KeyExt as _};
+use serde::Deserialize;
 use tokio::net::UnixListener;
 use tracing::info;
 
@@ -138,6 +139,11 @@ impl FakeApiServer {
 
 pub type ApiResult<T> = Result<Json<T>, (StatusCode, String)>;
 
+#[derive(Debug, Deserialize)]
+pub struct IpamQuery {
+    owner: String,
+}
+
 pub async fn get_config(
     State(_state): State<AppState>,
 ) -> ApiResult<daemon::DaemonConfigurationResponse> {
@@ -153,13 +159,12 @@ pub async fn get_health(State(_state): State<AppState>) -> StatusCode {
 
 pub async fn allocate_ip(
     State(_state): State<AppState>,
-    Json(params): Json<ipam::IpamAllocateRequest>,
+    Query(query): Query<IpamQuery>,
 ) -> ApiResult<ipam::IpamAllocateResponse> {
-    info!("allocate ip: {:?}", params);
+    info!("allocate ip: {:?}", query);
 
     let ipv4 = POD_IPS
-        .get(params.owner.as_str())
-        .copied()
+        .get(query.owner.as_str())
         .map(|ip| ipam::ContainerAddressing {
             ip: ip.to_string(),
             pool: None,
@@ -170,7 +175,7 @@ pub async fn allocate_ip(
             ipv4: Some(GATEWAY_IP.to_string()),
             ipv6: None,
         },
-        ipv4: ipv4,
+        ipv4,
         ipv6: None,
     };
 

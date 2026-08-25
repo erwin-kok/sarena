@@ -1,8 +1,10 @@
 use axum::{Json, Router, extract::State, routing::get};
-use hyper::StatusCode;
 use sarena_api_types_v1::daemon;
 
-use crate::{error::ApiResult, state::AppState};
+use crate::{
+    error::{ApiResult, ApiStatus, Res},
+    state::AppState,
+};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -11,14 +13,13 @@ pub fn routes() -> Router<AppState> {
 }
 
 pub async fn get_config(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
 ) -> ApiResult<daemon::DaemonConfigurationResponse> {
-    Ok(Json(daemon::DaemonConfigurationResponse {
-        device_mtu: 1500,
-        route_mtu: 1500,
-    }))
+    let response = state.daemon.config().await?;
+    Ok(Json(response))
 }
 
-pub async fn get_health(State(_state): State<AppState>) -> StatusCode {
-    StatusCode::OK
+pub async fn get_health(State(state): State<AppState>) -> Res<ApiStatus> {
+    state.daemon.health().await?;
+    Ok(ApiStatus::Ok)
 }

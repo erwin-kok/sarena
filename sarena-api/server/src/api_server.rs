@@ -1,4 +1,9 @@
-use std::{fs, path::Path};
+use std::{
+    fs,
+    net::{IpAddr, Ipv4Addr},
+    path::Path,
+    sync::Arc,
+};
 
 use axum::{
     Router,
@@ -10,6 +15,7 @@ use axum::{
 use http::{HeaderName, HeaderValue};
 use hyper::{body::Incoming, server::conn::http1};
 use hyper_util::rt::TokioIo;
+use ipnet::{IpNet, Ipv4Net};
 use sarena_infra::NetlinkNetworkProvisioner;
 use sarena_loader::{AyaBackend, Loader, LoaderHandle};
 use tokio::net::{TcpListener, UnixListener};
@@ -18,13 +24,16 @@ use tower_http::trace::{MakeSpan, TraceLayer};
 use tracing::info;
 use uuid::Uuid;
 
-use crate::{
-    handlers::{self, endpoint::PIN_ROOT},
-    state::AppState,
-    unix_stream::UnixStreamCompat,
-};
+use crate::{handlers, state::AppState, unix_stream::UnixStreamCompat};
 
 const X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
+
+/// Where eBPF program/link state gets pinned. Shared between the loader
+/// itself (below) and `sarena-services-endpoint-manager`'s
+/// `LoaderEndpointService`, which is handed this same path rather than
+/// hardcoding it -- keeps that crate from needing to know a specific
+/// bpffs layout.
+const PIN_ROOT: &str = "/sys/fs/bpf/sarena";
 
 pub struct ApiServer;
 
@@ -54,7 +63,19 @@ impl ApiServer {
 
         let provisioner = NetlinkNetworkProvisioner;
 
-        let state = AppState::new(loader_handle, provisioner);
+        let ipam = Arc::new(sarena_services_ipam::DefaultIpamService::new(
+            IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5)),
+            Some(IpNet::V4(Ipv4Net::new(Ipv4Addr::new(192, 168, 10, 0), 24)?)),
+            None,
+        ));
+        let endpoint = Arc::new(sarena_services_endpoint::DefaultEndpointService::new(
+            loader_handle,
+            provisioner,
+            PIN_ROOT,
+        ));
+        let daemon = Arc::new(sarena_services_daemon::DefaultDaemonService::new());
+
+        let state = AppState::new(ipam, endpoint, daemon);
         let app = build_router(state);
 
         unix_listener(driver_sock, app.clone())?;
