@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "sarena-cli",
     "sarena-plugins/cni",
     "sarena-plugins/common",
     "sarena-daemon",

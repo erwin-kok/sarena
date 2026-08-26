@@ -8,3 +8,9 @@ pub struct DaemonConfigurationResponse {
     #[serde(rename = "routeMTU")]
     pub route_mtu: u32,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct DaemonDebugInfoResponse {
+    #[serde(rename = "version")]
+    pub version: String,
+}

@@ -10,6 +10,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/config", get(get_config))
         .route("/health", get(get_health))
+        .route("/debuginfo", get(get_debuginfo))
 }
 
 pub async fn get_config(
@@ -22,4 +23,11 @@ pub async fn get_config(
 pub async fn get_health(State(state): State<AppState>) -> Res<ApiStatus> {
     state.daemon.health().await?;
     Ok(ApiStatus::Ok)
+}
+
+pub async fn get_debuginfo(
+    State(state): State<AppState>,
+) -> ApiResult<daemon::DaemonDebugInfoResponse> {
+    let response = state.daemon.debuginfo().await?;
+    Ok(Json(response))
 }

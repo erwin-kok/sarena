@@ -123,6 +123,10 @@ impl ApiClient<TransportKind> {
         }
     }
 
+    pub fn new_client(raw_host: Option<String>) -> Res<ApiClient<TransportKind>> {
+        Self::new_client_with_retry(raw_host, RetryPolicy::default())
+    }
+
     pub fn new_default_client() -> Res<ApiClient<TransportKind>> {
         Self::new_client_with_retry(None, RetryPolicy::default())
     }
@@ -171,6 +175,19 @@ impl<T: Transport> ApiClientInner<T> {
             .send_and_check(Method::PUT, endpoint, None, headers.as_ref())
             .await?;
         serde_json::from_slice(resp.body()).map_err(TransportError::Json)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) async fn delete_api_data<V>(&self, endpoint: &str, data: &V) -> Res<()>
+    where
+        V: Serialize,
+    {
+        let body = serde_json::to_vec(data)
+            .map(Bytes::from)
+            .map_err(TransportError::Json)?;
+        self.send_and_check(Method::DELETE, endpoint, Some(body), None)
+            .await?;
+        Ok(())
     }
 
     pub(crate) async fn delete_api_data_no_body(&self, endpoint: &str) -> Res<()> {

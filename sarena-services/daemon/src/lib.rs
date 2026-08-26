@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use sarena_api_types_v1::daemon::DaemonConfigurationResponse;
+use sarena_api_types_v1::daemon::{DaemonConfigurationResponse, DaemonDebugInfoResponse};
 use thiserror::Error;
 
 mod service;
@@ -20,4 +20,5 @@ pub type Res<T> = Result<T, DaemonError>;
 pub trait DaemonService: Send + Sync {
     async fn config(&self) -> Res<DaemonConfigurationResponse>;
     async fn health(&self) -> Res<()>;
+    async fn debuginfo(&self) -> Res<DaemonDebugInfoResponse>;
 }

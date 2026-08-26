@@ -1,0 +1,28 @@
+[package]
+name = "sarena-cli"
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sarena-api-types-v1 = { path = "../sarena-api/types/v1" }
+sarena-api-client = { path = "../sarena-api/client" }
+sarena-utils = { path = "../sarena-utils" }
+
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
+clap_complete = { workspace = true }
+config = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+
+[[bin]]
+name = "sarena-cli"
+path = "src/main.rs"

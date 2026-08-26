@@ -26,4 +26,8 @@ impl<T: Transport + 'static> DaemonClient<T> {
             .await?;
         Ok(())
     }
+
+    pub async fn debuginfo(&self) -> Res<daemon::DaemonDebugInfoResponse> {
+        self.inner.get_api_data("/daemon/debuginfo").await
+    }
 }

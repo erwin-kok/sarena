@@ -76,6 +76,9 @@ kind-run-daemon: build build-ebpf
     bash "{{justfile_directory()}}/scripts/kind-install.sh" --skip-daemon
     bash "{{justfile_directory()}}/scripts/kind-run-daemon.sh"
 
+kind-sc *ARGS: build
+    bash "{{justfile_directory()}}/scripts/kind-sc.sh" {{ARGS}}
+
 kind-cni-logs:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -90,7 +93,11 @@ run-daemon:
     exe=$(cargo build -p sarena-daemon --message-format=json \
         | jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable')
     sudo "$exe"
-    
+
+# Run the sarena-cli, forwarding all arguments to it (e.g. `just sarena-cli service list`)
+sarena-cli *ARGS:
+    cargo run --bin sarena-cli -- {{ARGS}}
+
 # Run all integration tests in the sarena-infra package (requires root)
 infra-test: (_root-test "sarena-infra")
 
