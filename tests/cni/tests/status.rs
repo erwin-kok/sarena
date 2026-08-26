@@ -35,10 +35,7 @@ const LOG_FILE: &str = "log-file";
 #[tokio::test(flavor = "current_thread")]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn cni_status_reports_daemon_ready() {
-    logging::init_logging(&LoggingConfig {
-        enable_debug: false,
-        log_file: None,
-    });
+    logging::init_logging(&LoggingConfig::default());
 
     Netns::unshare_self()
         .await

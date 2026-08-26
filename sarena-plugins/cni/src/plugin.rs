@@ -6,7 +6,7 @@ use rscni_plugin::{
     error::Error,
     types::{Args, CNIResult, NetConf},
 };
-use sarena_utils::{LoggingConfig, logging};
+use sarena_utils::{LogFormat, LoggingConfig, logging};
 use serde_json::Value;
 use tracing::{Instrument as _, Span, debug, debug_span};
 use uuid::Uuid;
@@ -85,6 +85,7 @@ fn init_logging(net_conf: &NetConf) {
     logging::init_logging(&LoggingConfig {
         enable_debug,
         log_file,
+        format: LogFormat::Json,
     });
 }
 

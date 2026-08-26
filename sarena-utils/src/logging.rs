@@ -6,13 +6,13 @@ use std::{
 use tracing::Level;
 use tracing_appender::{non_blocking::WorkerGuard, rolling};
 use tracing_subscriber::{
-    EnvFilter,
+    EnvFilter, Layer, Registry,
     fmt::{self, format::FmtSpan},
-    layer::SubscriberExt,
+    layer::{Layered, SubscriberExt},
     util::SubscriberInitExt,
 };
 
-use crate::LoggingConfig;
+use crate::{LogFormat, LoggingConfig};
 
 static LOG_INIT: OnceLock<()> = OnceLock::new();
 static LOG_GUARD: Mutex<Option<WorkerGuard>> = Mutex::new(None);
@@ -29,10 +29,21 @@ pub fn init_logging(config: &LoggingConfig) {
 
         let env_filter = EnvFilter::from_default_env().add_directive(level.into());
 
-        let stderr_layer = fmt::layer()
-            .with_writer(std::io::stderr)
-            .pretty()
-            .with_span_events(FmtSpan::CLOSE);
+        let stderr_layer: Box<dyn Layer<Layered<EnvFilter, Registry>> + Send + Sync> =
+            match config.format {
+                LogFormat::Text => fmt::layer()
+                    .with_writer(std::io::stderr)
+                    .compact()
+                    .with_span_events(FmtSpan::CLOSE)
+                    .boxed(),
+                LogFormat::Json => fmt::layer()
+                    .with_writer(std::io::stderr)
+                    .json()
+                    .with_current_span(true)
+                    .with_span_list(true)
+                    .with_span_events(FmtSpan::NONE)
+                    .boxed(),
+            };
 
         let subscriber = tracing_subscriber::registry()
             .with(env_filter)

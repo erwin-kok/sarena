@@ -37,10 +37,7 @@ const UDP_PORT: u16 = 9999;
 #[tokio::test(flavor = "current_thread")]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn cni_add_creates_working_connectivity_between_two_pods() {
-    logging::init_logging(&LoggingConfig {
-        enable_debug: false,
-        log_file: None,
-    });
+    logging::init_logging(&LoggingConfig::default());
 
     // Must run before anything else on this thread: makes "the default
     // namespace" for the rest of this process a fresh, private one instead

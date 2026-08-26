@@ -1564,6 +1564,7 @@ version = "0.1.0"
 name = "sarena-utils"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "tracing",
  "tracing-appender",
  "tracing-log",

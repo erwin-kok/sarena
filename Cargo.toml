@@ -87,7 +87,9 @@ aya-log = { git = "https://github.com/erwin-kok/aya", branch = "development", de
 aya-log-ebpf = { git = "https://github.com/erwin-kok/aya", branch = "development", default-features = false }
 bytes = "1.11"
 cargo_metadata = { version = "0.23", default-features = false }
-clap = { version = "4.5.20", features = ["std"] }
+clap = { version = "4", features = ["std"] }
+clap_complete = "4"
+config = "0.15"
 env_logger = { version = "0.11", default-features = false }
 futures = { version = "0.3", default-features = false }
 hex = { version = "0.4", default-features = false }

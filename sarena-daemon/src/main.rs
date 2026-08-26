@@ -1,5 +1,5 @@
 use sarena_api_server::ApiServer;
-use sarena_utils::{LoggingConfig, logging};
+use sarena_utils::{LogFormat, LoggingConfig, logging};
 use tokio::signal::unix::{SignalKind, signal};
 use tracing::info;
 
@@ -9,8 +9,8 @@ const TCP_PORT: u16 = 3000;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     logging::init_logging(&LoggingConfig {
-        enable_debug: false,
-        log_file: None,
+        format: LogFormat::Json,
+        ..Default::default()
     });
 
     let socket_path =

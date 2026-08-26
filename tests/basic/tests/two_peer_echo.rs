@@ -25,10 +25,7 @@ async fn two_peer_udp_echo_through_loader() {
         .await
         .expect("failed to unshare a private default namespace");
 
-    logging::init_logging(&LoggingConfig {
-        enable_debug: false,
-        log_file: None,
-    });
+    logging::init_logging(&LoggingConfig::default());
 
     info!("Application started");
 
