@@ -26,13 +26,15 @@ async fn open_socket_on_configured_veth_peer() {
             .create_veth(VethSpec {
                 host_ifname: host_name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: peer_ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
         let (mut host, mut peer) = (pair.host, pair.peer);
+
+        let target = Netns::open_path(&peer_ns).expect("open peer netns failed");
+        peer.set_ns(&target).await.expect("set_ns failed");
 
         let ip = Ipv4Addr::new(192, 168, 20, 20);
         let gateway = Ipv4Addr::new(192, 168, 20, 1);
@@ -93,31 +95,34 @@ async fn forward_udp_packet_between_two_peer_namespaces() {
             let host2_name = test_support::unique_name("dpir20-");
             let peer2_name = test_support::unique_name("dpir21-");
 
-            // `create_veth` moves the peer end into `peer{1,2}_ns` as part
-            // of creation; the host end stays in the default namespace.
+            // The peer end of each pair is moved into `peer{1,2}_ns`
+            // directly below, right after creation; the host end stays
+            // in the default namespace.
             let pair1 = provisioner
                 .create_veth(VethSpec {
                     host_ifname: host1_name.clone(),
                     peer_ifname: peer1_name.clone(),
-                    peer_netns: peer1_ns.clone(),
                     host_mac: None,
                     peer_mac: None,
                 })
                 .await
                 .expect("create_veth (pair 1) failed");
             let (mut host1, mut peer1) = (pair1.host, pair1.peer);
+            let target1 = Netns::open_path(&peer1_ns).expect("open peer1 netns failed");
+            peer1.set_ns(&target1).await.expect("peer1 set_ns failed");
 
             let pair2 = provisioner
                 .create_veth(VethSpec {
                     host_ifname: host2_name.clone(),
                     peer_ifname: peer2_name.clone(),
-                    peer_netns: peer2_ns.clone(),
                     host_mac: None,
                     peer_mac: None,
                 })
                 .await
                 .expect("create_veth (pair 2) failed");
             let (mut host2, mut peer2) = (pair2.host, pair2.peer);
+            let target2 = Netns::open_path(&peer2_ns).expect("open peer2 netns failed");
+            peer2.set_ns(&target2).await.expect("peer2 set_ns failed");
 
             let host1_ip = Ipv4Addr::new(192, 168, 21, 1);
             let peer1_ip = Ipv4Addr::new(192, 168, 21, 21);

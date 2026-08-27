@@ -39,31 +39,34 @@ async fn load_multiple_links() {
             let host2_name = test_support::unique_name("dpir20-");
             let peer2_name = test_support::unique_name("dpir21-");
 
-            // `create_veth` moves the peer end into `peer{1,2}_ns` as part
-            // of creation; the host end stays in the default namespace.
+            // The peer end of each pair is moved into `peer{1,2}_ns`
+            // directly below, right after creation; the host end stays
+            // in the default namespace.
             let pair1 = provisioner
                 .create_veth(VethSpec {
                     host_ifname: host1_name.clone(),
                     peer_ifname: peer1_name.clone(),
-                    peer_netns: peer1_ns.clone(),
                     host_mac: None,
                     peer_mac: None,
                 })
                 .await
                 .expect("create_veth (pair 1) failed");
-            let mut host1 = pair1.host;
+            let (mut host1, mut peer1) = (pair1.host, pair1.peer);
+            let target1 = Netns::open_path(&peer1_ns).expect("open peer1 netns failed");
+            peer1.set_ns(&target1).await.expect("peer1 set_ns failed");
 
             let pair2 = provisioner
                 .create_veth(VethSpec {
                     host_ifname: host2_name.clone(),
                     peer_ifname: peer2_name.clone(),
-                    peer_netns: peer2_ns.clone(),
                     host_mac: None,
                     peer_mac: None,
                 })
                 .await
                 .expect("create_veth (pair 2) failed");
-            let mut host2 = pair2.host;
+            let (mut host2, mut peer2) = (pair2.host, pair2.peer);
+            let target2 = Netns::open_path(&peer2_ns).expect("open peer2 netns failed");
+            peer2.set_ns(&target2).await.expect("peer2 set_ns failed");
 
             loader_handle
                 .add_endpoint(EndpointKind::Host, &host1_name)

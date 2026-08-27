@@ -67,12 +67,13 @@ async fn upsert_tcx_recovers_from_a_defunct_pin_after_device_replacement() {
             .create_veth(VethSpec {
                 host_ifname: test_support::unique_name("dpienolk0-"),
                 peer_ifname: test_support::unique_name("dpienolk1-"),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
+        let target = Netns::open_path(&ns).expect("open temp netns");
+        pair.peer.set_ns(&target).await.expect("set_ns failed");
 
         let first = upsert_tcx(&pair.host, program, link_dir, TcAttachType::Egress)
             .expect("first-ever attach should succeed");
@@ -90,12 +91,13 @@ async fn upsert_tcx_recovers_from_a_defunct_pin_after_device_replacement() {
             .create_veth(VethSpec {
                 host_ifname: test_support::unique_name("dpienolk2-"),
                 peer_ifname: test_support::unique_name("dpienolk3-"),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
+        let target2 = Netns::open_path(&ns).expect("open temp netns");
+        pair2.peer.set_ns(&target2).await.expect("set_ns failed");
 
         let second = upsert_tcx(&pair2.host, program, link_dir, TcAttachType::Egress).expect(
             "re-attaching after the old device was replaced should succeed, not fail with EEXIST",
@@ -140,16 +142,15 @@ async fn upsert_tcx_program_rejects_non_local_link() {
             .create_veth(VethSpec {
                 host_ifname: host_name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
         let (mut host, mut peer) = (pair.host, pair.peer);
+        let target = Netns::open_path(&ns).expect("open temp netns");
+        peer.set_ns(&target).await.expect("set_ns failed");
 
-        // The peer end was moved into `ns` by `create_veth` -- not the
-        // caller's own namespace -- so this must be refused.
         let err = peer
             .upsert_tcx_program(program, link_dir, TcAttachType::Egress)
             .expect_err("attaching to a link outside the caller's own namespace should fail");

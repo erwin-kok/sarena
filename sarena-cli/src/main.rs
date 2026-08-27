@@ -23,7 +23,10 @@ async fn main() -> Result<()> {
 
     let client = ApiClient::new_client(config.host.clone())?;
 
-    let app = App { _config: config, client };
+    let app = App {
+        _config: config,
+        client,
+    };
 
     app.run(&cli.command).await?;
 

@@ -136,13 +136,15 @@ async fn create_endpoint(
         .create_veth(VethSpec {
             host_ifname: lxc_ifname.clone(),
             peer_ifname: tmp_peer_ifname,
-            peer_netns: peer_netns_path,
             host_mac: Some(host_mac),
             peer_mac: Some(lxc_mac),
         })
         .await
         .expect("create_veth");
     let (mut host, mut peer) = (pair.host, pair.peer);
+
+    let target = Netns::open_path(&peer_netns_path).expect("open peer netns");
+    peer.set_ns(&target).await.expect("peer set_ns");
 
     peer.rename(if_name)
         .await

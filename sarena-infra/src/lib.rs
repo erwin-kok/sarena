@@ -26,9 +26,9 @@ pub use mock_provisioner::MockNetworkProvisioner;
 pub use netlink_provisioner::NetlinkNetworkProvisioner;
 pub use netns::{Netns, NetnsGuard};
 
-/// Everything needed to create one veth pair: the host side stays in
-/// whatever namespace the calling process is already in, the peer side
-/// gets moved into `peer_netns`.
+/// Everything needed to create one veth pair. Both ends stay in whatever
+/// namespace the calling process is already in -- move the peer into a
+/// different namespace afterward with [`Link::set_ns`] if needed.
 #[derive(Debug, Clone)]
 pub struct VethSpec {
     pub host_ifname: String,
@@ -36,7 +36,6 @@ pub struct VethSpec {
 
     pub peer_ifname: String,
     pub peer_mac: Option<MacAddress>,
-    pub peer_netns: PathBuf,
 }
 
 /// What `create_veth` hands back.

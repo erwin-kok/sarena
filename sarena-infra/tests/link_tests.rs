@@ -110,13 +110,13 @@ async fn veth_pair_create_and_configure() {
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: peer_ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
-        let (mut host, peer) = (pair.host, pair.peer);
+        let (mut host, mut peer) = (pair.host, pair.peer);
+        peer.set_ns(&peer_netns).await.expect("peer set_ns failed");
 
         assert_eq!(host.ifname(), name);
         assert_eq!(peer.ifname(), peer_name);
@@ -183,13 +183,14 @@ async fn rename_link_by_name() {
             .create_veth(VethSpec {
                 host_ifname: from_name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
-        let mut host = pair.host;
+        let (mut host, mut peer) = (pair.host, pair.peer);
+        let netns = Netns::open_path(&ns).expect("open temp netns");
+        peer.set_ns(&netns).await.expect("peer set_ns failed");
 
         host.rename(&to_name).await.expect("rename failed");
 
@@ -213,13 +214,13 @@ async fn link_setns_moves_only_the_moved_end() {
                 .create_veth(VethSpec {
                     host_ifname: host_name.clone(),
                     peer_ifname: peer_name.clone(),
-                    peer_netns: ns_a.clone(),
                     host_mac: None,
                     peer_mac: None,
                 })
                 .await
                 .expect("create_veth failed");
-            let (mut host, peer) = (pair.host, pair.peer);
+            let (mut host, mut peer) = (pair.host, pair.peer);
+            peer.set_ns(&netns_a).await.expect("peer set_ns failed");
 
             host.set_ns(&netns_b).await.expect("link_setns failed");
 
@@ -254,13 +255,13 @@ async fn list_links_includes_loopback_and_veth() {
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
-        let mut host = pair.host;
+        let (mut host, mut peer) = (pair.host, pair.peer);
+        peer.set_ns(&netns).await.expect("peer set_ns failed");
         host.set_ns(&netns)
             .await
             .expect("link_setns failed for host");
@@ -290,13 +291,13 @@ async fn set_addr_and_add_gateway_configure_the_link() {
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
-        let mut host = pair.host;
+        let (mut host, mut peer) = (pair.host, pair.peer);
+        peer.set_ns(&netns).await.expect("peer set_ns failed");
         host.set_ns(&netns)
             .await
             .expect("link_setns failed for host");
@@ -357,13 +358,14 @@ async fn set_ns_to_missing_namespace_fails_without_moving_the_link() {
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
-        let mut host = pair.host;
+        let (mut host, mut peer) = (pair.host, pair.peer);
+        let netns = Netns::open_path(&ns).expect("open temp netns");
+        peer.set_ns(&netns).await.expect("peer set_ns failed");
         let err = Netns::open(&missing_ns)
             .expect_err("opening a namespace that doesn't exist should fail");
         assert!(matches!(err, InfraError::OpenNamespace { name, .. } if name == missing_ns));
@@ -385,13 +387,13 @@ async fn rename_to_existing_name_fails() {
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
-        let mut host = pair.host;
+        let (mut host, mut peer) = (pair.host, pair.peer);
+        peer.set_ns(&netns).await.expect("peer set_ns failed");
         host.set_ns(&netns)
             .await
             .expect("link_setns failed for host");
@@ -412,13 +414,14 @@ async fn delete_twice_fails_the_second_time() {
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
-        let mut host = pair.host;
+        let (mut host, mut peer) = (pair.host, pair.peer);
+        let netns = Netns::open_path(&ns).expect("open temp netns");
+        peer.set_ns(&netns).await.expect("peer set_ns failed");
 
         host.delete().await.expect("first delete failed");
         assert!(
@@ -441,19 +444,19 @@ async fn create_veth_with_duplicate_name_fails() {
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("first create_veth failed");
-        let mut host = pair.host;
+        let (mut host, mut peer) = (pair.host, pair.peer);
+        let netns = Netns::open_path(&ns).expect("open temp netns");
+        peer.set_ns(&netns).await.expect("peer set_ns failed");
 
         let result = provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: other_peer_name,
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
@@ -476,16 +479,17 @@ async fn delete_link_by_name_removes_it_and_its_peer() {
         let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpidln0-");
         let peer_name = test_support::unique_name("dpidln1-");
-        provisioner
+        let pair = provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
+        let mut peer = pair.peer;
+        peer.set_ns(&netns).await.expect("peer set_ns failed");
 
         provisioner
             .delete_link(&name)
@@ -515,13 +519,13 @@ async fn delete_link_in_ns_removes_it_and_its_peer() {
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
-        let mut host = pair.host;
+        let (mut host, mut peer) = (pair.host, pair.peer);
+        peer.set_ns(&netns).await.expect("peer set_ns failed");
         host.set_ns(&netns)
             .await
             .expect("link_setns failed for host");
@@ -610,13 +614,13 @@ async fn add_route_without_a_nexthop_installs_an_on_link_route() {
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
-        let mut host = pair.host;
+        let (mut host, mut peer) = (pair.host, pair.peer);
+        peer.set_ns(&netns).await.expect("peer set_ns failed");
         host.set_ns(&netns)
             .await
             .expect("link_setns failed for host");
@@ -661,13 +665,13 @@ async fn add_route_with_a_nexthop_installs_a_route_via_gateway() {
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
-        let mut host = pair.host;
+        let (mut host, mut peer) = (pair.host, pair.peer);
+        peer.set_ns(&netns).await.expect("peer set_ns failed");
         host.set_ns(&netns)
             .await
             .expect("link_setns failed for host");
@@ -716,13 +720,13 @@ async fn add_route_sets_table_and_mtu() {
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
-                peer_netns: ns.clone(),
                 host_mac: None,
                 peer_mac: None,
             })
             .await
             .expect("create_veth failed");
-        let mut host = pair.host;
+        let (mut host, mut peer) = (pair.host, pair.peer);
+        peer.set_ns(&netns).await.expect("peer set_ns failed");
         host.set_ns(&netns)
             .await
             .expect("link_setns failed for host");

@@ -68,7 +68,6 @@ impl NetworkProvisioner for MockNetworkProvisioner {
                     peer_ifindex as u8,
                 ])),
                 peer_ifname: Some(spec.host_ifname.clone()),
-                netns: Some(spec.peer_netns.clone()),
                 ..Default::default()
             },
         };
@@ -142,13 +141,11 @@ mod tests {
 
     async fn provision_and_start_port<P: NetworkProvisioner>(
         provisioner: &mut P,
-        peer_netns: &str,
     ) -> Res<VethPair<P::LinkType>> {
         let mut pair = provisioner
             .create_veth(VethSpec {
                 host_ifname: "veth-test0".to_owned(),
                 peer_ifname: "veth-test1".to_owned(),
-                peer_netns: Netns::path_for(peer_netns),
                 host_mac: Some(MacAddress([0x02, 0x00, 0x00, 0x00, 0x00, 0x01])),
                 peer_mac: None,
             })
@@ -162,9 +159,7 @@ mod tests {
         let mut mock = MockNetworkProvisioner::default();
         mock.create_netns("test-ns").await.unwrap();
 
-        let pair = provision_and_start_port(&mut mock, "test-ns")
-            .await
-            .unwrap();
+        let pair = provision_and_start_port(&mut mock).await.unwrap();
 
         assert_eq!(
             pair.host.mac(),

@@ -299,13 +299,20 @@ async fn setup_veth(
         .create_veth(VethSpec {
             host_ifname: lxc_ifname.clone(),
             peer_ifname: tmp_peer_ifname,
-            peer_netns: peer_netns_path.to_path_buf(),
             host_mac: Some(host_mac),
             peer_mac: Some(lxc_mac),
         })
         .await
         .map_err(|e| Error::InvalidNetworkConfig(format!("could not create veth pair: {e}")))?;
     let (mut host, mut peer) = (pair.host, pair.peer);
+
+    // The peer is created with a random name first, then moved to its netns. Then renamed.
+    // This order is important, because if we rename the peer first (typically "eth0" since
+    // this is the default interface in a pod), then a name clash might occur when two "eth0"'s
+    // are created in the current netns.
+
+    let target = Netns::open_path(peer_netns_path).map_err(infra_err)?;
+    peer.set_ns(&target).await.map_err(infra_err)?;
 
     peer.rename(ifname).await.map_err(|e| {
         Error::InvalidNetworkConfig(format!("could not rename peer interface: {e}"))

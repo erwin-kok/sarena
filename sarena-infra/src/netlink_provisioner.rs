@@ -43,13 +43,7 @@ impl NetworkProvisioner for NetlinkNetworkProvisioner {
         // needed either way -- the ones just set, or kernel-random ones if
         // the caller didn't ask for specific values.
         let host = self.get_link(&spec.host_ifname).await?;
-        let mut peer = self.get_link(&spec.peer_ifname).await?;
-
-        // Move the peer *after* reading its state back -- we already have
-        // what we need from the default-namespace fetch above, and
-        // `set_ns` itself only needs the ifindex, which doesn't change.
-        let target = Netns::open_path(&spec.peer_netns)?;
-        peer.set_ns(&target).await?;
+        let peer = self.get_link(&spec.peer_ifname).await?;
 
         Ok(VethPair { host, peer })
     }
