@@ -305,10 +305,12 @@ async fn set_addr_and_add_gateway_configure_the_link() {
 
         let ip = Ipv4Addr::new(10, 99, 0, 1);
         let addr = InterfaceAddress::new(IpAddr::V4(ip), 24).expect("valid IPv4 network");
-        host.set_addr(addr).await.expect("set_addr failed");
+        host.add_addr(addr).await.expect("set_addr failed");
         assert!(has_address(&ns, host.ifindex(), ip, 24).await);
 
-        host.set_addr(addr).await.expect("repeat set_addr failed");
+        host.replace_addr(addr)
+            .await
+            .expect("repeat replace_addr failed");
         assert!(has_address(&ns, host.ifindex(), ip, 24).await);
 
         let gateway = Ipv4Addr::new(10, 99, 0, 254);
@@ -681,7 +683,7 @@ async fn add_route_with_a_nexthop_installs_a_route_via_gateway() {
         // or the kernel rejects the route with ENETUNREACH -- so give the
         // link an address on the same /24 the nexthop below lives in.
         let host_ip = Ipv4Addr::new(10, 78, 0, 1);
-        host.set_addr(InterfaceAddress::new(IpAddr::V4(host_ip), 24).unwrap())
+        host.add_addr(InterfaceAddress::new(IpAddr::V4(host_ip), 24).unwrap())
             .await
             .expect("set_addr failed");
 

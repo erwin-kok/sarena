@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "sarena-cli",
+    "sarena-control-plane",
     "sarena-plugins/cni",
     "sarena-plugins/common",
     "sarena-daemon",
@@ -40,6 +41,8 @@ members = [
 ]
 
 default-members = [
+    "sarena-cli",
+    "sarena-control-plane",
     "sarena-plugins/cni",
     "sarena-plugins/common",
     "sarena-daemon",

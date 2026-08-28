@@ -1,4 +1,3 @@
-use anyhow::Result;
 use clap::{Args, Subcommand};
 use tracing::info;
 
@@ -27,14 +26,12 @@ pub struct ListArgs {
     pub output: OutputArgs,
 }
 
-pub fn run(service: &ServiceCommand) -> Result<()> {
+pub fn run(service: &ServiceCommand) {
     match &service.command {
         ServiceCommands::List(args) => list_services(args),
     }
 }
 
-fn list_services(_args: &ListArgs) -> Result<()> {
+fn list_services(_args: &ListArgs) {
     info!("listing services");
-
-    Ok(())
 }

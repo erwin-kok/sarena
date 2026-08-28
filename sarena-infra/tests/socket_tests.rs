@@ -40,7 +40,7 @@ async fn open_socket_on_configured_veth_peer() {
         let gateway = Ipv4Addr::new(192, 168, 20, 1);
 
         peer.set_up().await.expect("set_up failed");
-        peer.set_addr(v4(ip, 24)).await.expect("set_addr failed");
+        peer.add_addr(v4(ip, 24)).await.expect("set_addr failed");
         peer.add_gateway(gateway).await.expect("add_gateway failed");
 
         let bound_addr = Netns::open_path(&peer_ns)
@@ -131,18 +131,18 @@ async fn forward_udp_packet_between_two_peer_namespaces() {
 
             host1.set_up().await.expect("host1 set_up failed");
             host1
-                .set_addr(v4(host1_ip, 24))
+                .add_addr(v4(host1_ip, 24))
                 .await
                 .expect("host1 set_addr failed");
             host2.set_up().await.expect("host2 set_up failed");
             host2
-                .set_addr(v4(host2_ip, 24))
+                .add_addr(v4(host2_ip, 24))
                 .await
                 .expect("host2 set_addr failed");
 
             peer1.set_up().await.expect("peer1 set_up failed");
             peer1
-                .set_addr(v4(peer1_ip, 24))
+                .add_addr(v4(peer1_ip, 24))
                 .await
                 .expect("peer1 set_addr failed");
             peer1
@@ -152,7 +152,7 @@ async fn forward_udp_packet_between_two_peer_namespaces() {
 
             peer2.set_up().await.expect("peer2 set_up failed");
             peer2
-                .set_addr(v4(peer2_ip, 24))
+                .add_addr(v4(peer2_ip, 24))
                 .await
                 .expect("peer2 set_addr failed");
             peer2

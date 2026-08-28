@@ -4,11 +4,9 @@ use axum::{
     routing::{delete, get, put},
 };
 use sarena_api_types_v1::endpoint;
+use sarena_control_plane::AppState;
 
-use crate::{
-    error::{ApiResult, ApiStatus, Res},
-    state::AppState,
-};
+use crate::error::{ApiResult, ApiStatus, Res};
 
 pub fn routes() -> Router<AppState> {
     Router::new()

@@ -1,9 +1,4 @@
-use std::{
-    fs,
-    net::{IpAddr, Ipv4Addr},
-    path::Path,
-    sync::Arc,
-};
+use std::path::Path;
 
 use axum::{
     Router,
@@ -15,25 +10,16 @@ use axum::{
 use http::{HeaderName, HeaderValue};
 use hyper::{body::Incoming, server::conn::http1};
 use hyper_util::rt::TokioIo;
-use ipnet::{IpNet, Ipv4Net};
-use sarena_infra::NetlinkNetworkProvisioner;
-use sarena_loader::{AyaBackend, Loader, LoaderHandle};
+use sarena_control_plane::AppState;
 use tokio::net::{TcpListener, UnixListener};
 use tower::ServiceExt;
 use tower_http::trace::{MakeSpan, TraceLayer};
 use tracing::info;
 use uuid::Uuid;
 
-use crate::{handlers, state::AppState, unix_stream::UnixStreamCompat};
+use crate::{handlers, unix_stream::UnixStreamCompat};
 
 const X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
-
-/// Where eBPF program/link state gets pinned. Shared between the loader
-/// itself (below) and `sarena-services-endpoint-manager`'s
-/// `LoaderEndpointService`, which is handed this same path rather than
-/// hardcoding it -- keeps that crate from needing to know a specific
-/// bpffs layout.
-const PIN_ROOT: &str = "/sys/fs/bpf/sarena";
 
 pub struct ApiServer;
 
@@ -48,39 +34,15 @@ impl ApiServer {
         Self {}
     }
 
-    pub async fn start(&self, driver_sock: &str, tcp_port: u16) -> anyhow::Result<()> {
-        let _ = fs::remove_dir_all(PIN_ROOT);
-
-        std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
-
-        let dir = std::env::var("EBPF_DIR").unwrap_or_else(|_| "/usr/lib/sarena/ebpf".into());
-        let backend = AyaBackend::new(
-            format!("{dir}/sarena-ebpf-programs.o"),
-            format!("{PIN_ROOT}/globals"),
-        );
-        let loader = Loader::new(backend, PIN_ROOT);
-        let loader_handle = LoaderHandle::spawn(loader, 16);
-
-        let provisioner = NetlinkNetworkProvisioner;
-
-        let ipam = Arc::new(sarena_services_ipam::DefaultIpamService::new(
-            IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5)),
-            Some(IpNet::V4(Ipv4Net::new(Ipv4Addr::new(192, 168, 10, 0), 24)?)),
-            None,
-        ));
-        let endpoint = Arc::new(sarena_services_endpoint::DefaultEndpointService::new(
-            loader_handle,
-            provisioner,
-            PIN_ROOT,
-        ));
-        let daemon = Arc::new(sarena_services_daemon::DefaultDaemonService::new());
-
-        let state = AppState::new(ipam, endpoint, daemon);
-        let app = build_router(state);
-
-        unix_listener(driver_sock, app.clone())?;
-        tcp_listener(tcp_port, app).await?;
-
+    pub async fn start(
+        &self,
+        driver_sock: &str,
+        tcp_port: u16,
+        state: AppState,
+    ) -> anyhow::Result<()> {
+        let router = build_router(state);
+        unix_listener(driver_sock, router.clone())?;
+        tcp_listener(tcp_port, router).await?;
         Ok(())
     }
 }

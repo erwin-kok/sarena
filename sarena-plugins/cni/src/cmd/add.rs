@@ -350,7 +350,7 @@ async fn configure_iface(
     peer.set_up().await.map_err(infra_err)?;
 
     for &interface_address in interface_addresses {
-        peer.set_addr(interface_address).await.map_err(infra_err)?;
+        peer.add_addr(interface_address).await.map_err(infra_err)?;
     }
 
     // Sort provided routes to make sure we apply any more specific

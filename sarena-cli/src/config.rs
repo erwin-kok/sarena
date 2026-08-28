@@ -25,11 +25,9 @@ pub fn load_config(cli: &Cli) -> anyhow::Result<Config> {
 
     if let Some(path) = &cli.config {
         builder = builder.add_source(File::from(path.clone()));
-    } else {
-        if let Some(home) = home_dir() {
-            let path = home.join(".sarena");
-            builder = builder.add_source(File::from(path).required(false));
-        }
+    } else if let Some(home) = home_dir() {
+        let path = home.join(".sarena");
+        builder = builder.add_source(File::from(path).required(false));
     }
 
     builder = builder.add_source(Environment::with_prefix("SARENA").separator("_"));
@@ -41,7 +39,7 @@ pub fn load_config(cli: &Cli) -> anyhow::Result<Config> {
     }
 
     if cli.log_file.is_some() {
-        config.log_file = cli.log_file.clone();
+        config.log_file.clone_from(&cli.log_file);
     }
 
     if let Some(log_format) = &cli.log_format {
@@ -49,7 +47,7 @@ pub fn load_config(cli: &Cli) -> anyhow::Result<Config> {
     }
 
     if cli.host.is_some() {
-        config.host = cli.host.clone();
+        config.host.clone_from(&cli.host);
     }
 
     Ok(config)

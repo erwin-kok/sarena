@@ -1,5 +1,5 @@
 use std::{
-    net::{IpAddr, Ipv4Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     os::fd::{AsRawFd, RawFd},
     path::{Path, PathBuf},
 };
@@ -221,7 +221,7 @@ impl Link for NetlinkLink {
         }
     }
 
-    async fn set_addr(&mut self, addr: InterfaceAddress) -> Res<()> {
+    async fn add_addr(&mut self, addr: InterfaceAddress) -> Res<()> {
         let index = self.index;
         if let Some(ns) = &self.netns {
             let netns = Netns::open_path(ns)?;
@@ -231,6 +231,34 @@ impl Link for NetlinkLink {
         } else {
             let handle = default_handle()?;
             link_add_addr_impl(&handle, index, addr).await
+        }
+    }
+
+    async fn replace_addr(&mut self, addr: InterfaceAddress) -> Res<()> {
+        let index = self.index;
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open_path(ns)?;
+            netns
+                .run(
+                    move |handle| async move { link_replace_addr_impl(&handle, index, addr).await },
+                )
+                .await
+        } else {
+            let handle = default_handle()?;
+            link_replace_addr_impl(&handle, index, addr).await
+        }
+    }
+
+    async fn delete_addr(&mut self, addr: InterfaceAddress) -> Res<()> {
+        let index = self.index;
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open_path(ns)?;
+            netns
+                .run(move |handle| async move { link_del_addr_impl(&handle, index, addr).await })
+                .await
+        } else {
+            let handle = default_handle()?;
+            link_del_addr_impl(&handle, index, addr).await
         }
     }
 
@@ -325,6 +353,45 @@ impl Link for NetlinkLink {
                 .await
         } else {
             sysctl_write(&path, &val)
+        }
+    }
+
+    async fn set_accept_local(&mut self, enabled: bool) -> Res<()> {
+        let path = format!("/proc/sys/net/ipv4/conf/{}/accept_local", self.name);
+        let value = if enabled { "1" } else { "0" };
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open_path(ns)?;
+            netns
+                .run(move |_| async move { sysctl_write(&path, value) })
+                .await
+        } else {
+            sysctl_write(&path, value)
+        }
+    }
+
+    async fn set_send_redirects(&mut self, enabled: bool) -> Res<()> {
+        let path = format!("/proc/sys/net/ipv4/conf/{}/send_redirects", self.name);
+        let value = if enabled { "1" } else { "0" };
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open_path(ns)?;
+            netns
+                .run(move |_| async move { sysctl_write(&path, value) })
+                .await
+        } else {
+            sysctl_write(&path, value)
+        }
+    }
+
+    async fn set_arp(&mut self, enabled: bool) -> Res<()> {
+        let index = self.index;
+        if let Some(ns) = &self.netns {
+            let netns = Netns::open_path(ns)?;
+            netns
+                .run(move |handle| async move { link_set_arp_impl(&handle, index, enabled).await })
+                .await
+        } else {
+            let handle = default_handle()?;
+            link_set_arp_impl(&handle, index, enabled).await
         }
     }
 }
@@ -570,6 +637,23 @@ async fn link_set_down_impl(handle: &rtnetlink::Handle, index: u32) -> Res<()> {
         .map_err(InfraError::Netlink)
 }
 
+async fn link_set_arp_impl(handle: &rtnetlink::Handle, index: u32, enabled: bool) -> Res<()> {
+    let mut msg = LinkMessage::default();
+    msg.header.index = index;
+    msg.header.flags = if enabled {
+        LinkFlags::empty()
+    } else {
+        LinkFlags::Noarp
+    };
+    msg.header.change_mask = LinkFlags::Noarp;
+    handle
+        .link()
+        .set(msg)
+        .execute()
+        .await
+        .map_err(InfraError::Netlink)
+}
+
 /// Set the MTU of the link with the given index; called from within an active namespace.
 async fn link_set_mtu_impl(handle: &rtnetlink::Handle, index: u32, mtu: u32) -> Res<()> {
     let mut msg = LinkMessage::default();
@@ -596,20 +680,48 @@ async fn link_set_mac_impl(handle: &rtnetlink::Handle, index: u32, mac: MacAddre
         .map_err(InfraError::Netlink)
 }
 
-/// Set (replacing any existing matching entry) an address on the link with
-/// the given index; called from within an active namespace. IPv6 addresses
-/// are added with `IFA_F_NODAD` -- skipping duplicate address detection,
-/// which would otherwise leave the address `tentative` (and generally
-/// unusable) for a few seconds after being added.
+/// Add a new address on the link with the given index (fails if an
+/// identical entry already exists); called from within an active
+/// namespace. IPv6 addresses are added with `IFA_F_NODAD` -- skipping
+/// duplicate address detection, which would otherwise leave the address
+/// `tentative` (and generally unusable) for a few seconds after being
+/// added.
 async fn link_add_addr_impl(
     handle: &rtnetlink::Handle,
     index: u32,
     addr: InterfaceAddress,
 ) -> Res<()> {
-    let mut request = handle
-        .address()
-        .add(index, addr.ip, addr.prefix_len)
-        .replace();
+    build_add_addr_request(handle, index, addr)
+        .execute()
+        .await
+        .map_err(InfraError::Netlink)
+}
+
+/// Add `addr` to the link with the given index, replacing any existing
+/// entry with the same ip+prefix (equivalent to `ip addr replace`); called
+/// from within an active namespace.
+async fn link_replace_addr_impl(
+    handle: &rtnetlink::Handle,
+    index: u32,
+    addr: InterfaceAddress,
+) -> Res<()> {
+    build_add_addr_request(handle, index, addr)
+        .replace()
+        .execute()
+        .await
+        .map_err(InfraError::Netlink)
+}
+
+/// Build (without executing) an address-add request for `addr` on the link
+/// with the given index, with IPv6 `IFA_F_NODAD` applied -- shared by
+/// `link_add_addr_impl` and `link_replace_addr_impl`, which differ only in
+/// whether `.replace()` is set before executing.
+fn build_add_addr_request(
+    handle: &rtnetlink::Handle,
+    index: u32,
+    addr: InterfaceAddress,
+) -> rtnetlink::AddressAddRequest {
+    let mut request = handle.address().add(index, addr.ip, addr.prefix_len);
     if addr.ip.is_ipv6() {
         let message = request.message_mut();
         message.header.flags |= AddressHeaderFlags::Nodad;
@@ -617,7 +729,32 @@ async fn link_add_addr_impl(
             .attributes
             .push(AddressAttribute::Flags(AddressFlags::Nodad));
     }
-    request.execute().await.map_err(InfraError::Netlink)
+    request
+}
+
+/// Delete an address from the link with the given index; called from within
+/// an active namespace.
+async fn link_del_addr_impl(
+    handle: &rtnetlink::Handle,
+    index: u32,
+    addr: InterfaceAddress,
+) -> Res<()> {
+    let message = match addr.ip {
+        IpAddr::V4(ip) => rtnetlink::AddressMessageBuilder::<Ipv4Addr>::new()
+            .index(index)
+            .address(ip, addr.prefix_len)
+            .build(),
+        IpAddr::V6(ip) => rtnetlink::AddressMessageBuilder::<Ipv6Addr>::new()
+            .index(index)
+            .address(ip, addr.prefix_len)
+            .build(),
+    };
+    handle
+        .address()
+        .del(message)
+        .execute()
+        .await
+        .map_err(InfraError::Netlink)
 }
 
 /// List addresses configured on the link with the given index, optionally

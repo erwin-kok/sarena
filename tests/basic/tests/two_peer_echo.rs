@@ -158,7 +158,7 @@ async fn create_endpoint(
     host.set_up().await.expect("set_up host");
     peer.set_up().await.expect("set_up peer"); // Should we bring up immediately, or when completely configured?
 
-    peer.set_addr(InterfaceAddress::new(IpAddr::V4(peer_ip), 24).expect("build interface address"))
+    peer.add_addr(InterfaceAddress::new(IpAddr::V4(peer_ip), 24).expect("build interface address"))
         .await
         .expect("set_addr peer");
 

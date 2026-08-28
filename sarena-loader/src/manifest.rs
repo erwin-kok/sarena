@@ -48,8 +48,6 @@ pub(crate) const NETDEV_HOOKS: &[HookSpec] = &[
         program_name: "to_netdev",
         required: true,
     },
-    // Example of where XDP acceleration would slot in later:
-    // HookSpec { hook: Hook::Xdp, program_name: "xdp_netdev", required: false },
 ];
 
 pub(crate) const OVERLAY_HOOKS: &[HookSpec] = &[

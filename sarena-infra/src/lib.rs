@@ -101,11 +101,19 @@ pub trait Link {
     async fn rename(&mut self, new_name: &str) -> Res<()>;
     /// Delete this link. Deleting either end of a veth pair deletes both.
     async fn delete(&mut self) -> Res<()>;
-    /// Set this link's address (replacing any existing matching entry).
-    /// Accepts either an IPv4 or an IPv6 network; for IPv6, the address is
-    /// added with `IFA_F_NODAD` (skipping duplicate address detection),
-    /// matching how e.g. veth ends are typically brought up.
-    async fn set_addr(&mut self, addr: InterfaceAddress) -> Res<()>;
+    /// Add a new address to this link (fails if an identical entry already
+    /// exists). Accepts either an IPv4 or an IPv6 network; for IPv6, the
+    /// address is added with `IFA_F_NODAD` (skipping duplicate address
+    /// detection), matching how e.g. veth ends are typically brought up.
+    async fn add_addr(&mut self, addr: InterfaceAddress) -> Res<()>;
+    /// Add `addr` to this link, replacing any existing entry with the same
+    /// ip+prefix (equivalent to `ip addr replace`). Unlike [`Link::add_addr`],
+    /// this does not fail if an identical entry already exists; unlike
+    /// [`Link::delete_addr`], it does not touch other, differently-addressed
+    /// entries already configured on the link.
+    async fn replace_addr(&mut self, addr: InterfaceAddress) -> Res<()>;
+    /// Remove `addr` from this link.
+    async fn delete_addr(&mut self, addr: InterfaceAddress) -> Res<()>;
     /// All addresses currently configured on this link, optionally
     /// filtered to a single address family (`None` returns both).
     async fn addresses(&self, family: Option<AddressFamily>) -> Res<Vec<InterfaceAddress>>;
@@ -140,6 +148,19 @@ pub trait Link {
     ///
     /// Writes `net.ipv4.conf.<link>.rp_filter`.
     async fn set_rp_filter(&mut self, value: u8) -> Res<()>;
+    /// Accept or reject packets with a local source address arriving on
+    /// this link.
+    ///
+    /// Writes `net.ipv4.conf.<link>.accept_local`.
+    async fn set_accept_local(&mut self, enabled: bool) -> Res<()>;
+    /// Enable or disable sending ICMP redirects from this link.
+    ///
+    /// Writes `net.ipv4.conf.<link>.send_redirects`.
+    async fn set_send_redirects(&mut self, enabled: bool) -> Res<()>;
+    /// Enable or disable ARP on this link (`IFF_NOARP`). `enabled = false`
+    /// sets `IFF_NOARP` (no ARP requests are sent or answered for this
+    /// device); `enabled = true` clears it, the kernel default.
+    async fn set_arp(&mut self, enabled: bool) -> Res<()>;
 }
 
 #[derive(Debug, Clone)]

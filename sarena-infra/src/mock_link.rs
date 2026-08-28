@@ -26,12 +26,17 @@ pub struct MockLink {
     pub mtu_calls: Vec<u32>,
     pub mac_calls: Vec<MacAddress>,
     pub addr_calls: Vec<InterfaceAddress>,
+    pub replace_addr_calls: Vec<InterfaceAddress>,
+    pub delete_addr_calls: Vec<InterfaceAddress>,
     pub gateway_calls: Vec<Ipv4Addr>,
     pub route_calls: Vec<Route>,
     pub ipv4_forwarding_calls: Vec<bool>,
     pub ipv6_forwarding_calls: Vec<bool>,
     pub ipv6_disable_calls: Vec<bool>,
     pub rp_filter_calls: Vec<u8>,
+    pub accept_local_calls: Vec<bool>,
+    pub send_redirects_calls: Vec<bool>,
+    pub arp_calls: Vec<bool>,
     pub rename_calls: Vec<String>,
     pub setns_calls: Vec<PathBuf>,
     pub delete_calls: u32,
@@ -94,8 +99,23 @@ impl Link for MockLink {
         Ok(())
     }
 
-    async fn set_addr(&mut self, addr: InterfaceAddress) -> Res<()> {
+    async fn add_addr(&mut self, addr: InterfaceAddress) -> Res<()> {
         self.addr_calls.push(addr);
+        Ok(())
+    }
+
+    async fn replace_addr(&mut self, addr: InterfaceAddress) -> Res<()> {
+        self.replace_addr_calls.push(addr);
+        self.addr_calls
+            .retain(|a| !(a.ip == addr.ip && a.prefix_len == addr.prefix_len));
+        self.addr_calls.push(addr);
+        Ok(())
+    }
+
+    async fn delete_addr(&mut self, addr: InterfaceAddress) -> Res<()> {
+        self.delete_addr_calls.push(addr);
+        self.addr_calls
+            .retain(|a| !(a.ip == addr.ip && a.prefix_len == addr.prefix_len));
         Ok(())
     }
 
@@ -135,6 +155,21 @@ impl Link for MockLink {
 
     async fn set_rp_filter(&mut self, value: u8) -> Res<()> {
         self.rp_filter_calls.push(value);
+        Ok(())
+    }
+
+    async fn set_accept_local(&mut self, enabled: bool) -> Res<()> {
+        self.accept_local_calls.push(enabled);
+        Ok(())
+    }
+
+    async fn set_send_redirects(&mut self, enabled: bool) -> Res<()> {
+        self.send_redirects_calls.push(enabled);
+        Ok(())
+    }
+
+    async fn set_arp(&mut self, enabled: bool) -> Res<()> {
+        self.arp_calls.push(enabled);
         Ok(())
     }
 }

@@ -480,9 +480,9 @@ dependencies = [
 
 [[package]]
 name = "cpufeatures"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
+checksum = "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
 dependencies = [
  "libc",
 ]
@@ -812,9 +812,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "1.11.0"
+version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d22053281f852e11534f5198498373cbb59295120a20771d90f7ed1897490a72"
+checksum = "27b501faa50e7a26c3d3560ca625132f4078a17771f4810baf70475ae48cbe43"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -1571,10 +1571,8 @@ dependencies = [
  "http",
  "hyper",
  "hyper-util",
- "ipnet",
  "sarena-api-types-v1",
- "sarena-infra",
- "sarena-loader",
+ "sarena-control-plane",
  "sarena-services-daemon",
  "sarena-services-endpoint",
  "sarena-services-ipam",
@@ -1616,7 +1614,6 @@ dependencies = [
  "clap_complete",
  "config",
  "sarena-api-client",
- "sarena-api-types-v1",
  "sarena-utils",
  "serde",
  "tokio",
@@ -1673,14 +1670,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "sarena-control-plane"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "ipnet",
+ "sarena-infra",
+ "sarena-loader",
+ "sarena-services-daemon",
+ "sarena-services-endpoint",
+ "sarena-services-ipam",
+ "serde",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "sarena-daemon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "ipnet",
  "sarena-api-server",
- "sarena-infra",
- "sarena-loader",
- "sarena-shared",
+ "sarena-control-plane",
  "sarena-utils",
  "tokio",
  "tracing",

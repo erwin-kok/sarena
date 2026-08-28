@@ -11,13 +11,6 @@ use crate::{
     pin::PinRoot,
 };
 
-/// Returned from a successful `add_endpoint`. Map paths, not map
-/// handles or map content - the caller opens these itself with
-/// whatever map wrapper it likes. Only *per-endpoint* maps are
-/// reported here (see `endpoint::map_rename`) - global maps (see
-/// `EndpointKind::global_map_names`) resolve to the same path for every
-/// endpoint of that kind, so this crate has no per-endpoint bookkeeping
-/// reason to track them.
 #[derive(Debug, Default)]
 pub struct EndpointHandle {
     pub map_paths: HashMap<String, PathBuf>,

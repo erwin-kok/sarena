@@ -1,4 +1,3 @@
-use anyhow::Result;
 use clap::{Args, CommandFactory as _};
 use clap_complete::{generate, shells};
 
@@ -10,7 +9,7 @@ pub struct CompletionArgs {
     pub shell: String,
 }
 
-pub fn run(args: &CompletionArgs) -> Result<()> {
+pub fn run(args: &CompletionArgs) {
     let mut cmd = Cli::command();
     match args.shell.as_str() {
         "bash" => generate(shells::Bash, &mut cmd, "sarena-cli", &mut std::io::stdout()),
@@ -18,5 +17,4 @@ pub fn run(args: &CompletionArgs) -> Result<()> {
         "fish" => generate(shells::Fish, &mut cmd, "sarena-cli", &mut std::io::stdout()),
         _ => unreachable!("value_parser restricts shell to bash/zsh/fish"),
     }
-    Ok(())
 }

@@ -1,5 +1,5 @@
 use aya_ebpf::programs::TcContext;
-use aya_log_ebpf::{debug, info};
+use aya_log_ebpf::debug;
 use network_types::{arp::ArpHdr, eth::EthHdr};
 use sarena_ebpf_common::{bpf_memcmp, ptr_at};
 use sarena_shared::EndpointConfig;
@@ -29,7 +29,7 @@ pub fn process_arp(ctx: &TcContext, config: &EndpointConfig) -> Res<EbpfReturn> 
         return Ok(EbpfReturn::Next);
     }
 
-    info!(
+    debug!(
         &ctx,
         "arp: who-has {:i}? (default) replying with {:mac}", tpa, config.mac
     );

@@ -1,0 +1,30 @@
+[package]
+name = "sarena-control-plane"
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+test-util = []
+
+[dependencies]
+sarena-infra = { path = "../sarena-infra" }
+sarena-loader = { path = "../sarena-loader" }
+sarena-services-daemon = { path = "../sarena-services/daemon" }
+sarena-services-endpoint = { path = "../sarena-services/endpoint" }
+sarena-services-ipam = { path = "../sarena-services/ipam" }
+
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+ipnet = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
+tracing = { workspace = true }
+uuid = { workspace = true }

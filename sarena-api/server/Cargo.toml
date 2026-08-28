@@ -12,8 +12,7 @@ workspace = true
 
 [dependencies]
 sarena-api-types-v1 = { path = "../../sarena-api/types/v1" }
-sarena-infra = { path = "../../sarena-infra" }
-sarena-loader = { path = "../../sarena-loader" }
+sarena-control-plane = { path = "../../sarena-control-plane" }
 sarena-services-daemon = { path = "../../sarena-services/daemon" }
 sarena-services-endpoint = { path = "../../sarena-services/endpoint" }
 sarena-services-ipam = { path = "../../sarena-services/ipam" }
@@ -23,7 +22,6 @@ axum = { workspace = true }
 http = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
-ipnet = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
 tower = { workspace = true }

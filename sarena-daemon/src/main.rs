@@ -1,4 +1,8 @@
+use std::net::{IpAddr, Ipv4Addr};
+
+use ipnet::{IpNet, Ipv4Net};
 use sarena_api_server::ApiServer;
+use sarena_control_plane::{ControlPlane, ControlPlaneConfig};
 use sarena_utils::{LogFormat, LoggingConfig, logging};
 use tokio::signal::unix::{SignalKind, signal};
 use tracing::info;
@@ -18,7 +22,19 @@ async fn main() -> anyhow::Result<()> {
 
     info!("starting sarena-daemon, socket = {socket_path}");
 
-    ApiServer::new().start(&socket_path, TCP_PORT).await?;
+    let config = ControlPlaneConfig {
+        gateway_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5)),
+        internal_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 7)),
+        ipam_ipv4_subnet: Some(IpNet::V4(Ipv4Net::new(Ipv4Addr::new(192, 168, 10, 0), 24)?)),
+        ipam_ipv6_subnet: None,
+    };
+
+    let control_plane = ControlPlane::new(config);
+    let state = control_plane.start().await?;
+
+    ApiServer::new()
+        .start(&socket_path, TCP_PORT, state)
+        .await?;
 
     let mut sigterm = signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
 
