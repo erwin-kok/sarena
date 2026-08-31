@@ -19,7 +19,7 @@ static ENDPOINT_CONFIG: Array<EndpointConfig> = Array::with_max_entries(1, 0);
 
 #[inline(always)]
 pub fn lookup_ipv4_endpoint(ip: Ipv4Key) -> Option<*const EndpointInfo> {
-    LXC_MAP.get_ptr(ip)
+    LXC_MAP.get_ptr(&ip)
 }
 
 #[inline(always)]

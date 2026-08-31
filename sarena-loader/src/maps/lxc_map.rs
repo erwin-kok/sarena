@@ -38,7 +38,7 @@ impl LxcMap {
     /// Insert or overwrite the entry for `ip`.
     pub fn upsert_endpoint(&mut self, ip: Ipv4Addr, info: EndpointInfo) -> Res<()> {
         self.map
-            .insert(Ipv4Key::from_addr(ip), info, 0)
+            .insert(&Ipv4Key::from_addr(ip), &info, 0)
             .map_err(|e| access(&e))
     }
 

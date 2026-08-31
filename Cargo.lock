@@ -157,7 +157,7 @@ dependencies = [
 [[package]]
 name = "aya"
 version = "0.14.0"
-source = "git+https://github.com/erwin-kok/aya?branch=development#3fd63edeb105ecb6902ea890189d8697dd8db95a"
+source = "git+https://github.com/erwin-kok/aya?branch=development#8c42a18ecc3963c550b79b0941a754ab1b6b5ba6"
 dependencies = [
  "assert_matches",
  "aya-obj",
@@ -174,7 +174,7 @@ dependencies = [
 [[package]]
 name = "aya-build"
 version = "0.2.0"
-source = "git+https://github.com/erwin-kok/aya?branch=development#3fd63edeb105ecb6902ea890189d8697dd8db95a"
+source = "git+https://github.com/erwin-kok/aya?branch=development#8c42a18ecc3963c550b79b0941a754ab1b6b5ba6"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -185,7 +185,7 @@ dependencies = [
 [[package]]
 name = "aya-ebpf"
 version = "0.2.1"
-source = "git+https://github.com/erwin-kok/aya?branch=development#3fd63edeb105ecb6902ea890189d8697dd8db95a"
+source = "git+https://github.com/erwin-kok/aya?branch=development#8c42a18ecc3963c550b79b0941a754ab1b6b5ba6"
 dependencies = [
  "aya-build",
  "aya-ebpf-bindings",
@@ -197,7 +197,7 @@ dependencies = [
 [[package]]
 name = "aya-ebpf-bindings"
 version = "0.2.0"
-source = "git+https://github.com/erwin-kok/aya?branch=development#3fd63edeb105ecb6902ea890189d8697dd8db95a"
+source = "git+https://github.com/erwin-kok/aya?branch=development#8c42a18ecc3963c550b79b0941a754ab1b6b5ba6"
 dependencies = [
  "aya-build",
  "aya-ebpf-cty",
@@ -206,7 +206,7 @@ dependencies = [
 [[package]]
 name = "aya-ebpf-cty"
 version = "0.3.0"
-source = "git+https://github.com/erwin-kok/aya?branch=development#3fd63edeb105ecb6902ea890189d8697dd8db95a"
+source = "git+https://github.com/erwin-kok/aya?branch=development#8c42a18ecc3963c550b79b0941a754ab1b6b5ba6"
 dependencies = [
  "aya-build",
 ]
@@ -214,18 +214,17 @@ dependencies = [
 [[package]]
 name = "aya-ebpf-macros"
 version = "0.2.0"
-source = "git+https://github.com/erwin-kok/aya?branch=development#3fd63edeb105ecb6902ea890189d8697dd8db95a"
+source = "git+https://github.com/erwin-kok/aya?branch=development#8c42a18ecc3963c550b79b0941a754ab1b6b5ba6"
 dependencies = [
  "proc-macro2",
- "proc-macro2-diagnostics",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.4",
 ]
 
 [[package]]
 name = "aya-log"
 version = "0.3.0"
-source = "git+https://github.com/erwin-kok/aya?branch=development#3fd63edeb105ecb6902ea890189d8697dd8db95a"
+source = "git+https://github.com/erwin-kok/aya?branch=development#8c42a18ecc3963c550b79b0941a754ab1b6b5ba6"
 dependencies = [
  "aya",
  "aya-log-common",
@@ -236,7 +235,7 @@ dependencies = [
 [[package]]
 name = "aya-log-common"
 version = "0.2.0"
-source = "git+https://github.com/erwin-kok/aya?branch=development#3fd63edeb105ecb6902ea890189d8697dd8db95a"
+source = "git+https://github.com/erwin-kok/aya?branch=development#8c42a18ecc3963c550b79b0941a754ab1b6b5ba6"
 dependencies = [
  "num_enum",
 ]
@@ -244,7 +243,7 @@ dependencies = [
 [[package]]
 name = "aya-log-ebpf"
 version = "0.2.0"
-source = "git+https://github.com/erwin-kok/aya?branch=development#3fd63edeb105ecb6902ea890189d8697dd8db95a"
+source = "git+https://github.com/erwin-kok/aya?branch=development#8c42a18ecc3963c550b79b0941a754ab1b6b5ba6"
 dependencies = [
  "aya-ebpf",
  "aya-log-common",
@@ -254,19 +253,19 @@ dependencies = [
 [[package]]
 name = "aya-log-ebpf-macros"
 version = "0.2.0"
-source = "git+https://github.com/erwin-kok/aya?branch=development#3fd63edeb105ecb6902ea890189d8697dd8db95a"
+source = "git+https://github.com/erwin-kok/aya?branch=development#8c42a18ecc3963c550b79b0941a754ab1b6b5ba6"
 dependencies = [
  "aya-log-common",
  "aya-log-parser",
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.4",
 ]
 
 [[package]]
 name = "aya-log-parser"
 version = "0.2.0"
-source = "git+https://github.com/erwin-kok/aya?branch=development#3fd63edeb105ecb6902ea890189d8697dd8db95a"
+source = "git+https://github.com/erwin-kok/aya?branch=development#8c42a18ecc3963c550b79b0941a754ab1b6b5ba6"
 dependencies = [
  "aya-log-common",
 ]
@@ -274,7 +273,7 @@ dependencies = [
 [[package]]
 name = "aya-obj"
 version = "0.3.0"
-source = "git+https://github.com/erwin-kok/aya?branch=development#3fd63edeb105ecb6902ea890189d8697dd8db95a"
+source = "git+https://github.com/erwin-kok/aya?branch=development#8c42a18ecc3963c550b79b0941a754ab1b6b5ba6"
 dependencies = [
  "bytes",
  "log",

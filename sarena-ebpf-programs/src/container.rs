@@ -10,7 +10,7 @@ use sarena_shared::{EndpointConfig, Ipv4Key, Ipv4KeyExt as _};
 use crate::{
     arp::process_arp,
     endpoint::{get_endpoint_config, lookup_ipv4_endpoint},
-    error::{EbpfError, EbpfReturn, Res},
+    error::{EbpfReturn, Res},
 };
 
 #[inline(always)]

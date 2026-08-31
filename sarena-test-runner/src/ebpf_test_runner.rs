@@ -168,7 +168,7 @@ fn run_test(test_bpf: &mut Ebpf) -> Res<()> {
         .take_map(map_name)
         .ok_or_else(|| TestRunnerError::MapNotFound(map_name.to_owned()))?;
     let mut test_suite_status_code: Array<_, u32> = Array::try_from(map)?;
-    test_suite_status_code.set(0, 0, 0)?;
+    test_suite_status_code.set(0, &0, 0)?;
 
     let map_name = "scapy_assert_map";
     let map = test_bpf
@@ -225,11 +225,11 @@ fn sub_test(
     let ctx = vec![0u8; CTX_SIZE];
 
     // Clear test_suite_result
-    test_suite_result.set(0, [0u8; TEST_RESULT_MAP_SIZE], 0)?;
+    test_suite_result.set(0, &[0u8; TEST_RESULT_MAP_SIZE], 0)?;
 
     // Clear assert map
-    scapy_assert_map_count.set(0, 0u32, 0)?;
-    test_suite_status_code.set(0, 0u32, 0)?;
+    scapy_assert_map_count.set(0, &0u32, 0)?;
+    test_suite_status_code.set(0, &0u32, 0)?;
 
     let (data, ctx) = if let Some(arrange_prog) = arrange_prog {
         let (ret, data, ctx) = run_bpf_program(arrange_prog, &data, &ctx)?;
@@ -246,7 +246,7 @@ fn sub_test(
         if test_error(ret) {
             panic!("[{name}] error while running act prog: status code ({ret})");
         }
-        test_suite_status_code.set(0, ret, 0)?;
+        test_suite_status_code.set(0, &ret, 0)?;
 
         (data, ctx)
     } else {

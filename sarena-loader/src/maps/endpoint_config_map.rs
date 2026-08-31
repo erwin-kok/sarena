@@ -41,7 +41,7 @@ impl EndpointConfigMap {
 
     /// Write this endpoint's configuration.
     pub fn set(&mut self, config: EndpointConfig) -> Res<()> {
-        self.map.set(0, config, 0).map_err(|e| access(&e))
+        self.map.set(0, &config, 0).map_err(|e| access(&e))
     }
 
     /// Read this endpoint's configuration back.

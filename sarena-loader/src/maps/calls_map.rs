@@ -37,7 +37,7 @@ impl CallsMap {
     }
 
     pub fn set(&mut self, index: u32, value: u32) -> Res<()> {
-        self.map.set(index, value, 0).map_err(|e| access(&e))
+        self.map.set(index, &value, 0).map_err(|e| access(&e))
     }
 
     pub fn get(&self, index: u32) -> Res<u32> {
