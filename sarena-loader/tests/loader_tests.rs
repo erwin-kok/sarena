@@ -79,12 +79,12 @@ async fn load_multiple_links() {
 
             assert!(
                 host1
-                    .has_tcx_link("from_host", TcAttachType::Ingress)
+                    .has_tcx_link("to_host", TcAttachType::Ingress)
                     .expect("expect program")
             );
             assert!(
                 host1
-                    .has_tcx_link("to_host", TcAttachType::Egress)
+                    .has_tcx_link("from_host", TcAttachType::Egress)
                     .expect("expect program")
             );
 

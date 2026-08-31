@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use crate::endpoint::EndpointKind;
+use crate::{
+    endpoint::EndpointKind,
+    maps::{EndpointMap, GlobalMap},
+};
 
 /// Resolves every pin path this loader ever touches, all under one
 /// root (e.g. `/sys/fs/bpf/sarena`). Pure and deterministic on
@@ -40,25 +43,18 @@ impl PinRoot {
         self.links_dir().join(pin_subpath(kind, link))
     }
 
-    pub fn per_endpoint_map_dir(&self, map_name: &str, link: &str) -> PathBuf {
-        self.globals_dir().join(format!("{map_name}_{link}"))
+    pub fn per_endpoint_map_dir(&self, map: EndpointMap, link: &str) -> PathBuf {
+        self.globals_dir()
+            .join(format!("{}_{link}", map.wire_name()))
     }
 
-    pub fn global_map_dir(&self, map_name: &str) -> PathBuf {
-        self.globals_dir().join(map_name)
+    pub fn global_map_dir(&self, map: GlobalMap) -> PathBuf {
+        self.globals_dir().join(map.wire_name())
     }
 
     pub fn parse_pin_subpath(path: &Path) -> Option<(EndpointKind, String)> {
         let mut components = path.components();
-        let kind_str = components.next()?.as_os_str().to_str()?;
-        let kind = match kind_str {
-            "container" => EndpointKind::Container,
-            "host" => EndpointKind::Host,
-            "netdev" => EndpointKind::NetDev,
-            "overlay" => EndpointKind::Overlay,
-            "wireguard" => EndpointKind::Wireguard,
-            _ => return None,
-        };
+        let kind = EndpointKind::from_kind_str(components.next()?.as_os_str().to_str()?)?;
         let link = components.next()?.as_os_str().to_str()?.to_string();
         Some((kind, link))
     }
@@ -115,17 +111,24 @@ mod tests {
     fn per_endpoint_map_paths_do_not_collide() {
         let root = PinRoot::new("/sys/fs/bpf/test");
         assert_ne!(
-            root.per_endpoint_map_dir("sarena_policy", "lxc00001"),
-            root.per_endpoint_map_dir("sarena_policy", "lxc00002")
+            root.per_endpoint_map_dir(EndpointMap::CallsMap, "lxc00001"),
+            root.per_endpoint_map_dir(EndpointMap::CallsMap, "lxc00002")
         );
     }
 
     #[test]
     fn global_map_path_does_not_collide_with_per_endpoint_paths() {
         let root = PinRoot::new("/sys/fs/bpf/test");
+        // A per-endpoint map's pin carries a `_<link>` suffix, so it can
+        // never alias a bare global-map pin even for the same wire name.
         assert_ne!(
-            root.global_map_dir("conntrack_tcp"),
-            root.per_endpoint_map_dir("conntrack_tcp", "lxc00001")
+            root.global_map_dir(GlobalMap::LxcMap),
+            root.per_endpoint_map_dir(EndpointMap::CallsMap, "lxc00001")
+        );
+        assert!(
+            root.per_endpoint_map_dir(EndpointMap::CallsMap, "lxc00001")
+                .to_string_lossy()
+                .contains("calls_map_lxc00001")
         );
     }
 }

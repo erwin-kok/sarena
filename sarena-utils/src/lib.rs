@@ -1,4 +1,5 @@
 pub mod logging;
+pub mod version;
 
 use serde::{Deserialize, Serialize};
 
@@ -32,3 +33,4 @@ pub struct LoggingConfig {
 }
 
 pub use logging::{init_logging, shutdown_logging};
+pub use version::version;

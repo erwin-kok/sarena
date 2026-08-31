@@ -19,6 +19,7 @@ sarena-loader = { path = "../sarena-loader" }
 sarena-services-daemon = { path = "../sarena-services/daemon" }
 sarena-services-endpoint = { path = "../sarena-services/endpoint" }
 sarena-services-ipam = { path = "../sarena-services/ipam" }
+sarena-shared = { path = "../sarena-shared" }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }

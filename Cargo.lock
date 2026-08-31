@@ -1684,6 +1684,7 @@ dependencies = [
  "sarena-services-daemon",
  "sarena-services-endpoint",
  "sarena-services-ipam",
+ "sarena-shared",
  "serde",
  "thiserror 2.0.20",
  "tokio",
@@ -1781,6 +1782,7 @@ dependencies = [
  "log",
  "nix 0.31.3",
  "sarena-infra",
+ "sarena-shared",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -1792,6 +1794,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "sarena-api-types-v1",
+ "sarena-utils",
  "thiserror 2.0.20",
  "tracing",
 ]

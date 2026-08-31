@@ -1,3 +1,5 @@
+use crate::maps::{EndpointMap, GlobalMap};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hook {
     TcxIngress,
@@ -26,12 +28,12 @@ pub(crate) const CONTAINER_HOOKS: &[HookSpec] = &[
 
 pub(crate) const HOST_HOOKS: &[HookSpec] = &[
     HookSpec {
-        hook: Hook::TcxIngress,
+        hook: Hook::TcxEgress,
         program_name: "from_host",
         required: true,
     },
     HookSpec {
-        hook: Hook::TcxEgress,
+        hook: Hook::TcxIngress,
         program_name: "to_host",
         required: true,
     },
@@ -76,14 +78,14 @@ pub(crate) const WIREGUARD_HOOKS: &[HookSpec] = &[
     },
 ];
 
-pub(crate) const CONTAINER_PER_ENDPOINT_MAPS: &[&str] = &["calls_map", "endpoint_config"];
-pub(crate) const HOST_PER_ENDPOINT_MAPS: &[&str] = &["calls_map", "endpoint_config"];
-pub(crate) const NETDEV_PER_ENDPOINT_MAPS: &[&str] = &["calls_map"];
-pub(crate) const OVERLAY_PER_ENDPOINT_MAPS: &[&str] = &["calls_map"];
-pub(crate) const WIREGUARD_PER_ENDPOINT_MAPS: &[&str] = &["calls_map"];
+pub(crate) const CONTAINER_PER_ENDPOINT_MAPS: &[EndpointMap] =
+    &[EndpointMap::CallsMap, EndpointMap::EndpointConfigMap];
+pub(crate) const HOST_PER_ENDPOINT_MAPS: &[EndpointMap] =
+    &[EndpointMap::CallsMap, EndpointMap::EndpointConfigMap];
+pub(crate) const NETDEV_PER_ENDPOINT_MAPS: &[EndpointMap] = &[EndpointMap::CallsMap];
+pub(crate) const OVERLAY_PER_ENDPOINT_MAPS: &[EndpointMap] = &[EndpointMap::CallsMap];
+pub(crate) const WIREGUARD_PER_ENDPOINT_MAPS: &[EndpointMap] = &[EndpointMap::CallsMap];
 
-pub(crate) const CONTAINER_GLOBAL_MAPS: &[&str] = &["lxc_map"];
-pub(crate) const HOST_GLOBAL_MAPS: &[&str] = &[];
-pub(crate) const NETDEV_GLOBAL_MAPS: &[&str] = &[];
-pub(crate) const OVERLAY_GLOBAL_MAPS: &[&str] = &[];
-pub(crate) const WIREGUARD_GLOBAL_MAPS: &[&str] = &[];
+pub(crate) const GLOBAL_MAPS: &[GlobalMap] = &[
+    GlobalMap::LxcMap,
+];

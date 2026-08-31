@@ -28,6 +28,23 @@
             "-Z",
             "build-std=core",
             "--message-format=json"
-        ]
+        ],
+
+        // Same rustfmt.toml applies here; keep auto-imports in its shape.
+        "rust-analyzer.imports.granularity.group": "crate",
+        "rust-analyzer.imports.granularity.enforce": true,
+        "rust-analyzer.imports.prefix": "crate",
+
+        // Format on save via rust-analyzer/rustfmt.
+        "[rust]": {
+            "editor.defaultFormatter": "rust-lang.rust-analyzer",
+            "editor.formatOnSave": true
+        },
+        "editor.rulers": [100],
+
+        "files.watcherExclude": {
+            "**/target/**": true,
+            "**/target-ebpf/**": true
+        }
     }
 }

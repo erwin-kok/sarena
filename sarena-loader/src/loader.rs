@@ -7,18 +7,14 @@ use crate::{
     backend::BpfBackend,
     endpoint::EndpointKind,
     error::{HookFailure, LoaderError, Res},
-    manifest::HookSpec,
+    manifest::{GLOBAL_MAPS, HookSpec},
     pin::PinRoot,
 };
-
-#[derive(Debug, Default)]
-pub struct EndpointHandle {
-    pub map_paths: HashMap<String, PathBuf>,
-}
 
 pub struct Loader<B: BpfBackend> {
     backend: B,
     pins: PinRoot,
+    globals_holder: Option<B::Instance>,
 }
 
 impl<B: BpfBackend> Loader<B> {
@@ -26,18 +22,27 @@ impl<B: BpfBackend> Loader<B> {
         Self {
             backend,
             pins: PinRoot::new(pin_root),
+            globals_holder: None,
         }
     }
 
-    pub fn add_endpoint(&mut self, kind: EndpointKind, link: &str) -> Res<EndpointHandle> {
+    pub fn load_global_maps(&mut self) -> Res<()> {
+        let pins = self.global_map_pins();
+        self.globals_holder = Some(self.backend.load_global_maps(&pins)?);
+        Ok(())
+    }
+
+    pub fn add_endpoint(&mut self, kind: EndpointKind, link: &str) -> Res<()> {
         let resolved = self.backend.resolve_link(link)?;
-        let per_endpoint_maps = kind.map_rename(&self.pins, link);
-        let mut maps = per_endpoint_maps.clone();
-        maps.extend(
-            kind.global_map_names()
-                .iter()
-                .map(|name| (name.to_string(), self.pins.global_map_dir(name))),
-        );
+
+        let mut maps = self.global_map_pins();
+        for &map in kind.per_endpoint_map_names() {
+            maps.insert(
+                map.wire_name().to_string(),
+                self.pins.per_endpoint_map_dir(map, link),
+            );
+        }
+
         let mut instance = self.backend.load_instance(link, &maps)?;
         let mut failures = Vec::new();
         let link_dir = self.pins.endpoint_link_dir(kind, link);
@@ -70,9 +75,7 @@ impl<B: BpfBackend> Loader<B> {
             return Err(LoaderError::Partial(failures));
         }
 
-        Ok(EndpointHandle {
-            map_paths: per_endpoint_maps,
-        })
+        Ok(())
     }
 
     pub fn remove_endpoint(&mut self, kind: EndpointKind, link: &str) -> Res<()> {
@@ -81,8 +84,8 @@ impl<B: BpfBackend> Loader<B> {
         self.backend
             .remove_pin_dir(&self.pins.endpoint_link_dir(kind, link))?;
 
-        for name in kind.per_endpoint_map_names() {
-            let path = self.pins.per_endpoint_map_dir(name, link);
+        for &map in kind.per_endpoint_map_names() {
+            let path = self.pins.per_endpoint_map_dir(map, link);
             self.backend.unpin_map(&path)?;
         }
 
@@ -146,7 +149,16 @@ impl<B: BpfBackend> Loader<B> {
         self.backend.stop_all_logging();
         self.backend.remove_pin_dir(&self.pins.links_dir())?;
         self.backend.remove_pin_dir(&self.pins.globals_dir())?;
+        // The pins are gone; drop the instance that was holding the maps.
+        self.globals_holder = None;
         Ok(())
+    }
+
+    fn global_map_pins(&self) -> HashMap<String, PathBuf> {
+        GLOBAL_MAPS
+            .iter()
+            .map(|&m| (m.wire_name().to_string(), self.pins.global_map_dir(m)))
+            .collect()
     }
 }
 
@@ -170,15 +182,25 @@ mod tests {
         let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
         let l = link(1);
 
-        let handle = loader.add_endpoint(EndpointKind::Container, &l).unwrap();
+        loader.add_endpoint(EndpointKind::Container, &l).unwrap();
         assert_eq!(
             loader.list_active_endpoints().unwrap(),
             vec![(EndpointKind::Container, l.clone())]
         );
 
-        // CONTAINER_PER_ENDPOINT_MAPS currently declares one map. If
-        // that list changes, update this count.
-        assert_eq!(handle.map_paths.len(), 2);
+        // add_endpoint loads the object with pin paths for both the
+        // per-endpoint maps (calls_map, endpoint_config) and the global
+        // maps (lxc_map, conntrack_tcp_buffer, conntrack_any_buffer).
+        let loaded_maps = loader
+            .backend
+            .calls
+            .iter()
+            .find_map(|c| match c {
+                Call::LoadInstance(maps) => Some(maps),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(loaded_maps.len(), 3);
 
         loader.remove_endpoint(EndpointKind::Container, &l).unwrap();
         assert_eq!(loader.list_active_endpoints().unwrap(), vec![]);
@@ -272,17 +294,56 @@ mod tests {
     }
 
     #[test]
-    fn endpoint_handle_reports_only_per_endpoint_map_paths() {
+    fn per_endpoint_maps_pin_with_link_suffix_globals_with_bare_names() {
         let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
-        let handle = loader
-            .add_endpoint(EndpointKind::Container, &link(1))
-            .unwrap();
+        let l = link(1);
+        loader.add_endpoint(EndpointKind::Container, &l).unwrap();
 
-        assert!(handle.map_paths.contains_key("calls_map"));
+        let loaded_maps: Vec<String> = loader
+            .backend
+            .calls
+            .iter()
+            .find_map(|c| match c {
+                Call::LoadInstance(maps) => Some(maps),
+                _ => None,
+            })
+            .unwrap()
+            .iter()
+            .map(|(_, path)| path.to_string_lossy().into_owned())
+            .collect();
+
+        // per-endpoint maps carry the `_<link>` suffix in their pin path...
         assert!(
-            !handle.map_paths.contains_key("shared_map"),
-            "global maps aren't this crate's bookkeeping to report"
+            loaded_maps
+                .iter()
+                .any(|p| p.ends_with(&format!("calls_map_{l}")))
         );
+        // ...global maps do not.
+        assert!(loaded_maps.iter().any(|p| p.ends_with("globals/lxc_map")));
+    }
+
+    #[test]
+    fn load_global_maps_pins_every_global_map_once_up_front() {
+        let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        loader.load_global_maps().unwrap();
+
+        let pinned: Vec<String> = loader
+            .backend
+            .calls
+            .iter()
+            .find_map(|c| match c {
+                Call::LoadGlobalMaps(maps) => Some(maps),
+                _ => None,
+            })
+            .unwrap()
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect();
+
+        assert_eq!(pinned.len(), 1);
+        for name in ["lxc_map"] {
+            assert!(pinned.iter().any(|n| n == name), "missing {name}");
+        }
     }
 
     #[test]

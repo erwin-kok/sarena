@@ -10,6 +10,7 @@ pub trait BpfBackend {
     type LinkType;
 
     fn resolve_link(&mut self, link: &str) -> Res<Self::LinkType>;
+    fn load_global_maps(&mut self, maps: &HashMap<String, PathBuf>) -> Res<Self::Instance>;
     fn load_instance(&mut self, link: &str, maps: &HashMap<String, PathBuf>)
     -> Res<Self::Instance>;
     fn ensure_attached(

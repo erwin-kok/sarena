@@ -17,6 +17,7 @@ test = []
 
 [dependencies]
 sarena-infra = { path = "../sarena-infra", features = ["test"] }
+sarena-shared = { path = "../sarena-shared" }
 
 aya = { workspace = true }
 aya-log = { workspace = true }

@@ -9,13 +9,13 @@
     // cross-compiled to `bpfel-unknown-none` via `cargo xtask build-ebpf`
     // (see `just build-ebpf`), not on the host target.
     //
-    // Plain `cargo check` (no --workspace) respects `default-members` in
+    // Plain `cargo clippy` (no --workspace) respects `default-members` in
     // the root Cargo.toml, which already excludes both eBPF crates — same
-    // as `just check`. Overriding flycheck to use that avoids the bogus
-    // diagnostic.
+    // as `just check` / `just clippy`. Overriding flycheck to use clippy
+    // (rather than plain check) surfaces lint diagnostics inline too.
     "rust-analyzer.check.overrideCommand": [
         "cargo",
-        "check",
+        "clippy",
         "--all-features",
         "--message-format=json"
     ],
@@ -26,5 +26,41 @@
     // (and other feature-gated test-only code, e.g. sarena-infra/sarena-loader's
     // "test" feature) is behind non-default features, so without this it's
     // treated as dead cfg'd-out code and none of it resolves.
-    "rust-analyzer.cargo.features": "all"
+    "rust-analyzer.cargo.features": "all",
+
+    // sarena-test-scapy's build.rs shells out to `python3 scapy/...`; the
+    // scapy module only exists in ./scapyenv. Prepend it to PATH so RA's
+    // flycheck build scripts find it even when VS Code wasn't launched
+    // from a shell with the venv activated.
+    "rust-analyzer.cargo.extraEnv": {
+        "PATH": "${workspaceFolder}/scapyenv/bin:${env:PATH}"
+    },
+
+    // Insert auto-imports the way rustfmt.toml (imports_granularity="Crate",
+    // group_imports="StdExternalCrate") will format them, so adding a `use`
+    // doesn't churn on the next save.
+    "rust-analyzer.imports.granularity.group": "crate",
+    "rust-analyzer.imports.granularity.enforce": true,
+    "rust-analyzer.imports.prefix": "crate",
+
+    // Format Rust files on save via rust-analyzer (which shells out to
+    // rustfmt with the crate's edition/rustfmt.toml applied).
+    "[rust]": {
+        "editor.defaultFormatter": "rust-lang.rust-analyzer",
+        "editor.formatOnSave": true
+    },
+    "editor.rulers": [
+        100
+    ],
+
+    // Keep the editor from indexing build output.
+    "files.watcherExclude": {
+        "**/target/**": true,
+        "**/target-ebpf/**": true
+    },
+    "search.exclude": {
+        "**/target": true,
+        "**/target-ebpf": true,
+        "**/Cargo.lock": true
+    }
 }

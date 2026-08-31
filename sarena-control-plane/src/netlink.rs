@@ -5,8 +5,8 @@ use sarena_infra::{
 
 use crate::{ControlPlaneError, Res};
 
-const SARENA_HOST: &str = "sarena_host";
-const SARENA_NET: &str = "sarena_net";
+pub const SARENA_HOST: &str = "sarena_host";
+pub const SARENA_NET: &str = "sarena_net";
 
 pub async fn setup_host_device(
     provisioner: &mut NetlinkNetworkProvisioner,

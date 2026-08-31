@@ -1,9 +1,16 @@
-use std::{fs, sync::Arc};
+use std::{fs, net::IpAddr, sync::Arc};
 
-use sarena_infra::{InterfaceAddress, Link as _, NetlinkNetworkProvisioner, route::Route};
-use sarena_loader::{AyaBackend, EndpointKind, Loader, LoaderHandle};
+use sarena_infra::{
+    InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, route::Route,
+};
+use sarena_loader::{AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, PinRoot};
+use sarena_shared::EndpointConfig;
 
-use crate::{AppState, Res, config::ControlPlaneConfig, netlink::setup_host_device};
+use crate::{
+    AppState, Res,
+    config::ControlPlaneConfig,
+    netlink::{SARENA_HOST, setup_host_device},
+};
 
 /// Where eBPF program/link state gets pinned. Shared between the loader
 /// itself (below) and `sarena-services-endpoint-manager`'s
@@ -34,6 +41,9 @@ impl ControlPlane {
         let loader: Loader<AyaBackend> = Loader::new(backend, PIN_ROOT);
 
         let loader_handle = LoaderHandle::spawn(loader, 16);
+
+        loader_handle.load_global_maps().await?;
+
         let mut provisioner = NetlinkNetworkProvisioner;
 
         let (mut host, _) = setup_host_device(
@@ -57,9 +67,11 @@ impl ControlPlane {
             host.add_route(&route).await?;
         }
 
-        let _ = loader_handle
-            .add_endpoint(EndpointKind::Host, "sarena_net")
+        loader_handle
+            .add_endpoint(EndpointKind::Host, SARENA_HOST)
             .await?;
+
+        set_endpoint_config(host.mac(), self.config.internal_ip);
 
         let ipam = Arc::new(sarena_services_ipam::DefaultIpamService::new(
             self.config.gateway_ip,
@@ -77,4 +89,18 @@ impl ControlPlane {
 
         Ok(state)
     }
+}
+
+fn set_endpoint_config(host_mac: MacAddress, addr: IpAddr) {
+    let ipv4 = match addr {
+        IpAddr::V4(addr) => addr,
+        IpAddr::V6(_) => panic!("expected IPv4 address"),
+    };
+    EndpointConfigMap::for_link(&PinRoot::new(PIN_ROOT), SARENA_HOST)
+        .expect("open endpoint_config map")
+        .set(EndpointConfig {
+            mac: host_mac.0,
+            ipv4,
+        })
+        .expect("set endpoint config");
 }

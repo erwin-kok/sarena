@@ -12,14 +12,14 @@ use axum::{
     http::StatusCode,
     routing::{delete, get, put},
 };
-use aya::maps::{Array, Map, MapData, hash_map};
 use sarena_api_types_v1::{daemon, endpoint, ipam};
 use sarena_infra::{
     InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, NetworkProvisioner,
-    netlink_link::NetlinkLink,
 };
-use sarena_loader::{AyaBackend, EndpointHandle, EndpointKind, Loader, LoaderHandle, PinRoot};
-use sarena_shared::{EndpointConfig, EndpointInfo, Ipv4Key, Ipv4KeyExt as _};
+use sarena_loader::{
+    AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, LxcMap, PinRoot,
+};
+use sarena_shared::{EndpointConfig, EndpointInfo};
 use serde::Deserialize;
 use tokio::net::UnixListener;
 use tracing::info;
@@ -99,6 +99,10 @@ impl FakeApiServer {
         );
         let loader = Loader::new(backend, PIN_ROOT);
         let loader_handle = LoaderHandle::spawn(loader, 16);
+        loader_handle
+            .load_global_maps()
+            .await
+            .expect("load_global_maps");
 
         let provisioner = NetlinkNetworkProvisioner;
 
@@ -197,7 +201,7 @@ pub async fn create_endpoint(
         .await
         .expect("get_link");
 
-    let handle = state
+    state
         .loader_handle
         .add_endpoint(EndpointKind::Container, &ep.host_iface_name)
         .await
@@ -210,48 +214,31 @@ pub async fn create_endpoint(
             IpAddr::V6(_) => panic!("IPv6 peer addresses are not supported"),
         };
 
+        let pins = PinRoot::new(PIN_ROOT);
+
         let host_mac = MacAddress::parse(&ep.host_mac).expect("parse host mac");
-        set_endpoint_config(&handle, host_mac, peer_ip);
+        EndpointConfigMap::for_link(&pins, &ep.host_iface_name)
+            .expect("open endpoint_config map")
+            .set(EndpointConfig {
+                mac: host_mac.0,
+                ipv4: peer_ip,
+            })
+            .expect("set endpoint config");
 
         let peer_mac = MacAddress::parse(&ep.container_mac).expect("parse container mac");
-        insert_endpoint_info(peer_ip, &host, peer_mac);
+        LxcMap::open(&pins)
+            .expect("open lxc_map")
+            .upsert_endpoint(
+                peer_ip,
+                EndpointInfo {
+                    if_index: host.ifindex(),
+                    mac: peer_mac.0,
+                },
+            )
+            .expect("insert endpoint info");
     }
 
     Ok(Json(endpoint::EndpointCreateResponse {}))
-}
-
-fn set_endpoint_config(handle: &EndpointHandle, host_mac: MacAddress, peer_ip: Ipv4Addr) {
-    let path = &handle.map_paths["endpoint_config"];
-    let map_data = MapData::from_pin(path).expect("map from_pin");
-    let map = Map::Array(map_data);
-    let mut array: Array<_, EndpointConfig> = Array::try_from(map).expect("try_from");
-    array
-        .set(
-            0,
-            EndpointConfig {
-                mac: host_mac.0,
-                ipv4: peer_ip,
-            },
-            0,
-        )
-        .expect("setting element");
-}
-
-fn insert_endpoint_info(peer_ip: Ipv4Addr, link: &NetlinkLink, peer_mac: MacAddress) {
-    let pin_root = PinRoot::new(PIN_ROOT);
-    let path = pin_root.global_map_dir("lxc_map");
-    let map_data = MapData::from_pin(path).expect("map from_pin");
-    let map = Map::from_map_data(map_data).expect("from_map_data");
-
-    let mut lxc_map: hash_map::HashMap<_, Ipv4Key, EndpointInfo> =
-        hash_map::HashMap::try_from(map).expect("try_from");
-
-    let key = Ipv4Key::from_addr(peer_ip);
-    let value = EndpointInfo {
-        if_index: link.ifindex(),
-        mac: peer_mac.0,
-    };
-    lxc_map.insert(key, value, 0).expect("insert element");
 }
 
 pub async fn delete_endpoint(

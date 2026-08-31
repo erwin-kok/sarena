@@ -38,6 +38,12 @@ pub enum LoaderError {
     #[error("map {name:?} not found in the loaded object")]
     MapNotFound { name: String },
 
+    #[error("failed to open pinned map at {path:?}: {src}")]
+    MapOpen { path: PathBuf, src: String },
+
+    #[error("operation on map {map:?} failed: {src}")]
+    MapAccess { map: &'static str, src: String },
+
     #[error("{} required hook(s) failed to attach", .0.len())]
     Partial(Vec<HookFailure>),
 

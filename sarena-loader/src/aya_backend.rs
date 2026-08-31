@@ -62,6 +62,24 @@ impl AyaBackend {
         Ok(sched)
     }
 
+    fn load_with_pins(&self, maps: &HashMap<String, PathBuf>) -> Res<Ebpf> {
+        let mut loader = EbpfLoader::new();
+        let mut loader = loader.default_map_pin_directory(&self.globals_dir);
+        for (name, path) in maps {
+            loader = loader.map_pin_path(name.as_str(), path);
+        }
+        let bpf = loader
+            .load_file(&self.object_path)
+            .map_err(|e| LoaderError::ObjectLoad(e.to_string()))?;
+
+        for name in maps.keys() {
+            if bpf.map(name.as_str()).is_none() {
+                return Err(LoaderError::MapNotFound { name: name.clone() });
+            }
+        }
+        Ok(bpf)
+    }
+
     fn start_logging(&mut self, link: &str, bpf: &mut Ebpf) {
         self.stop_logging(link);
 
@@ -111,24 +129,13 @@ impl BpfBackend for AyaBackend {
             })
     }
 
+    fn load_global_maps(&mut self, maps: &HashMap<String, PathBuf>) -> Res<Ebpf> {
+        self.load_with_pins(maps)
+    }
+
     fn load_instance(&mut self, link: &str, maps: &HashMap<String, PathBuf>) -> Res<Ebpf> {
-        let mut loader = EbpfLoader::new();
-        let mut loader = loader.default_map_pin_directory(&self.globals_dir);
-        for (name, path) in maps {
-            loader = loader.map_pin_path(name.as_str(), path);
-        }
-        let mut bpf = loader
-            .load_file(&self.object_path)
-            .map_err(|e| LoaderError::ObjectLoad(e.to_string()))?;
-
-        for name in maps.keys() {
-            if bpf.map(name.as_str()).is_none() {
-                return Err(LoaderError::MapNotFound { name: name.clone() });
-            }
-        }
-
+        let mut bpf = self.load_with_pins(maps)?;
         self.start_logging(link, &mut bpf);
-
         Ok(bpf)
     }
 

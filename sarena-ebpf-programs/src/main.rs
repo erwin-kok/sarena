@@ -15,7 +15,7 @@ use sarena_ebpf_programs::do_panic;
 static GLOBAL: Array<u32> = Array::pinned(64, 0);
 
 #[map(name = "calls_map")]
-static PER_ENDPOINT_CALLS_MAP: Array<u32> = Array::pinned(64, 0);
+static PER_ENDPOINT_CALLS_MAP: Array<u32> = Array::with_max_entries(64, 0);
 
 #[classifier]
 pub fn from_container(ctx: TcContext) -> i32 {

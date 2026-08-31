@@ -4,14 +4,17 @@ use crate::{
     backend::BpfBackend,
     endpoint::EndpointKind,
     error::{LoaderError, Res},
-    loader::{EndpointHandle, Loader},
+    loader::Loader,
 };
 
 enum Command {
+    LoadGlobalMaps {
+        reply: oneshot::Sender<Res<()>>,
+    },
     AddEndpoint {
         kind: EndpointKind,
         link: String,
-        reply: oneshot::Sender<Res<EndpointHandle>>,
+        reply: oneshot::Sender<Res<()>>,
     },
     RemoveEndpoint {
         kind: EndpointKind,
@@ -52,6 +55,7 @@ impl LoaderHandle {
     pub fn spawn<B>(loader: Loader<B>, channel_buffer: usize) -> Self
     where
         B: BpfBackend + Send + 'static,
+        B::Instance: Send,
     {
         let (tx, mut rx) = mpsc::channel(channel_buffer);
 
@@ -69,7 +73,11 @@ impl LoaderHandle {
         Self { tx }
     }
 
-    pub async fn add_endpoint(&self, kind: EndpointKind, link: &str) -> Res<EndpointHandle> {
+    pub async fn load_global_maps(&self) -> Res<()> {
+        self.call(|reply| Command::LoadGlobalMaps { reply }).await
+    }
+
+    pub async fn add_endpoint(&self, kind: EndpointKind, link: &str) -> Res<()> {
         let link = link.to_string();
         self.call(|reply| Command::AddEndpoint { kind, link, reply })
             .await
@@ -113,6 +121,9 @@ fn dispatch<B: BpfBackend>(loader: &mut Loader<B>, cmd: Command) {
     // (e.g. it timed out and moved on), that's the caller's business,
     // not a reason to log noise or panic here.
     match cmd {
+        Command::LoadGlobalMaps { reply } => {
+            let _ = reply.send(loader.load_global_maps());
+        }
         Command::AddEndpoint { kind, link, reply } => {
             let _ = reply.send(loader.add_endpoint(kind, &link));
         }

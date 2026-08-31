@@ -5,6 +5,7 @@ mod endpoint;
 mod error;
 mod loader;
 mod manifest;
+pub mod maps;
 mod pin;
 
 #[cfg(test)]
@@ -15,6 +16,7 @@ pub use aya_backend::AyaBackend;
 pub use backend::BpfBackend;
 pub use endpoint::EndpointKind;
 pub use error::{HookFailure, LoaderError};
-pub use loader::{EndpointHandle, Loader};
+pub use loader::Loader;
 pub use manifest::Hook;
+pub use maps::{CallsMap, EndpointConfigMap, LxcMap};
 pub use pin::PinRoot;

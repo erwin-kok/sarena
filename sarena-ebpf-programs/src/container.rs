@@ -1,4 +1,4 @@
-use aya_ebpf::{helpers::generated::bpf_redirect, macros::map, maps::Array, programs::TcContext};
+use aya_ebpf::{helpers::generated::bpf_redirect, programs::TcContext};
 use aya_log_ebpf::{debug, info};
 use network_types::{
     eth::{EthHdr, EtherType},
@@ -9,12 +9,9 @@ use sarena_shared::{EndpointConfig, Ipv4Key, Ipv4KeyExt as _};
 
 use crate::{
     arp::process_arp,
-    endpoint::lookup_ipv4_endpoint,
-    error::{EbpfError::InternalError, EbpfReturn, Res},
+    endpoint::{get_endpoint_config, lookup_ipv4_endpoint},
+    error::{EbpfError, EbpfReturn, Res},
 };
-
-#[map(name = "endpoint_config")]
-static ENDPOINT_CONFIG: Array<EndpointConfig> = Array::pinned(1, 0);
 
 #[inline(always)]
 pub fn try_from_container(ctx: TcContext) -> Res<EbpfReturn> {
@@ -24,9 +21,7 @@ pub fn try_from_container(ctx: TcContext) -> Res<EbpfReturn> {
         return Ok(EbpfReturn::Pass);
     };
 
-    let config = ENDPOINT_CONFIG
-        .get(0)
-        .ok_or(InternalError("endpoint does not have EndpointConfig"))?;
+    let config = get_endpoint_config()?;
 
     debug!(
         &ctx,

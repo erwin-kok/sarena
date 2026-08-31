@@ -5,8 +5,20 @@ pub struct EndpointCreateRequest {
     #[serde(rename = "container-id")]
     pub container_id: String,
 
+    #[serde(rename = "mac")]
+    pub container_mac: String,
+
     #[serde(rename = "container-interface-name")]
     pub container_iface_name: String,
+
+    #[serde(rename = "host-mac")]
+    pub host_mac: String,
+
+    #[serde(rename = "interface-name")]
+    pub host_iface_name: String,
+
+    #[serde(rename = "interface-index")]
+    pub host_iface_index: u32,
 
     #[serde(rename = "k8s-namespace")]
     pub k8s_namespace: String,
@@ -16,18 +28,6 @@ pub struct EndpointCreateRequest {
 
     #[serde(rename = "k8s-uid")]
     pub k8s_uid: String,
-
-    #[serde(rename = "mac")]
-    pub container_mac: String,
-
-    #[serde(rename = "host-mac")]
-    pub host_mac: String,
-
-    #[serde(rename = "interface-index")]
-    pub host_iface_index: u32,
-
-    #[serde(rename = "interface-name")]
-    pub host_iface_name: String,
 
     #[serde(rename = "ipv4")]
     pub ipv4: Option<Addressing>,

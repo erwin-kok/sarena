@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use sarena_api_types_v1::daemon::{DaemonConfigurationResponse, DaemonDebugInfoResponse};
+use sarena_utils::version;
 
 use crate::{DaemonService, Res};
 
@@ -30,7 +31,7 @@ impl DaemonService for DefaultDaemonService {
     }
 
     async fn debuginfo(&self) -> Res<DaemonDebugInfoResponse> {
-        let version = format!("{VERSION} ({GIT_HASH}, built {BUILD_DATE})");
+        let version = version(VERSION, GIT_HASH, BUILD_DATE);
         Ok(DaemonDebugInfoResponse { version })
     }
 }

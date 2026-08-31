@@ -14,6 +14,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Call {
     ResolveLink(String),
+    LoadGlobalMaps(Vec<(String, PathBuf)>),
     LoadInstance(Vec<(String, PathBuf)>),
     EnsureAttached {
         program: &'static str,
@@ -71,6 +72,19 @@ impl BpfBackend for MockBackend {
             ifname: link.to_string(),
             ..Default::default()
         })
+    }
+
+    fn load_global_maps(&mut self, maps: &HashMap<String, PathBuf>) -> Res<Self::Instance> {
+        self.tick()?;
+        self.calls.push(Call::LoadGlobalMaps(
+            maps.iter()
+                .map(|(name, path)| (name.clone(), path.clone()))
+                .collect(),
+        ));
+        for (name, path) in maps {
+            self.maps.insert(name.clone(), path.clone());
+        }
+        Ok(MockInstance)
     }
 
     fn load_instance(
