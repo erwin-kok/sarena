@@ -11,7 +11,6 @@
 
 use std::{collections::HashMap, env, net::UdpSocket, path::PathBuf, time::Duration};
 
-use ipnet::IpNet;
 use rscni_plugin::{
     async_cni::Cni,
     types::{Args, CNIResult, NetConf},
@@ -52,7 +51,7 @@ async fn cni_add_creates_working_connectivity_between_two_pods() {
     let sarena_plugin = SarenaPlugin;
 
     let api_server = FakeApiServer::new();
-    api_server.start("/tmp/sarena.sock");
+    api_server.start("/tmp/sarena.sock").await;
 
     let pid = std::process::id();
 
@@ -106,16 +105,8 @@ async fn cni_add_creates_working_connectivity_between_two_pods() {
         .await
         .expect("ADD failed for pod2");
 
-    let pod1_ip = result1.ips[0]
-        .address
-        .parse::<IpNet>()
-        .expect("could not parse pod1 ip")
-        .addr();
-    let pod2_ip = result2.ips[0]
-        .address
-        .parse::<IpNet>()
-        .expect("could not parse pod2 ip")
-        .addr();
+    let pod1_ip = result1.ips[0].address.addr();
+    let pod2_ip = result2.ips[0].address.addr();
 
     let listener = Netns::open_path(pod1.netns_path)
         .expect("failed to open pod1 netns")
@@ -205,11 +196,11 @@ fn build_args(p: &PodSpec, prev_result: Option<CNIResult>) -> Args {
         ..Default::default()
     };
     Args {
-        container_id: Some(p.container_id.to_string()),
+        container_id: Some(p.container_id.parse().expect("valid container id")),
         netns: Some(PathBuf::from(p.netns_path)),
-        ifname: Some(p.if_name.to_string()),
+        ifname: Some(p.if_name.parse().expect("valid interface name")),
         args: Some(p.cni_args_string()),
         path: vec![PathBuf::from("/opt/cni/bin")],
-        config: Some(net_conf),
+        config: net_conf,
     }
 }

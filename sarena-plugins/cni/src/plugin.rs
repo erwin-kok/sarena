@@ -3,7 +3,6 @@ use std::future::Future;
 use async_trait::async_trait;
 use rscni_plugin::{
     async_cni::Cni,
-    error::Error,
     types::{Args, CNIResult, NetConf},
 };
 use sarena_utils::{LogFormat, LoggingConfig, logging};
@@ -28,11 +27,11 @@ impl Cni for SarenaPlugin {
         dispatch("ADD", args, cmd::add::add).await
     }
 
-    async fn del(&self, args: Args) -> Res<CNIResult> {
+    async fn del(&self, args: Args) -> Res<()> {
         dispatch("DEL", args, cmd::del::del).await
     }
 
-    async fn check(&self, args: Args) -> Res<CNIResult> {
+    async fn check(&self, args: Args) -> Res<()> {
         dispatch("CHECK", args, cmd::check::check).await
     }
 
@@ -50,9 +49,7 @@ where
     F: FnOnce(Args, ArgsSpec) -> Fut,
     Fut: Future<Output = Res<T>>,
 {
-    let net_conf = args
-        .config()
-        .ok_or_else(|| Error::InvalidNetworkConfig("failed to load netconf".to_string()))?;
+    let net_conf = args.config();
     init_logging(net_conf);
 
     let cni_args = load_args::<ArgsSpec>(args.args.as_ref())?;

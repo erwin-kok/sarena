@@ -35,6 +35,25 @@ impl InterfaceAddress {
 
         Ok(Self { ip, prefix_len })
     }
+
+    pub const fn to_ip_net(self) -> IpNet {
+        IpNet::new_assert(self.ip, self.prefix_len)
+    }
+}
+
+impl From<InterfaceAddress> for IpNet {
+    fn from(addr: InterfaceAddress) -> Self {
+        addr.to_ip_net()
+    }
+}
+
+impl From<IpNet> for InterfaceAddress {
+    fn from(net: IpNet) -> Self {
+        Self {
+            ip: net.addr(),
+            prefix_len: net.prefix_len(),
+        }
+    }
 }
 
 const fn max_prefix_len(ip: IpAddr) -> u8 {
@@ -68,5 +87,28 @@ impl FromStr for InterfaceAddress {
 impl fmt::Display for InterfaceAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}", self.ip, self.prefix_len)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_ip_net_keeps_host_bits_and_prefix() {
+        let addr: InterfaceAddress = "10.0.0.7/24".parse().unwrap();
+        let net = addr.to_ip_net();
+
+        assert_eq!(net, "10.0.0.7/24".parse::<IpNet>().unwrap());
+        assert_eq!(net.addr(), addr.ip);
+        assert_eq!(net.prefix_len(), 24);
+        // `From` delegates to the same conversion.
+        assert_eq!(IpNet::from(addr), net);
+    }
+
+    #[test]
+    fn to_ip_net_defaults_to_host_prefix() {
+        let addr: InterfaceAddress = "2001:db8::1".parse().unwrap();
+        assert_eq!(addr.to_ip_net().prefix_len(), 128);
     }
 }

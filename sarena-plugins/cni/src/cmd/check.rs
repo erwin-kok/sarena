@@ -10,7 +10,7 @@ use sarena_infra::{InterfaceAddress, Link, NetlinkNetworkProvisioner, Netns, Net
 
 use crate::{Res, args::ArgsSpec};
 
-pub(crate) async fn check(args: Args, _cni_args: ArgsSpec) -> Res<CNIResult> {
+pub(crate) async fn check(args: Args, _cni_args: ArgsSpec) -> Res<()> {
     let Some(netns_path) = args.netns() else {
         return Err(Error::InvalidNetworkConfig("missing CNI_NETNS".to_string()));
     };
@@ -24,10 +24,7 @@ pub(crate) async fn check(args: Args, _cni_args: ArgsSpec) -> Res<CNIResult> {
             "missing CNI_CONTAINERID".to_string(),
         ));
     };
-    let Some(net_conf) = args.config() else {
-        return Err(Error::InvalidNetworkConfig("missing NetConf".to_string()));
-    };
-    let Some(prev_result) = &net_conf.prev_result else {
+    let Some(prev_result) = &args.config().prev_result else {
         return Err(Error::InvalidNetworkConfig(
             "NetConf does not have a prev_result".to_string(),
         ));
@@ -51,7 +48,7 @@ pub(crate) async fn check(args: Args, _cni_args: ArgsSpec) -> Res<CNIResult> {
 
     verify_interface(netns_path, ifname, prev_result).await?;
 
-    Ok(CNIResult::default())
+    Ok(())
 }
 
 async fn verify_interface(
@@ -91,10 +88,7 @@ async fn verify_interface(
         }
         for ip in &prev_result.ips {
             if ip.interface.map(|i| i as usize) == Some(index) {
-                let address = ip.address.parse::<InterfaceAddress>().map_err(|e| {
-                    Error::InvalidNetworkConfig(format!("could not parse interface address: {e}"))
-                })?;
-                want_addresses.push(address);
+                want_addresses.push(InterfaceAddress::from(ip.address));
             }
         }
     }

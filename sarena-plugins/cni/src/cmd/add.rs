@@ -1,5 +1,5 @@
 use std::{
-    net::{Ipv4Addr, Ipv6Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::Path,
     sync::Arc,
 };
@@ -94,16 +94,14 @@ pub async fn add(args: Args, cni_args: ArgsSpec) -> Res<CNIResult> {
             "missing CNI_CONTAINERID".to_string(),
         ));
     };
-    if let Some(net_conf) = args.config() {
-        let chained = net_conf.prev_result.is_some();
-        if chained {
-            return Err(Error::InvalidNetworkConfig(
-                "chaining is currently not supported".to_string(),
-            ));
-        }
+    let chained = args.config().prev_result.is_some();
+    if chained {
+        return Err(Error::InvalidNetworkConfig(
+            "chaining is currently not supported".to_string(),
+        ));
     }
 
-    debug!(ifname, netns = %netns_path.display(), "deleting any stale link before ADD");
+    debug!(ifname = %ifname, netns = %netns_path.display(), "deleting any stale link before ADD");
     let netns = Netns::open_path(netns_path).map_err(|e| {
         Error::InvalidNetworkConfig(format!(
             "could not open namespace {}: {e}",
@@ -195,8 +193,8 @@ pub async fn add(args: Args, cni_args: ArgsSpec) -> Res<CNIResult> {
 
         cni_ips.push(types::IpConfig {
             interface: Some(1), // Must point to "cni_host_interface" index
-            address: endpoint_ip.to_string(),
-            gateway: Some(gateway_ip.to_string()),
+            address: endpoint_ip.to_ip_net(),
+            gateway: Some(IpAddr::V4(gateway_ip)),
         });
 
         cni_routes.extend(convert_to_cni_routes(ipv4_routes));
@@ -223,8 +221,8 @@ pub async fn add(args: Args, cni_args: ArgsSpec) -> Res<CNIResult> {
 
         cni_ips.push(types::IpConfig {
             interface: Some(1), // Must point to "cni_host_interface" index
-            address: endpoint_ip.to_string(),
-            gateway: Some(gateway_ip.to_string()),
+            address: endpoint_ip.to_ip_net(),
+            gateway: Some(IpAddr::V6(gateway_ip)),
         });
 
         cni_routes.extend(convert_to_cni_routes(ipv6_routes));
@@ -370,9 +368,9 @@ fn convert_to_cni_routes(routes: Vec<Route>) -> Vec<types::Route> {
     routes
         .iter()
         .map(|r| types::Route {
-            dst: r.prefix.to_string(),
+            dst: r.prefix,
             mtu: r.mtu,
-            gw: r.nexthop.map(|h| h.to_string()),
+            gw: r.nexthop,
             advmss: None,
             priority: None,
             table: None,

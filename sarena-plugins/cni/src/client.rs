@@ -9,7 +9,8 @@ const DAEMON_ENDPOINT: &str = "daemon-endpoint";
 pub(crate) fn build_api_client(args: &Args) -> Res<ApiClient<TransportKind>> {
     let endpoint = args
         .config()
-        .and_then(|c| c.custom.get(DAEMON_ENDPOINT))
+        .custom
+        .get(DAEMON_ENDPOINT)
         .and_then(Value::as_str)
         .map(String::from);
 

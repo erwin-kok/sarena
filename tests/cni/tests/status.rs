@@ -44,7 +44,7 @@ async fn cni_status_reports_daemon_ready() {
     let sarena_plugin = SarenaPlugin;
 
     let api_server = FakeApiServer::new();
-    api_server.start("/tmp/sarena.sock");
+    api_server.start("/tmp/sarena.sock").await;
 
     unsafe {
         env::set_var("CNI_COMMAND", "STATUS");
@@ -75,6 +75,6 @@ fn status_args() -> Args {
         ifname: None,
         args: None,
         path: vec!["/opt/cni/bin".into()],
-        config: Some(net_conf),
+        config: net_conf,
     }
 }

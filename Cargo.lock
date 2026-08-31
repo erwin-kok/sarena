@@ -972,9 +972,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.14.0"
+version = "2.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
+checksum = "07aa2048142242915a31d35844fb311e0e53fcca590c3a0a40dcf1b841fa09eb"
 dependencies = [
  "equivalent",
  "hashbrown 0.17.1",
@@ -985,6 +985,9 @@ name = "ipnet"
 version = "2.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a756c3fac73139e83f14c2d742155dd2b78d3ee56597b419a0579b7bdd6dd78"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "is_terminal_polyfill"
@@ -1475,8 +1478,8 @@ dependencies = [
 
 [[package]]
 name = "rscni-plugin"
-version = "0.3.0"
-source = "git+https://github.com/erwin-kok/rscni?branch=main#39e37f52e25d055a1687451817d0078571936d2f"
+version = "0.4.0"
+source = "git+https://github.com/erwin-kok/rscni?branch=main#4c4e5450e28bf084185fae29d6d72f8cc5749fd8"
 dependencies = [
  "async-trait",
  "rscni-types",
@@ -1485,12 +1488,12 @@ dependencies = [
 
 [[package]]
 name = "rscni-types"
-version = "0.1.0"
-source = "git+https://github.com/erwin-kok/rscni?branch=main#39e37f52e25d055a1687451817d0078571936d2f"
+version = "0.2.0"
+source = "git+https://github.com/erwin-kok/rscni?branch=main#4c4e5450e28bf084185fae29d6d72f8cc5749fd8"
 dependencies = [
+ "ipnet",
  "serde",
  "serde_json",
- "thiserror 2.0.20",
 ]
 
 [[package]]

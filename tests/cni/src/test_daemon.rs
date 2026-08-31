@@ -87,7 +87,7 @@ impl FakeApiServer {
         Self {}
     }
 
-    pub fn start(&self, driver_sock: &str) {
+    pub async fn start(&self, driver_sock: &str) {
         let _ = fs::remove_dir_all(PIN_ROOT);
 
         std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");

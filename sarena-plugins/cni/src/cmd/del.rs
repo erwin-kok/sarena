@@ -1,14 +1,11 @@
-use rscni_plugin::{
-    error::Error,
-    types::{Args, CNIResult},
-};
+use rscni_plugin::{error::Error, types::Args};
 use sarena_api_client::attachment_id;
 use sarena_infra::{InfraError, NetlinkNetworkProvisioner, Netns, NetworkProvisioner as _};
 use tracing::debug;
 
 use crate::{Res, args::ArgsSpec};
 
-pub(crate) async fn del(args: Args, _cni_args: ArgsSpec) -> Res<CNIResult> {
+pub(crate) async fn del(args: Args, _cni_args: ArgsSpec) -> Res<()> {
     let Some(netns_path) = args.netns() else {
         return Err(Error::InvalidNetworkConfig("missing CNI_NETNS".to_string()));
     };
@@ -48,5 +45,5 @@ pub(crate) async fn del(args: Args, _cni_args: ArgsSpec) -> Res<CNIResult> {
         Err(e) => debug!("could not delete interface in namespace: {e}"),
     }
 
-    Ok(CNIResult::default())
+    Ok(())
 }
