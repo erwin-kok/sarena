@@ -206,7 +206,8 @@ async fn create_endpoint(
             peer_ip,
             EndpointInfo {
                 if_index: host.ifindex(),
-                mac: peer.mac().0,
+                container_mac: peer.mac().0,
+                host_mac: host_mac.0,
             },
         )
         .expect("insert endpoint info");

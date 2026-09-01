@@ -1,90 +1,76 @@
-use aya_ebpf::{helpers::generated::bpf_redirect, programs::TcContext};
-use aya_log_ebpf::{debug, info};
+use aya_ebpf::programs::TcContext;
+use aya_log_ebpf::debug;
 use network_types::{
     eth::{EthHdr, EtherType},
     ip::Ipv4Hdr,
 };
-use sarena_ebpf_common::ptr_at;
-use sarena_shared::{EndpointConfig, Ipv4Key, Ipv4KeyExt as _};
+use sarena_ebpf_common::at;
+use sarena_shared::{Ipv4Key, Ipv4KeyExt as _};
 
 use crate::{
     arp::process_arp,
     endpoint::{get_endpoint_config, lookup_ipv4_endpoint},
-    error::{EbpfReturn, Res},
+    error::{Res, Verdict},
+    ipv4::is_fragmented,
+    local_delivery,
 };
 
-#[inline(always)]
-pub fn try_from_container(ctx: TcContext) -> Res<EbpfReturn> {
-    let ethhdr: *const EthHdr = unsafe { ptr_at(&ctx, 0)? };
-
-    let Ok(ether_type) = unsafe { *ethhdr }.ether_type() else {
-        return Ok(EbpfReturn::Pass);
+#[inline]
+pub fn try_from_container(ctx: TcContext) -> Res<Verdict> {
+    let eth: &EthHdr = unsafe { at(&ctx, 0)? };
+    let Ok(ether_type) = eth.ether_type() else {
+        return Ok(Verdict::Pass);
     };
 
     let config = get_endpoint_config()?;
-
     debug!(
         &ctx,
         "endpoint config: {:mac}, ip: {:i}", config.mac, config.ipv4
     );
 
-    let result = match ether_type {
-        EtherType::Ipv4 => process_ipv4(&ctx, config)?,
-        EtherType::Arp => process_arp(&ctx, config)?,
-        _ => EbpfReturn::Pass,
+    match ether_type {
+        EtherType::Ipv4 => process_ipv4(&ctx),
+        EtherType::Arp => process_arp(&ctx, config),
+        _ => Ok(Verdict::Pass),
+    }
+}
+
+#[inline]
+pub fn try_to_container(_ctx: TcContext) -> Res<Verdict> {
+    Ok(Verdict::Pass)
+}
+
+#[inline]
+fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
+    let (fragmented, src_ip, dst_ip) = {
+        let ip4: &Ipv4Hdr = unsafe { at(ctx, EthHdr::LEN)? };
+        (
+            is_fragmented(ip4),
+            Ipv4Key::from_octets(ip4.src_addr),
+            Ipv4Key::from_octets(ip4.dst_addr),
+        )
     };
-    Ok(result)
-}
 
-#[inline(always)]
-pub fn try_to_container(_ctx: TcContext) -> Res<EbpfReturn> {
-    Ok(EbpfReturn::Pass)
-}
-
-#[inline(always)]
-fn process_ipv4(ctx: &TcContext, config: &EndpointConfig) -> Res<EbpfReturn> {
-    let ethhdr: *const EthHdr = unsafe { ptr_at(&ctx, 0)? };
-    let ipv4hdr: *const Ipv4Hdr = unsafe { ptr_at(&ctx, EthHdr::LEN)? };
-
-    let eth = unsafe { &*ethhdr };
-    let ipv4 = unsafe { &*ipv4hdr };
-
-    // If we have a fragmented IP --> DROP
-    if is_fragmented(ipv4) {
-        debug!(&ctx, "drop fragmented IP packet");
-        return Ok(EbpfReturn::Drop);
+    if fragmented {
+        debug!(ctx, "drop fragmented IP packet");
+        return Ok(Verdict::Drop);
     }
 
-    let src_ip = Ipv4Key::from_octets(ipv4.src_addr);
-    let dst_ip = Ipv4Key::from_octets(ipv4.dst_addr);
-
-    info!(
-        &ctx,
-        "IPv4 -- dst-mac: {:mac}, src-mac: {:mac}, src-ip: {:i}, dst-ip: {:i}",
-        eth.dst_addr,
-        eth.src_addr,
-        src_ip.to_addr(),
-        dst_ip.to_addr(),
-    );
-
-    if let Some(ep) = lookup_ipv4_endpoint(dst_ip) {
-        let ifindex = unsafe { (*ep).if_index };
-        let dst_mac = unsafe { (*ep).mac };
-
-        let eth_mut = ethhdr as *mut EthHdr;
-        unsafe {
-            (*eth_mut).dst_addr = dst_mac;
-            (*eth_mut).src_addr = config.mac;
-        }
-
-        let ret = unsafe { bpf_redirect(ifindex, 0) };
-        return Ok(EbpfReturn::Custom(ret as i32));
+    {
+        let eth: &EthHdr = unsafe { at(ctx, 0)? };
+        debug!(
+            ctx,
+            "IPv4 -- dst-mac: {:mac}, src-mac: {:mac}, src-ip: {:i}, dst-ip: {:i}",
+            eth.dst_addr,
+            eth.src_addr,
+            src_ip.to_addr(),
+            dst_ip.to_addr(),
+        );
     }
 
-    Ok(EbpfReturn::Pass)
-}
+    let Some(ep) = lookup_ipv4_endpoint(dst_ip) else {
+        return Ok(Verdict::Pass);
+    };
 
-// If MF is set, or the frag_offset is nonzero, we have a IP fragment
-fn is_fragmented(ipv4: &Ipv4Hdr) -> bool {
-    (ipv4.frag_flags() & 0x1) != 0 || (ipv4.frag_offset() != 0)
+    local_delivery(ctx, ep)
 }

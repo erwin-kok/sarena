@@ -1,8 +1,5 @@
 use core::net::Ipv4Addr;
 
-// This is config is a private struct per endpoint.
-// There is should be only one config per endpoint and gives the configuration of that particular
-// endpoint.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct EndpointConfig {
@@ -17,7 +14,9 @@ pub struct EndpointInfo {
     pub if_index: u32,
     // The CONTAINER-side MAC, i.e. the endpoint's own interface address as seen
     // from inside its netns.
-    pub mac: [u8; 6],
+    pub container_mac: [u8; 6],
+
+    pub host_mac: [u8; 6],
 }
 
 #[cfg(feature = "std")]

@@ -1,7 +1,13 @@
 use aya_ebpf::{
-    EbpfContext as _, bindings::__sk_buff, helpers::generated::bpf_redirect_peer,
+    EbpfContext as _,
+    bindings::__sk_buff,
+    helpers::generated::{bpf_redirect, bpf_redirect_peer},
     programs::TcContext,
 };
+
+pub fn ctx_redirect(ifindex: u32, flags: u64) -> i64 {
+    unsafe { bpf_redirect(ifindex, flags) }
+}
 
 pub fn ctx_redirect_peer(ifindex: u32, flags: u64) -> i64 {
     unsafe { bpf_redirect_peer(ifindex, flags) }

@@ -3,11 +3,11 @@
 #![allow(nonstandard_style, dead_code)]
 
 use aya_ebpf::{
-    bindings::tcx_action_base::TCX_NEXT,
     macros::{classifier, map},
     maps::Array,
     programs::TcContext,
 };
+use sarena_ebpf_programs::dispatch;
 #[cfg(not(test))]
 use sarena_ebpf_programs::do_panic;
 
@@ -19,82 +19,52 @@ static PER_ENDPOINT_CALLS_MAP: Array<u32> = Array::with_max_entries(64, 0);
 
 #[classifier]
 pub fn from_container(ctx: TcContext) -> i32 {
-    match sarena_ebpf_programs::try_from_container(ctx) {
-        Ok(ret) => ret.into(),
-        Err(_) => TCX_NEXT,
-    }
+    dispatch(sarena_ebpf_programs::try_from_container(ctx))
 }
 
 #[classifier]
 pub fn to_container(ctx: TcContext) -> i32 {
-    match sarena_ebpf_programs::try_to_container(ctx) {
-        Ok(ret) => ret.into(),
-        Err(_) => TCX_NEXT,
-    }
+    dispatch(sarena_ebpf_programs::try_to_container(ctx))
 }
 
 #[classifier]
 pub fn from_host(ctx: TcContext) -> i32 {
-    match sarena_ebpf_programs::try_from_host(ctx) {
-        Ok(ret) => ret.into(),
-        Err(_) => TCX_NEXT,
-    }
+    dispatch(sarena_ebpf_programs::try_from_host(ctx))
 }
 
 #[classifier]
 pub fn to_host(ctx: TcContext) -> i32 {
-    match sarena_ebpf_programs::try_to_host(ctx) {
-        Ok(ret) => ret.into(),
-        Err(_) => TCX_NEXT,
-    }
+    dispatch(sarena_ebpf_programs::try_to_host(ctx))
 }
 
 #[classifier]
 pub fn from_netdev(ctx: TcContext) -> i32 {
-    match sarena_ebpf_programs::try_from_netdev(ctx) {
-        Ok(ret) => ret.into(),
-        Err(_) => TCX_NEXT,
-    }
+    dispatch(sarena_ebpf_programs::try_from_netdev(ctx))
 }
 
 #[classifier]
 pub fn to_netdev(ctx: TcContext) -> i32 {
-    match sarena_ebpf_programs::try_to_netdev(ctx) {
-        Ok(ret) => ret.into(),
-        Err(_) => TCX_NEXT,
-    }
+    dispatch(sarena_ebpf_programs::try_to_netdev(ctx))
 }
 
 #[classifier]
 pub fn from_overlay(ctx: TcContext) -> i32 {
-    match sarena_ebpf_programs::try_from_overlay(ctx) {
-        Ok(ret) => ret.into(),
-        Err(_) => TCX_NEXT,
-    }
+    dispatch(sarena_ebpf_programs::try_from_overlay(ctx))
 }
 
 #[classifier]
 pub fn to_overlay(ctx: TcContext) -> i32 {
-    match sarena_ebpf_programs::try_to_overlay(ctx) {
-        Ok(ret) => ret.into(),
-        Err(_) => TCX_NEXT,
-    }
+    dispatch(sarena_ebpf_programs::try_to_overlay(ctx))
 }
 
 #[classifier]
 pub fn from_wireguard(ctx: TcContext) -> i32 {
-    match sarena_ebpf_programs::try_from_wireguard(ctx) {
-        Ok(ret) => ret.into(),
-        Err(_) => TCX_NEXT,
-    }
+    dispatch(sarena_ebpf_programs::try_from_wireguard(ctx))
 }
 
 #[classifier]
 pub fn to_wireguard(ctx: TcContext) -> i32 {
-    match sarena_ebpf_programs::try_to_wireguard(ctx) {
-        Ok(ret) => ret.into(),
-        Err(_) => TCX_NEXT,
-    }
+    dispatch(sarena_ebpf_programs::try_to_wireguard(ctx))
 }
 
 #[cfg(not(test))]

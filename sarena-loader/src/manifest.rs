@@ -86,6 +86,4 @@ pub(crate) const NETDEV_PER_ENDPOINT_MAPS: &[EndpointMap] = &[EndpointMap::Calls
 pub(crate) const OVERLAY_PER_ENDPOINT_MAPS: &[EndpointMap] = &[EndpointMap::CallsMap];
 pub(crate) const WIREGUARD_PER_ENDPOINT_MAPS: &[EndpointMap] = &[EndpointMap::CallsMap];
 
-pub(crate) const GLOBAL_MAPS: &[GlobalMap] = &[
-    GlobalMap::LxcMap,
-];
+pub(crate) const GLOBAL_MAPS: &[GlobalMap] = &[GlobalMap::LxcMap];

@@ -64,8 +64,9 @@ impl EndpointService for DefaultEndpointService {
             let host_mac = MacAddress::parse(&request.host_mac).expect("parse host mac");
             self.set_endpoint_config(&host, host_mac, container_ip);
 
-            let container_mac = MacAddress::parse(&request.container_mac).expect("parse container mac");
-            self.insert_endpoint_info(&host, container_mac, container_ip);
+            let container_mac =
+                MacAddress::parse(&request.container_mac).expect("parse container mac");
+            self.insert_endpoint_info(&host, host_mac, container_mac, container_ip);
         }
 
         Ok(EndpointCreateResponse {})
@@ -86,7 +87,12 @@ impl EndpointService for DefaultEndpointService {
 }
 
 impl DefaultEndpointService {
-    fn set_endpoint_config(&self, link: &NetlinkLink, host_mac: MacAddress, container_ip: Ipv4Addr) {
+    fn set_endpoint_config(
+        &self,
+        link: &NetlinkLink,
+        host_mac: MacAddress,
+        container_ip: Ipv4Addr,
+    ) {
         EndpointConfigMap::for_link(&PinRoot::new(&self.pin_root), link.ifname())
             .expect("open endpoint_config map")
             .set(EndpointConfig {
@@ -96,14 +102,21 @@ impl DefaultEndpointService {
             .expect("set endpoint config");
     }
 
-    fn insert_endpoint_info(&self, link: &NetlinkLink, container_mac: MacAddress, container_ip: Ipv4Addr) {
+    fn insert_endpoint_info(
+        &self,
+        link: &NetlinkLink,
+        host_mac: MacAddress,
+        container_mac: MacAddress,
+        container_ip: Ipv4Addr,
+    ) {
         LxcMap::open(&PinRoot::new(&self.pin_root))
             .expect("open lxc_map")
             .upsert_endpoint(
                 container_ip,
                 EndpointInfo {
                     if_index: link.ifindex(),
-                    mac: container_mac.0,
+                    container_mac: container_mac.0,
+                    host_mac: host_mac.0,
                 },
             )
             .expect("insert endpoint info");
