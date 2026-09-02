@@ -58,6 +58,17 @@ pub trait NetworkProvisioner {
     async fn delete_netns(&mut self, netns: &str) -> Res<()>;
     /// Enable global IP forwarding, when ipv6 == true, also enable ipv6 forwarding.
     async fn enable_ip_forwarding(&mut self, ipv6: bool) -> Res<()>;
+    /// Set the reverse-path filter mode globally.
+    ///
+    /// | value | meaning                                               |
+    /// |-------|-------------------------------------------------------|
+    /// | `0`   | No filtering                                         |
+    /// | `1`   | Strict mode – drop packets that wouldn't be routed   |
+    /// |       | back through the same interface (recommended)        |
+    /// | `2`   | Loose mode – drop only if there is no route at all   |
+    ///
+    /// Writes `net.ipv4.conf.all.rp_filter`.
+    async fn set_rp_filter(&mut self, value: u8) -> Res<()>;
     /// Create a veth pair per `spec`, returning its host and peer ends.
     async fn create_veth(&mut self, spec: VethSpec) -> Res<VethPair<Self::LinkType>>;
     /// Deleting either end of a veth pair deletes both; takes the host end

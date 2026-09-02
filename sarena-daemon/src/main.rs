@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
     let config = ControlPlaneConfig {
         gateway_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5)),
         internal_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 7)),
-        ipam_ipv4_subnet: Some(IpNet::V4(Ipv4Net::new(Ipv4Addr::new(192, 168, 10, 0), 24)?)),
+        ipam_ipv4_subnet: Some(IpNet::V4(Ipv4Net::new(Ipv4Addr::new(10, 0, 10, 0), 24)?)),
         ipam_ipv6_subnet: None,
     };
 

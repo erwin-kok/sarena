@@ -10,6 +10,7 @@ pub struct MockNetworkProvisioner {
     pub netns_created: Vec<String>,
     pub netns_deleted: Vec<String>,
     pub ipv_forwarding_calls: Vec<bool>,
+    pub rp_filter_calls: Vec<u8>,
     pub veths_created: Vec<VethSpec>,
     pub veths_deleted: Vec<VethPair<MockLink>>,
     pub links: Vec<MockLink>,
@@ -32,6 +33,11 @@ impl NetworkProvisioner for MockNetworkProvisioner {
 
     async fn enable_ip_forwarding(&mut self, ipv6: bool) -> Res<()> {
         self.ipv_forwarding_calls.push(ipv6);
+        Ok(())
+    }
+
+    async fn set_rp_filter(&mut self, value: u8) -> Res<()> {
+        self.rp_filter_calls.push(value);
         Ok(())
     }
 

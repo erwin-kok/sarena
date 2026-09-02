@@ -28,6 +28,13 @@ impl NetworkProvisioner for NetlinkNetworkProvisioner {
         Ok(())
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
+    async fn set_rp_filter(&mut self, value: u8) -> Res<()> {
+        let val = value.to_string();
+        sysctl_write("/proc/sys/net/ipv4/conf/all/rp_filter", &val)?;
+        Ok(())
+    }
+
     async fn create_veth(&mut self, spec: VethSpec) -> Res<VethPair<Self::LinkType>> {
         let (mut host, mut peer) = create_veth_pair(&spec.host_ifname, &spec.peer_ifname).await?;
 

@@ -1,7 +1,8 @@
 use std::{fs, net::IpAddr, sync::Arc};
 
 use sarena_infra::{
-    InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, route::Route,
+    InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, NetworkProvisioner as _,
+    route::Route,
 };
 use sarena_loader::{AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, PinRoot};
 use sarena_shared::EndpointConfig;
@@ -45,6 +46,8 @@ impl ControlPlane {
         loader_handle.load_global_maps().await?;
 
         let mut provisioner = NetlinkNetworkProvisioner;
+
+        provisioner.set_rp_filter(0).await?;
 
         let (mut host, _) = setup_host_device(
             &mut provisioner,

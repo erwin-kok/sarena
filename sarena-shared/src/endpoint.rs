@@ -15,7 +15,6 @@ pub struct EndpointInfo {
     // The CONTAINER-side MAC, i.e. the endpoint's own interface address as seen
     // from inside its netns.
     pub container_mac: [u8; 6],
-
     pub host_mac: [u8; 6],
 }
 
