@@ -18,9 +18,6 @@ pub struct LxcMap {
 }
 
 impl LxcMap {
-    /// Open the global `lxc_map` from its pin. Errors if it has not been
-    /// materialised yet (see
-    /// [`Loader::load_global_maps`](crate::Loader::load_global_maps)).
     pub fn open(pins: &PinRoot) -> Res<Self> {
         Self::from_pin(&pins.global_map_dir(GlobalMap::LxcMap))
     }

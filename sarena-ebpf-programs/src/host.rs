@@ -50,8 +50,9 @@ fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
         return Ok(Verdict::Drop);
     }
 
-    let Some(ep) = lookup_ipv4_endpoint(dst_ip) else {
-        return Ok(Verdict::Pass);
+    if let Some(ep) = lookup_ipv4_endpoint(dst_ip) {
+        return local_delivery(ctx, ep);
     };
-    local_delivery(ctx, ep)
+
+    Ok(Verdict::Pass)
 }

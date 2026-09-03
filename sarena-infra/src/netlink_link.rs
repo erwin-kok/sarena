@@ -826,6 +826,12 @@ async fn link_add_route_impl(handle: &rtnetlink::Handle, index: u32, route: &Rou
         None => builder.scope(RouteScope::Link),
     };
 
+    if let Some(local) = route.local {
+        builder = builder
+            .pref_source(local)
+            .map_err(|e| InfraError::InvalidRoute(e.to_string()))?;
+    }
+
     if let Some(table) = route.table {
         builder = builder.table_id(table);
     }
