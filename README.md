@@ -4,7 +4,7 @@
 [![made-with-rust](https://img.shields.io/badge/Made%20with-Rust-1f425f.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/github/license/erwin-kok/sarena.svg)](https://github.com/erwin-kok/sarena/blob/master/LICENSE-APACHE)
 
-An eBPF-based 🐝 virtual network dataplane, control plane and CNI, written in Rust 🦀
+An eBPF-based 🐝 virtual network dataplane, control plane, and CNI, written in Rust 🦀
 using [Aya](https://aya-rs.dev/). 
 
 Sarena is an independent, from-scratch exploration of how kernel-level networking (routing, ARP, forwarding, and others) actually works, built one feature at a time.
@@ -73,16 +73,16 @@ To build and test everything, just do:
 just all
 ```
 
-This will build all the crates, inluding the eBPF crates. It installs the eBPF program in
- `/usr/lib/sarena/ebpf` and it runs all the tests (normal unit tests, and also eBPF tests).
+This will build all the crates, including the eBPF crates. It installs the eBPF program in
+ `/usr/lib/sarena/ebpf` and runs all the tests (normal unit tests, and also eBPF tests).
 
 ## Testing and running in Kubernetes
 
-> The following runs the Sarena daemon locally on your system, and enters the network namespace of the control plane otherwise the CNI connect connect with the daemon. This is great for development purposes. Note that you will need **root privileges** and also know that the **eBPF programs and maps** are used/pinned **locally**.
+> The following runs the Sarena daemon locally on the local host, and enters the network namespace of the control plane. The reason is that the CNI needs to connect with the daemon. This is great for development purposes. However, note that you will need **root privileges** and also know that the **eBPF programs and maps** are used/pinned **locally**.
 
-Note that running the daemon locally you will need **root privileges** in order to install and test eBPF programs
+> **Do NOT use this setup in a production cluster.**
 
-In order ro test in a kind cluster, do the following in sequence:
+To test in a kind cluster, do the following in sequence:
 
 ```shell
 just kind-up            # This will spin up a one node kind cluster and does not install a CNI.
@@ -94,48 +94,13 @@ just kind-run-daemon    # This will run the Sarena daemon
 Then, in another terminal do:
 
 ```shell
-kubectl get nodes       # It should show "Unready"
-just kind-install       # This will install the Sarena CNI plugin into the Kind node
-kubectl get nodes       # Now it should show "Ready"
+kubectl get nodes                   # It should show "Unready"
+just kind-install                   # This will install the Sarena CNI plugin into the Kind node
+kubectl get nodes                   # Now it should show "Ready"
+kubectl get all --all-namespaces    # All Pods should be ready and running
 ```
 
-If you do:
-
-```shell 
-kubectl get all --all-namespaces
-```
-
-It should show:
-
-```text
-NAMESPACE            NAME                                               READY   STATUS    RESTARTS   AGE
-kube-system          pod/coredns-7d764666f9-47js2                       1/1     Running   0          49s
-kube-system          pod/coredns-7d764666f9-9dqgq                       1/1     Running   0          49s
-kube-system          pod/etcd-sarena-control-plane                      1/1     Running   0          56s
-kube-system          pod/kube-apiserver-sarena-control-plane            1/1     Running   0          56s
-kube-system          pod/kube-controller-manager-sarena-control-plane   1/1     Running   0          55s
-kube-system          pod/kube-proxy-q44jg                               1/1     Running   0          49s
-kube-system          pod/kube-scheduler-sarena-control-plane            1/1     Running   0          56s
-local-path-storage   pod/local-path-provisioner-67b8995b4b-dpk5w        1/1     Running   0          49s
-
-NAMESPACE     NAME                 TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)                  AGE
-default       service/kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP                  56s
-kube-system   service/kube-dns     ClusterIP   10.96.0.10   <none>        53/UDP,53/TCP,9153/TCP   55s
-
-NAMESPACE     NAME                        DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE
-kube-system   daemonset.apps/kube-proxy   1         1         1       1            1           kubernetes.io/os=linux   55s
-
-NAMESPACE            NAME                                     READY   UP-TO-DATE   AVAILABLE   AGE
-kube-system          deployment.apps/coredns                  2/2     2            2           55s
-local-path-storage   deployment.apps/local-path-provisioner   1/1     1            1           53s
-
-NAMESPACE            NAME                                                DESIRED   CURRENT   READY   AGE
-kube-system          replicaset.apps/coredns-7d764666f9                  2         2         2       49s
-local-path-storage   replicaset.apps/local-path-provisioner-67b8995b4b   1         1         1       49s
-
-```
-
-To bring down the kind cluster:
+To bring the kind cluster down:
 
 ```shell
 just kind-down
@@ -151,7 +116,10 @@ If you're interested in the background and technical details, check out my engin
 
 ## About the name
 
-*Sarena* comes from a combination of two words: **arena**, a central space where people meet and interact — roughly what a router's is. And **sarang**, Indonesian for *nest*, chosen for personal reasons because of a strong connection to Indonesia. Both point at the same idea: a structure that things return to and pass through.
+*Sarena* comes from a combination of two words: **arena**, a central space where people meet and interact and **sarang**, Indonesian for *nest*.
+
+The name was chosen because of my personal connection to Indonesia. Both words also point to the same idea:
+a structure that things return to and pass through — like a router that sits at the center of network traffic.
 
 ## License
 
@@ -181,4 +149,3 @@ resource.
   inspiration for this project's design
 - [Aya](https://github.com/aya-rs/aya) — the Rust eBPF library this project
   is built on
-  
