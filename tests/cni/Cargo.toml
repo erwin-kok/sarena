@@ -21,9 +21,7 @@ sarena-loader = { path = "../../sarena-loader" }
 sarena-shared = { path = "../../sarena-shared" }
 sarena-utils = { path = "../../sarena-utils" }
 
-aya = { workspace = true }
 axum = { workspace = true }
-ipnet = { workspace = true }
 rscni-plugin = { workspace = true, features = ["async", "test-util"] }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -9,6 +9,7 @@ mod app;
 mod cli;
 mod config;
 mod output;
+mod utils;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -24,10 +25,7 @@ async fn main() -> Result<()> {
 
     let client = ApiClient::new_client(config.host.clone())?;
 
-    let app = App {
-        _config: config,
-        client,
-    };
+    let app = App { config, client };
 
     app.run(&cli.command).await?;
 

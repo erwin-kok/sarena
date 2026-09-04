@@ -1608,7 +1608,6 @@ dependencies = [
 name = "sarena-basic-test"
 version = "0.1.0"
 dependencies = [
- "aya",
  "ipnet",
  "sarena-infra",
  "sarena-loader",
@@ -1627,12 +1626,15 @@ dependencies = [
  "clap_complete",
  "config",
  "jsonpath_lib",
+ "libc",
  "sarena-api-client",
  "sarena-api-types-v1",
+ "sarena-loader",
  "sarena-utils",
  "serde",
  "serde_json",
  "serde_yaml",
+ "tabwriter",
  "tokio",
  "tracing",
 ]
@@ -1660,8 +1662,6 @@ name = "sarena-cni-test"
 version = "0.1.0"
 dependencies = [
  "axum",
- "aya",
- "ipnet",
  "rscni-plugin",
  "sarena-api-types-v1",
  "sarena-cni-plugin",
@@ -1690,8 +1690,6 @@ dependencies = [
 name = "sarena-control-plane"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "async-trait",
  "ipnet",
  "sarena-infra",
  "sarena-loader",
@@ -1808,9 +1806,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "sarena-api-types-v1",
- "sarena-utils",
  "thiserror 2.0.20",
- "tracing",
 ]
 
 [[package]]
@@ -1818,7 +1814,6 @@ name = "sarena-services-endpoint"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "aya",
  "sarena-api-types-v1",
  "sarena-infra",
  "sarena-loader",
@@ -1886,7 +1881,6 @@ version = "0.1.0"
 name = "sarena-utils"
 version = "0.1.0"
 dependencies = [
- "sarena-api-types-v1",
  "serde",
  "tracing",
  "tracing-appender",
@@ -2118,6 +2112,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "tabwriter"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fce91f2f0ec87dff7e6bcbbeb267439aa1188703003c6055193c821487400432"
+dependencies = [
+ "unicode-width",
 ]
 
 [[package]]
@@ -2442,6 +2445,12 @@ name = "unicode-segmentation"
 version = "1.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
+
+[[package]]
+name = "unicode-width"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "unsafe-libyaml"

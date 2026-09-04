@@ -13,16 +13,19 @@ workspace = true
 [dependencies]
 sarena-api-client = { path = "../sarena-api/client" }
 sarena-api-types-v1 = { path = "../sarena-api/types/v1" }
+sarena-loader = { path = "../sarena-loader" }
 sarena-utils = { path = "../sarena-utils" }
 
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 clap_complete = { workspace = true }
 config = { workspace = true }
+libc = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 jsonpath_lib = { workspace = true }
+tabwriter = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 

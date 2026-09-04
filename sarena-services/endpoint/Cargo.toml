@@ -20,6 +20,5 @@ sarena-loader = { path = "../../sarena-loader" }
 sarena-shared = { path = "../../sarena-shared" }
 
 async-trait = { workspace = true }
-aya = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

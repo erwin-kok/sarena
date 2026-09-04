@@ -19,7 +19,6 @@ sarena-loader = { path = "../../sarena-loader" }
 sarena-shared = { path = "../../sarena-shared" }
 sarena-utils = { path = "../../sarena-utils" }
 
-aya = { workspace = true }
 ipnet = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "net"] }
 tracing = { workspace = true }

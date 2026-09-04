@@ -25,3 +25,29 @@ mod pod_impls {
     unsafe impl aya::Pod for EndpointInfo {}
     unsafe impl aya::Pod for EndpointConfig {}
 }
+
+#[cfg(feature = "std")]
+mod display_impls {
+    use core::fmt;
+
+    use super::EndpointInfo;
+
+    impl fmt::Display for EndpointInfo {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "if_index={} container_mac=", self.if_index)?;
+            write_mac(f, self.container_mac)?;
+            write!(f, " host_mac=")?;
+            write_mac(f, self.host_mac)
+        }
+    }
+
+    fn write_mac(f: &mut fmt::Formatter<'_>, mac: [u8; 6]) -> fmt::Result {
+        for (i, byte) in mac.iter().enumerate() {
+            if i != 0 {
+                f.write_str(":")?;
+            }
+            write!(f, "{byte:02x}")?;
+        }
+        Ok(())
+    }
+}

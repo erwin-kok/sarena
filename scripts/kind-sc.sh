@@ -1,20 +1,4 @@
 #!/usr/bin/env bash
-#
-# Runs the locally-built sarena-cli (target/debug/sarena-cli) attached to
-# the kind node's *network* namespace via nsenter, so it can reach the
-# sarena-daemon started by `just kind-run-daemon`. That daemon listens on
-# tcp://127.0.0.1:3000 inside the node's network namespace (see
-# kind-run-daemon.sh's comments for why TCP-on-loopback rather than a
-# Unix socket), which isn't reachable from this host's own network
-# namespace without also being attached to the node's.
-#
-# We deliberately do NOT also enter the node's mount namespace, same
-# reasoning as kind-run-daemon.sh: the cli binary loads straight from
-# this host's target/debug/, no need for that path to exist inside the
-# node.
-#
-# All arguments are forwarded to sarena-cli, e.g.:
-#   just kind-sc service list
 
 set -euo pipefail
 

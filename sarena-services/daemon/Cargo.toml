@@ -15,8 +15,6 @@ test-util = []
 
 [dependencies]
 sarena-api-types-v1 = { path = "../../sarena-api/types/v1" }
-sarena-utils = { path = "../../sarena-utils" }
 
 async-trait = { workspace = true }
 thiserror = { workspace = true }
-tracing = { workspace = true }

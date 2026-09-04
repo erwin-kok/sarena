@@ -1,10 +1,12 @@
-use std::env::home_dir;
+use std::{env::home_dir, path::PathBuf};
 
 use config::{Config as ConfigLoader, Environment, File};
 use sarena_utils::LogFormat;
 use serde::Deserialize;
 
 use crate::cli::Cli;
+
+const DEFAULT_PIN_ROOT: &str = "/sys/fs/bpf/sarena";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -18,6 +20,13 @@ pub struct Config {
 
     #[serde(default)]
     pub log_format: LogFormat,
+
+    #[serde(default = "default_pin_root")]
+    pub pin_root: PathBuf,
+}
+
+fn default_pin_root() -> PathBuf {
+    PathBuf::from(DEFAULT_PIN_ROOT)
 }
 
 pub fn load_config(cli: &Cli) -> anyhow::Result<Config> {

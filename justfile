@@ -70,7 +70,7 @@ kind-down:
     bash "{{justfile_directory()}}/scripts/kind-down.sh"
 
 kind-install: build build-ebpf
-    bash "{{justfile_directory()}}/scripts/kind-install.sh" --skip-daemon
+    bash "{{justfile_directory()}}/scripts/kind-install.sh"
 
 kind-run-daemon: build build-ebpf
     bash "{{justfile_directory()}}/scripts/kind-run-daemon.sh"

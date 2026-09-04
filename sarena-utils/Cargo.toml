@@ -11,8 +11,6 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-sarena-api-types-v1 = { path = "../sarena-api/types/v1" }
-
 serde = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }

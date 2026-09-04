@@ -2,6 +2,7 @@ use std::{path::PathBuf, str::FromStr};
 
 use clap::{Args, Parser, Subcommand};
 
+pub mod bpf;
 pub mod completion;
 pub mod service;
 pub mod version;
@@ -71,6 +72,9 @@ impl FromStr for OutputFormat {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    /// Direct access to local BPF maps
+    Bpf(bpf::BpfCommand),
+
     /// Installing bash/zsh/fish completion
     Completion(completion::CompletionArgs),
 
