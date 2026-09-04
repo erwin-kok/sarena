@@ -4,7 +4,7 @@ default:
   @just --list
 
 setup:
-    python -m venv scapyenv
+    python3 -m venv scapyenv
     scapyenv/bin/pip install -r scapy/requirements.txt
 
 # Build all workspace packages (excluding eBPF programs)
