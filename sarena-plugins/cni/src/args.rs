@@ -16,7 +16,7 @@ pub struct ArgsSpec {
     pub k8s_pod_uid: String,
 }
 
-pub fn load_args<T>(args: Option<&String>) -> Res<T>
+pub fn load_args<T>(args: Option<&str>) -> Res<T>
 where
     T: DeserializeOwned + Default,
 {

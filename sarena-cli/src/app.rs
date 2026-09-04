@@ -16,7 +16,7 @@ impl App {
         match command {
             Commands::Completion(args) => completion::run(args),
             Commands::Service(service) => service::run(service),
-            Commands::Version => version::run(self).await?,
+            Commands::Version(args) => version::run(self, args.output.as_ref()).await?,
         }
 
         Ok(())

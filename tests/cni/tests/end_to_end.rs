@@ -1,19 +1,9 @@
-//! Exercises the real CNI ADD/CHECK/DEL flow (`sarena-cni-plugin`) against a
-//! fake `sarena-daemon` API server: two pods get `ADD`ed into their own
-//! netns, UDP connectivity between them is verified end-to-end, `CHECK` is
-//! run against both, then both are `DEL`ed. `STATUS` (which, per the CNI
-//! spec, takes no per-container args) is covered separately below.
-//!
-//! `CHECK` and `DEL` carry `prevResult` (the `CNIResult` from `ADD`) in their
-//! network configuration, matching what a real CNI runtime sends -- it's the
-//! mechanism the runtime uses to hand a plugin's own prior result back to it,
-//! independent of plugin chaining (which only applies to `ADD`).
-
-use std::{collections::HashMap, env, net::UdpSocket, path::PathBuf, time::Duration};
+use std::{env, net::UdpSocket, time::Duration};
 
 use rscni_plugin::{
     async_cni::Cni,
-    types::{Args, CNIResult, NetConf},
+    test_util::ArgsBuilder,
+    types::{Args, CNIResult},
 };
 use sarena_cni_plugin::SarenaPlugin;
 use sarena_cni_test::test_daemon::{FakeApiServer, PodSpec};
@@ -21,9 +11,6 @@ use sarena_infra::{InfraError, Netns, NetnsGuard};
 use sarena_utils::{LoggingConfig, logging};
 use serde_json::json;
 use tracing::info;
-
-const ENABLE_DEBUG: &str = "enable-debug";
-const LOG_FILE: &str = "log-file";
 
 const DEMO_NETNS_PREFIX: &str = "cnidemo";
 
@@ -183,24 +170,27 @@ fn set_cni_runtime_env(verb: &str, p: &PodSpec) {
 }
 
 fn build_args(p: &PodSpec, prev_result: Option<CNIResult>) -> Args {
-    let custom = HashMap::from([
-        (ENABLE_DEBUG.to_string(), json!(false)),
-        (LOG_FILE.to_string(), json!("cnidemo-log")),
-    ]);
-    let net_conf = NetConf {
-        cni_version: "1.0.0".to_string(),
-        name: "sarena".to_string(),
-        r#type: "sarena-cni".to_string(),
-        custom,
-        prev_result,
-        ..Default::default()
-    };
-    Args {
-        container_id: Some(p.container_id.parse().expect("valid container id")),
-        netns: Some(PathBuf::from(p.netns_path)),
-        ifname: Some(p.if_name.parse().expect("valid interface name")),
-        args: Some(p.cni_args_string()),
-        path: vec![PathBuf::from("/opt/cni/bin")],
-        config: net_conf,
+    let mut config = json!({
+        "cniVersion": "1.0.0",
+        "name": "sarena",
+        "type": "sarena-cni",
+        "enable-debug": false,
+        "log-file": "cnidemo-log"
+    });
+    if let Some(prev) = prev_result {
+        config["prevResult"] = serde_json::to_value(prev).expect("failed to serialize prevResult");
     }
+
+    ArgsBuilder::new()
+        .container_id(p.container_id)
+        .expect("valid container id")
+        .netns(p.netns_path)
+        .ifname(p.if_name)
+        .expect("valid interface name")
+        .args(&p.cni_args_string())
+        .path("/opt/cni/bin")
+        .config(&config.to_string())
+        .expect("valid network config")
+        .build()
+        .expect("failed to build Args")
 }

@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand};
 
 pub mod completion;
 pub mod service;
@@ -38,15 +38,35 @@ pub struct Cli {
 
 #[derive(Args, Debug)]
 pub struct OutputArgs {
-    #[arg(short = 'o', long, value_enum, default_value_t = OutputFormat::Table)]
-    pub output: OutputFormat,
+    #[arg(short = 'o', long)]
+    pub output: Option<OutputFormat>,
 }
 
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OutputFormat {
-    Table,
     Json,
     Yaml,
+    JsonPath(String),
+}
+
+impl FromStr for OutputFormat {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "json" => Ok(Self::Json),
+            "yaml" => Ok(Self::Yaml),
+            value => {
+                if let Some(expression) = value.strip_prefix("jsonpath=") {
+                    Ok(Self::JsonPath(expression.to_string()))
+                } else {
+                    Err(format!(
+                        "invalid output format: {value}; expected json, yaml, or jsonpath=<expression>"
+                    ))
+                }
+            }
+        }
+    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -54,8 +74,9 @@ pub enum Commands {
     /// Installing bash/zsh/fish completion
     Completion(completion::CompletionArgs),
 
+    /// List services & loadbalancers
     Service(service::ServiceCommand),
 
     /// Print version, git commit, and build date/time
-    Version,
+    Version(OutputArgs),
 }

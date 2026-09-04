@@ -24,7 +24,7 @@ sarena-utils = { path = "../../sarena-utils" }
 aya = { workspace = true }
 axum = { workspace = true }
 ipnet = { workspace = true }
-rscni-plugin = { workspace = true, features = ["async"] }
+rscni-plugin = { workspace = true, features = ["async", "test-util"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }

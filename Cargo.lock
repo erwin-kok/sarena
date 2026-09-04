@@ -1023,6 +1023,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "jsonpath_lib"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eaa63191d68230cccb81c5aa23abd53ed64d83337cacbb25a7b8c7979523774f"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1478,7 +1489,7 @@ dependencies = [
 [[package]]
 name = "rscni-plugin"
 version = "0.4.0"
-source = "git+https://github.com/erwin-kok/rscni?branch=main#4c4e5450e28bf084185fae29d6d72f8cc5749fd8"
+source = "git+https://github.com/erwin-kok/rscni?branch=main#180b09145e6de71b61b3e8e14ffc98bd4d92f355"
 dependencies = [
  "async-trait",
  "rscni-types",
@@ -1488,7 +1499,7 @@ dependencies = [
 [[package]]
 name = "rscni-types"
 version = "0.2.0"
-source = "git+https://github.com/erwin-kok/rscni?branch=main#4c4e5450e28bf084185fae29d6d72f8cc5749fd8"
+source = "git+https://github.com/erwin-kok/rscni?branch=main#180b09145e6de71b61b3e8e14ffc98bd4d92f355"
 dependencies = [
  "ipnet",
  "serde",
@@ -1615,9 +1626,13 @@ dependencies = [
  "clap",
  "clap_complete",
  "config",
+ "jsonpath_lib",
  "sarena-api-client",
+ "sarena-api-types-v1",
  "sarena-utils",
  "serde",
+ "serde_json",
+ "serde_yaml",
  "tokio",
  "tracing",
 ]
@@ -1871,6 +1886,7 @@ version = "0.1.0"
 name = "sarena-utils"
 version = "0.1.0"
 dependencies = [
+ "sarena-api-types-v1",
  "serde",
  "tracing",
  "tracing-appender",
@@ -1942,6 +1958,7 @@ version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "serde",
@@ -1979,6 +1996,19 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "serde_yaml"
+version = "0.9.34+deprecated"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
+dependencies = [
+ "indexmap",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml",
 ]
 
 [[package]]
@@ -2412,6 +2442,12 @@ name = "unicode-segmentation"
 version = "1.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
+
+[[package]]
+name = "unsafe-libyaml"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "url"

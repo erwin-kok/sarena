@@ -1,6 +1,9 @@
+use std::env::consts;
+
 use async_trait::async_trait;
-use sarena_api_types_v1::daemon::{DaemonConfigurationResponse, DaemonDebugInfoResponse};
-use sarena_utils::version;
+use sarena_api_types_v1::daemon::{
+    DaemonConfigurationResponse, DaemonDebugInfoResponse, SarenaVersion,
+};
 
 use crate::{DaemonService, Res};
 
@@ -31,7 +34,14 @@ impl DaemonService for DefaultDaemonService {
     }
 
     async fn debuginfo(&self) -> Res<DaemonDebugInfoResponse> {
-        let version = version(VERSION, GIT_HASH, BUILD_DATE);
-        Ok(DaemonDebugInfoResponse { version })
+        Ok(DaemonDebugInfoResponse {
+            version: SarenaVersion {
+                version: VERSION.to_owned(),
+                git_hash: GIT_HASH.to_owned(),
+                build_date: BUILD_DATE.to_owned(),
+                os: consts::OS.to_owned(),
+                arch: consts::ARCH.to_owned(),
+            },
+        })
     }
 }

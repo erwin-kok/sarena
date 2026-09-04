@@ -52,7 +52,7 @@ where
     let net_conf = args.config();
     init_logging(net_conf);
 
-    let cni_args = load_args::<ArgsSpec>(args.args.as_ref())?;
+    let cni_args = load_args::<ArgsSpec>(args.args())?;
     let span = make_span(command, &args, &cni_args);
 
     async move {
@@ -91,9 +91,9 @@ fn make_span(command: &'static str, args: &Args, cni_args: &ArgsSpec) -> Span {
         "cni_request",
         command,
         event_id = %Uuid::new_v4(),
-        container_id = ?args.container_id,
-        netns = ?args.netns,
-        interface = ?args.ifname,
+        container_id = ?args.container_id(),
+        netns = ?args.netns(),
+        interface = ?args.ifname(),
         k8s_namespace = %cni_args.k8s_pod_namespace,
         k8s_pod = %cni_args.k8s_pod_name,
     )
