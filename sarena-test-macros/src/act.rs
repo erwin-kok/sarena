@@ -1,5 +1,4 @@
-use proc_macro2::{Span, TokenStream};
-use proc_macro2_diagnostics::{Diagnostic, SpanDiagnosticExt as _};
+use proc_macro2::TokenStream;
 use syn::ItemFn;
 
 use crate::common::{ProgramAttrs, ProgramMode, passthrough_tc, passthrough_xdp};
@@ -11,10 +10,9 @@ pub(crate) struct ActProgram {
 }
 
 impl ActProgram {
-    pub(crate) fn parse(attrs: TokenStream, item: TokenStream) -> Result<Self, Diagnostic> {
+    pub(crate) fn parse(attrs: TokenStream, item: TokenStream) -> syn::Result<Self> {
         let item: ItemFn = syn::parse2(item)?;
-        let ProgramAttrs { mode, name } =
-            syn::parse2(attrs).map_err(|e| Span::call_site().error(e.to_string()))?;
+        let ProgramAttrs { mode, name } = syn::parse2(attrs)?;
         Ok(Self { item, mode, name })
     }
 

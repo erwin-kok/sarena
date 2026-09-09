@@ -17,6 +17,5 @@ std = ["dep:aya", "dep:serde"]
 
 [dependencies]
 aya = { workspace = true, optional = true }
-aya-ebpf = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true, optional = true }

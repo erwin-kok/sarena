@@ -1,5 +1,4 @@
-use proc_macro2::{Span, TokenStream};
-use proc_macro2_diagnostics::{Diagnostic, SpanDiagnosticExt as _};
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::ItemFn;
 
@@ -12,10 +11,9 @@ pub(crate) struct AssertProgram {
 }
 
 impl AssertProgram {
-    pub(crate) fn parse(attrs: TokenStream, item: TokenStream) -> Result<Self, Diagnostic> {
+    pub(crate) fn parse(attrs: TokenStream, item: TokenStream) -> syn::Result<Self> {
         let item: ItemFn = syn::parse2(item)?;
-        let ProgramAttrs { mode, name } =
-            syn::parse2(attrs).map_err(|e| Span::call_site().error(e.to_string()))?;
+        let ProgramAttrs { mode, name } = syn::parse2(attrs)?;
         Ok(Self { item, mode, name })
     }
 
@@ -33,6 +31,7 @@ impl AssertProgram {
             vis,
             sig,
             block,
+            ..
         } = item;
         let outer_fn = outer_fn_ident("assert", name);
         let fn_name = &sig.ident;
