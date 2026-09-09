@@ -14,22 +14,29 @@ pub mod version;
     long_about = "CLI for interacting with the local Sarena daemon"
 )]
 pub struct Cli {
-    /// Config file
+    /// Path to a configuration file to load before applying the flags below.
+    /// When omitted, `~/.sarena` is read if it exists. See docs/config.
     #[arg(long, global = true)]
     pub config: Option<PathBuf>,
 
-    /// Enable debug messages
+    /// Emit debug-level log messages (overrides `debug` from the config file).
     #[arg(short = 'D', long, global = true)]
     pub debug: bool,
 
+    /// Address of the daemon to talk to, as `unix://<path>` or `tcp://<host:port>`.
+    /// Overrides `host` from the config file.
+    /// Default: `unix:///tmp/sarena.sock`.
     #[arg(short = 'H', long, global = true)]
     pub host: Option<String>,
 
+    /// Write logs to this file instead of stderr (overrides `log_file` from the
+    /// config file).
     #[arg(short = 'L', long, global = true)]
     pub log_file: Option<String>,
 
-    /// Log format: "text" (one-line, for a terminal) or "json" (for
-    /// production/log aggregation)
+    /// Log output format: `text` (one line per event, for a terminal) or `json`
+    /// (structured, for production / log aggregation).
+    /// Overrides `log_format` from the config file. Default: `text`.
     #[arg(short = 'F', long, global = true, value_parser = ["text", "json"])]
     pub log_format: Option<String>,
 
@@ -39,6 +46,8 @@ pub struct Cli {
 
 #[derive(Args, Debug)]
 pub struct OutputArgs {
+    /// Render the result as machine-readable output instead of a table:
+    /// `json`, `yaml`, or `jsonpath=<expression>`.
     #[arg(short = 'o', long)]
     pub output: Option<OutputFormat>,
 }

@@ -8,19 +8,29 @@ use crate::cli::Cli;
 
 const DEFAULT_PIN_ROOT: &str = "/sys/fs/bpf/sarena";
 
+/// Effective CLI configuration, merged from (lowest to highest precedence):
+/// the config file (`--config <path>`, or `~/.sarena` when it exists),
+/// `SARENA_*` environment variables, and finally the command-line flags.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
+    /// Address of the daemon, as `unix://<path>` or `tcp://<host:port>`.
+    /// When unset the client falls back to `unix:///tmp/sarena.sock`.
     pub host: Option<String>,
 
+    /// Emit debug-level log messages.
     #[serde(default)]
     pub debug: bool,
 
+    /// Write logs to this file instead of stderr.
     #[serde(default)]
     pub log_file: Option<String>,
 
+    /// Log output format: `text` (default) or `json`.
     #[serde(default)]
     pub log_format: LogFormat,
 
+    /// BPF filesystem directory holding the datapath's pinned maps, opened by
+    /// the `bpf` subcommands. Default: `/sys/fs/bpf/sarena`.
     #[serde(default = "default_pin_root")]
     pub pin_root: PathBuf,
 }
