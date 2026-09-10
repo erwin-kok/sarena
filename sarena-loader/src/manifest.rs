@@ -89,4 +89,6 @@ pub(crate) const WIREGUARD_PER_ENDPOINT_MAPS: &[EndpointMap] = &[EndpointMap::Ca
 pub(crate) const GLOBAL_MAPS: &[GlobalMap] = &[
     GlobalMap::LxcMap,
     GlobalMap::MetricsMap,
+    GlobalMap::ConnTrackTcpMap,
+    GlobalMap::ConnTrackAnyMap,
 ];
