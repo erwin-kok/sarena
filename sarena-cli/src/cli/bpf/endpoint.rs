@@ -77,7 +77,7 @@ fn delete_endpoint(app: &App, ip: Ipv4Addr) -> Result<()> {
 
 fn print_table(endpoints: &BTreeMap<String, String>) -> Result<()> {
     let mut tw = TabWriter::new(io::stdout());
-    writeln!(tw, "IP ADDRESS\tLOCAL ENDPOINT INFO")?;
+    writeln!(tw, "IP-ADDRESS\tLOCAL-ENDPOINT-INFO")?;
     for (ip, info) in endpoints {
         writeln!(tw, "{ip}\t{info}")?;
     }

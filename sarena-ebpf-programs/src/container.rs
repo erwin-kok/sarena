@@ -5,14 +5,14 @@ use network_types::{
     ip::Ipv4Hdr,
 };
 use sarena_ebpf_common::at;
-use sarena_shared::{Ipv4Key, Ipv4KeyExt as _};
+use sarena_shared::{Ipv4Key, Ipv4KeyExt as _, OBS_POINT_CONTAINER_FORWARD};
 
 use crate::{
     arp::process_arp,
     endpoint::{get_endpoint_config, lookup_ipv4_endpoint},
     error::{Res, Verdict},
     ipv4::is_fragmented,
-    local_delivery,
+    local_delivery, metrics,
 };
 
 #[inline]
@@ -69,6 +69,8 @@ fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
     }
 
     if let Some(ep) = lookup_ipv4_endpoint(dst_ip) {
+        metrics::update_metrics(ctx.len() as u64, OBS_POINT_CONTAINER_FORWARD);
+
         return local_delivery(ctx, ep);
     };
 

@@ -9,6 +9,7 @@ mod error;
 mod host;
 mod ipv4;
 mod local_delivery;
+mod metrics;
 mod netdev;
 mod overlay;
 mod panic;

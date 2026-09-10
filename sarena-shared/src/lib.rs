@@ -2,8 +2,10 @@
 #![no_builtins]
 
 mod endpoint;
+mod metrics;
 
 pub use endpoint::*;
+pub use metrics::*;
 
 pub type Ipv4Key = u32; // network byte order throughout
 

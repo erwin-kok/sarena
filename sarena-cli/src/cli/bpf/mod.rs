@@ -1,9 +1,13 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
 
-use crate::{app::App, cli::bpf::endpoint::BpfEndpointCommand};
+use crate::{
+    app::App,
+    cli::bpf::{endpoint::BpfEndpointCommand, metrics::BpfMetricsCommand},
+};
 
 pub mod endpoint;
+pub mod metrics;
 
 #[derive(Args, Debug)]
 pub struct BpfCommand {
@@ -16,10 +20,14 @@ pub enum BpfCommands {
     /// Local endpoint map
     #[command(alias = "ep")]
     Endpoint(BpfEndpointCommand),
+
+    /// Traffic metrics
+    Metrics(BpfMetricsCommand),
 }
 
 pub fn run(app: &App, command: &BpfCommand) -> Result<()> {
     match &command.command {
-        BpfCommands::Endpoint(endpoint) => endpoint::run(app, endpoint),
+        BpfCommands::Endpoint(command) => endpoint::run(app, command),
+        BpfCommands::Metrics(command) => metrics::run(app, command),
     }
 }
