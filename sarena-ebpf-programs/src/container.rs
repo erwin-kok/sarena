@@ -9,6 +9,7 @@ use sarena_shared::{Ipv4Key, Ipv4KeyExt as _, OBS_POINT_CONTAINER_FORWARD};
 
 use crate::{
     arp::process_arp,
+    conntrack::ConnTrackInfo,
     endpoint::{get_endpoint_config, lookup_ipv4_endpoint},
     error::{Res, Verdict},
     ipv4::is_fragmented,
@@ -31,7 +32,7 @@ pub fn try_from_container(ctx: TcContext) -> Res<Verdict> {
     match ether_type {
         EtherType::Ipv4 => process_ipv4(&ctx),
         EtherType::Arp => process_arp(&ctx, config),
-        _ => Ok(Verdict::Pass),
+        _ => Ok(Verdict::Drop),
     }
 }
 
@@ -55,6 +56,9 @@ fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
         debug!(ctx, "drop fragmented IP packet");
         return Ok(Verdict::Drop);
     }
+
+    let conntrack = ConnTrackInfo::new(&ctx)?;
+    let status = conntrack.lookup();
 
     {
         let eth: &EthHdr = unsafe { at(ctx, 0)? };

@@ -64,6 +64,7 @@ pub struct ConnTrackKey {
     dst_port: u16,
     src_port: u16,
     protocol: u8,
+    flags: u8,
 }
 
 #[repr(C)]
@@ -75,6 +76,10 @@ pub struct ConnTrackEntry {
 }
 
 impl ConnTrackEntry {
+    pub fn is_alive(&self) -> bool {
+        !self.tx_closing || !self.rx_closing
+    }
+
     pub fn is_closing(&self) -> bool {
         self.tx_closing || self.rx_closing
     }
@@ -138,7 +143,8 @@ impl ConnTrackInfo {
             // (Linux conntrack does the same). Still bounds-check that the
             // header is actually present before accepting the packet.
             IpProto::Icmp => {
-                let _icmphdr: *const Icmpv4Hdr = unsafe { ptr_at(&ctx, EthHdr::LEN + ihl)? };
+                let icmphdr: *const Icmpv4Hdr = unsafe { ptr_at(&ctx, EthHdr::LEN + ihl)? };
+                let _icmp = unsafe { &*icmphdr };
                 (0, 0, TcpFlags::NONE)
             }
 
@@ -152,14 +158,18 @@ impl ConnTrackInfo {
         })
     }
 
-    pub fn lookup(&self) {
+    pub fn lookup(&self) -> ConnTrackStatus {
         let action = self.select_tcp_action();
         let ct_map = if self.proto == IpProto::Tcp {
             &CONNTRACK_TCP_BUFFER
         } else {
             &CONNTRACK_ANY_BUFFER
         };
-        self.__lookup(ct_map, action);
+
+        // Lookup in both directions. TODO
+        let status = self.__lookup(ct_map, &self.key, action);
+
+        status
     }
 
     #[inline]
@@ -181,6 +191,7 @@ impl ConnTrackInfo {
     fn __lookup(
         &self,
         map: &LruHashMap<ConnTrackKey, ConnTrackEntry, CONNTRACK_MAX_ENTRIES, 0>,
+        key: &ConnTrackKey,
         action: ConnTrackAction,
     ) -> ConnTrackStatus {
         if let Some(e) = map.get_ptr_mut(&self.key) {
@@ -211,6 +222,7 @@ impl ConnTrackKey {
             dst_port,
             src_port,
             protocol: proto as u8,
+            flags: 0,
         }
     }
 
@@ -222,6 +234,7 @@ impl ConnTrackKey {
             dst_port: self.src_port,
             src_port: self.dst_port,
             protocol: self.protocol,
+            flags: 0,
         }
     }
 
