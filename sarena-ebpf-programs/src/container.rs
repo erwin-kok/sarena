@@ -4,12 +4,15 @@ use network_types::{
     eth::{EthHdr, EtherType},
     ip::Ipv4Hdr,
 };
-use sarena_ebpf_common::at;
+use sarena_ebpf_common::{at, ptr_at};
 use sarena_shared::{Ipv4Key, Ipv4KeyExt as _, OBS_POINT_CONTAINER_FORWARD};
 
 use crate::{
     arp::process_arp,
-    conntrack::ConnTrackInfo,
+    conntrack::{
+        conntrack::{ConnTrackDirection, ConnTrackScope, ct_lookup},
+        tuple::ConnTrackTuple,
+    },
     endpoint::{get_endpoint_config, lookup_ipv4_endpoint},
     error::{Res, Verdict},
     ipv4::is_fragmented,
@@ -57,8 +60,7 @@ fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
         return Ok(Verdict::Drop);
     }
 
-    let conntrack = ConnTrackInfo::new(&ctx)?;
-    let status = conntrack.lookup();
+    lookup_conntrack(ctx)?;
 
     {
         let eth: &EthHdr = unsafe { at(ctx, 0)? };
@@ -79,4 +81,17 @@ fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
     };
 
     Ok(Verdict::Pass)
+}
+
+fn lookup_conntrack(ctx: &TcContext) -> Res<()> {
+    let mut tuple = ConnTrackTuple::new(ctx)?;
+
+    ct_lookup(
+        ctx,
+        &mut tuple,
+        ConnTrackDirection::Egress,
+        ConnTrackScope::BiDir,
+    );
+
+    Ok(())
 }
