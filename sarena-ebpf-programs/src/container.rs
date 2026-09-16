@@ -9,10 +9,7 @@ use sarena_shared::{Ipv4Key, Ipv4KeyExt as _, OBS_POINT_CONTAINER_FORWARD};
 
 use crate::{
     arp::process_arp,
-    conntrack::{
-        conntrack::{ConnTrackDirection, ConnTrackScope, ct_lookup4},
-        tuple::ConnTrackTuple,
-    },
+    conntrack::tuple::ConnTrackTuple,
     endpoint::{get_endpoint_config, lookup_ipv4_endpoint},
     error::{Res, Verdict},
     ipv4::is_fragmented,
@@ -60,7 +57,7 @@ fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
         return Ok(Verdict::Drop);
     }
 
-    let mut tuple = ConnTrackTuple::new(ctx)?;
+    let tuple = ConnTrackTuple::new(ctx)?;
     tuple.print_key();
 
     {

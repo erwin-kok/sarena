@@ -1,4 +1,5 @@
-use aya_ebpf::{helpers::bpf_printk, programs::TcContext};
+use aya_ebpf::{bpf_printk, programs::TcContext};
+use aya_log_ebpf::info;
 use network_types::{
     eth::EthHdr,
     icmp::{Icmpv4Hdr, Icmpv4HdrData},
@@ -15,15 +16,14 @@ use crate::{
     error::{EbpfError::UnsupportedProtocol, Res},
 };
 
-#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ConnTrackTuple {
-    pub daddr: Ipv4Key,
-    pub saddr: Ipv4Key,
-    pub dport: u16,
-    pub sport: u16,
-    pub nexthdr: u8,
-    pub flags: Option<TcpFlags>,
+    pub src_addr: Ipv4Key,
+    pub dst_addr: Ipv4Key,
+    pub src_port: u16,
+    pub dst_port: u16,
+    pub proto: u8,
+    pub tcp_flags: Option<TcpFlags>,
 }
 
 impl ConnTrackTuple {
@@ -44,34 +44,33 @@ impl ConnTrackTuple {
         };
 
         Ok(Self {
-            daddr: Ipv4Key::from_octets(ipv4.dst_addr),
-            saddr: Ipv4Key::from_octets(ipv4.src_addr),
-            dport: dst_port,
-            sport: src_port,
-            nexthdr: proto as u8,
-            flags: flags,
+            dst_addr: Ipv4Key::from_octets(ipv4.dst_addr),
+            src_addr: Ipv4Key::from_octets(ipv4.src_addr),
+            dst_port,
+            src_port,
+            proto: proto as u8,
+            tcp_flags: flags,
         })
     }
 
     #[inline]
     pub fn print_key(&self) {
-        let src = self.saddr.octets();
-        let dst = self.daddr.octets();
-
+        let src = self.src_addr.octets();
+        let dst = self.dst_addr.octets();
         unsafe {
             bpf_printk!(
                 c"conntrack proto=%d %u.%u.%u.%u:%u -> %u.%u.%u.%u:%u",
-                self.nexthdr,
+                self.proto,
                 src[0],
                 src[1],
                 src[2],
                 src[3],
-                self.sport,
+                self.src_port,
                 dst[0],
                 dst[1],
                 dst[2],
                 dst[3],
-                self.dport,
+                self.dst_port,
             );
         }
     }
