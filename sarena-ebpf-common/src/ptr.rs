@@ -9,7 +9,7 @@ pub unsafe fn ptr_at<T>(ctx: &TcContext, offset: usize) -> Res<*const T> {
     let len: usize = core::mem::size_of::<T>();
 
     if start + offset + len > end {
-        return Err(PacketSizeError(core::any::type_name::<T>()));
+        return Err(PacketSizeError);
     }
 
     Ok((start + offset) as *const T)
@@ -22,7 +22,7 @@ pub unsafe fn mut_ptr_at<T>(ctx: &TcContext, offset: usize) -> Res<*mut T> {
     let len: usize = core::mem::size_of::<T>();
 
     if start + offset + len > end {
-        return Err(PacketSizeError(core::any::type_name::<T>()));
+        return Err(PacketSizeError);
     }
 
     Ok((start + offset) as *mut T)

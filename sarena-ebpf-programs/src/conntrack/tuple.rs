@@ -1,8 +1,7 @@
 use aya_ebpf::{helpers::bpf_printk, programs::TcContext};
-use bitflags::bitflags;
 use network_types::{
     eth::EthHdr,
-    icmp::Icmpv4Hdr,
+    icmp::{Icmpv4Hdr, Icmpv4HdrData},
     ip::{IpProto, Ipv4Hdr},
     sctp::SctpHdr,
     tcp::TcpHdr,
@@ -12,19 +11,9 @@ use sarena_ebpf_common::ptr_at;
 use sarena_shared::{Ipv4Key, Ipv4KeyExt as _};
 
 use crate::{
-    conntrack::conntrack::{ConnTrackDirection, ConnTrackScope, TcpFlags},
+    conntrack::tcp_flags::TcpFlags,
     error::{EbpfError::UnsupportedProtocol, Res},
 };
-
-bitflags! {
-    #[derive(Debug, Clone, Copy)]
-    struct TupleFlags: u8 {
-        const OUT     = 0; // Outgoing flow
-        const IN      = 1; // Incoming flow
-        const RELATED = 2; // Flow represents related packets
-        const SERVICE = 4; // Flow represents packets to service
-    }
-}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -34,7 +23,7 @@ pub struct ConnTrackTuple {
     pub dport: u16,
     pub sport: u16,
     pub nexthdr: u8,
-    pub flags: TupleFlags,
+    pub flags: Option<TcpFlags>,
 }
 
 impl ConnTrackTuple {
@@ -44,49 +33,13 @@ impl ConnTrackTuple {
         let ipv4 = unsafe { &*ipv4hdr };
 
         let proto = ipv4.proto()?;
-        let ihl = ipv4.ihl() as usize;
+        let ihl: usize = ipv4.ihl() as usize;
 
         let (src_port, dst_port, flags) = match proto {
-            IpProto::Udp => {
-                let udphdr: *const UdpHdr = unsafe { ptr_at(&ctx, EthHdr::LEN + ihl)? };
-                let udp = unsafe { &*udphdr };
-                (udp.src_port(), udp.dst_port(), TcpFlags::NONE)
-            }
-
-            IpProto::Tcp => {
-                let tcphdr: *const TcpHdr = unsafe { ptr_at(&ctx, EthHdr::LEN + ihl)? };
-                let tcp = unsafe { &*tcphdr };
-                (
-                    u16::from_be_bytes(tcp.source),
-                    u16::from_be_bytes(tcp.dest),
-                    TcpFlags::new(
-                        tcp.syn() != 0,
-                        tcp.ack() != 0,
-                        tcp.fin() != 0,
-                        tcp.rst() != 0,
-                    ),
-                )
-            }
-
-            IpProto::Sctp => {
-                let sctphdr: *const SctpHdr = unsafe { ptr_at(&ctx, EthHdr::LEN + ihl)? };
-                let sctp = unsafe { &*sctphdr };
-                (
-                    u16::from_be_bytes(sctp.src),
-                    u16::from_be_bytes(sctp.dst),
-                    TcpFlags::NONE,
-                )
-            }
-
-            // ICMP has no port concept -- 0/0 is the conventional placeholder
-            // (Linux conntrack does the same). Still bounds-check that the
-            // header is actually present before accepting the packet.
-            IpProto::Icmp => {
-                let icmphdr: *const Icmpv4Hdr = unsafe { ptr_at(&ctx, EthHdr::LEN + ihl)? };
-                let _icmp = unsafe { &*icmphdr };
-                (0, 0, TcpFlags::NONE)
-            }
-
+            IpProto::Udp => Self::extract_for_udp(ctx, EthHdr::LEN + ihl)?,
+            IpProto::Tcp => Self::extract_for_tcp(ctx, EthHdr::LEN + ihl)?,
+            IpProto::Sctp => Self::extract_for_sctp(ctx, EthHdr::LEN + ihl)?,
+            IpProto::Icmp => Self::extract_for_icmp(ctx, EthHdr::LEN + ihl)?,
             _ => return Err(UnsupportedProtocol(proto as u8)),
         };
 
@@ -96,45 +49,8 @@ impl ConnTrackTuple {
             dport: dst_port,
             sport: src_port,
             nexthdr: proto as u8,
-            flags: TupleFlags::OUT,
+            flags: flags,
         })
-    }
-
-    #[inline]
-    pub fn select_tuple_type(&mut self, direction: ConnTrackDirection, scope: ConnTrackScope) {
-        if direction == ConnTrackDirection::Service {
-            self.flags = TupleFlags::SERVICE;
-            return;
-        }
-        let egress = direction == ConnTrackDirection::Egress;
-        self.flags = match scope {
-            ConnTrackScope::Forward => {
-                if egress {
-                    TupleFlags::OUT
-                } else {
-                    TupleFlags::IN
-                }
-            }
-            ConnTrackScope::BiDir | ConnTrackScope::Reverse => {
-                if egress {
-                    TupleFlags::IN
-                } else {
-                    TupleFlags::OUT
-                }
-            }
-        }
-    }
-
-    #[inline]
-    pub fn reverse(&self) -> Self {
-        Self {
-            daddr: self.saddr,
-            saddr: self.daddr,
-            dport: self.sport,
-            sport: self.dport,
-            nexthdr: self.nexthdr,
-            flags: self.flags,
-        }
     }
 
     #[inline]
@@ -157,6 +73,65 @@ impl ConnTrackTuple {
                 dst[3],
                 self.dport,
             );
+        }
+    }
+
+    #[inline]
+    fn extract_for_tcp(ctx: &TcContext, offset: usize) -> Res<(u16, u16, Option<TcpFlags>)> {
+        let tcphdr: *const TcpHdr = unsafe { ptr_at(&ctx, offset)? };
+        let tcp = unsafe { &*tcphdr };
+        Ok((
+            u16::from_be_bytes(tcp.source),
+            u16::from_be_bytes(tcp.dest),
+            Some(TcpFlags::from(&tcp)),
+        ))
+    }
+
+    #[inline]
+    fn extract_for_udp(ctx: &TcContext, offset: usize) -> Res<(u16, u16, Option<TcpFlags>)> {
+        let udphdr: *const UdpHdr = unsafe { ptr_at(&ctx, offset)? };
+        let udp = unsafe { &*udphdr };
+        Ok((udp.src_port(), udp.dst_port(), None))
+    }
+
+    #[inline]
+    fn extract_for_sctp(ctx: &TcContext, offset: usize) -> Res<(u16, u16, Option<TcpFlags>)> {
+        let sctphdr: *const SctpHdr = unsafe { ptr_at(&ctx, offset)? };
+        let sctp = unsafe { &*sctphdr };
+        Ok((
+            u16::from_be_bytes(sctp.src),
+            u16::from_be_bytes(sctp.dst),
+            None,
+        ))
+    }
+
+    #[inline]
+    fn extract_for_icmp(ctx: &TcContext, offset: usize) -> Res<(u16, u16, Option<TcpFlags>)> {
+        let icmphdr: *const Icmpv4Hdr = unsafe { ptr_at(&ctx, offset)? };
+        let icmp = unsafe { &*icmphdr };
+        let data = icmp.data()?;
+        match data {
+            Icmpv4HdrData::EchoReply(id_seq) | Icmpv4HdrData::Echo(id_seq) => {
+                Ok((id_seq.id(), id_seq.id(), None))
+            }
+
+            Icmpv4HdrData::DestinationUnreachable(_) | Icmpv4HdrData::ParameterProblem(_) => {
+                let inner_offset = offset + Icmpv4Hdr::LEN;
+                let ipv4hdr_inner: *const Ipv4Hdr = unsafe { ptr_at(&ctx, inner_offset)? };
+                let ipv4_inner = unsafe { &*ipv4hdr_inner };
+                let proto = ipv4_inner.proto()?;
+                let ihl: usize = ipv4_inner.ihl() as usize;
+                let (src_port, dst_port, _) = match proto {
+                    IpProto::Udp => Self::extract_for_udp(ctx, inner_offset + ihl)?,
+                    IpProto::Tcp => Self::extract_for_tcp(ctx, inner_offset + ihl)?,
+                    IpProto::Sctp => Self::extract_for_sctp(ctx, inner_offset + ihl)?,
+                    _ => (0, 0, None),
+                };
+
+                Ok((src_port, dst_port, None))
+            }
+
+            _ => Ok((0, 0, None)),
         }
     }
 }

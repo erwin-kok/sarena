@@ -3,7 +3,7 @@ use aya_ebpf::{
     macros::map,
     maps::PerCpuArray,
 };
-use network_types::ip::IpError;
+use network_types::{icmp::IcmpError, ip::IpError};
 use sarena_ebpf_common::CommonError;
 
 #[map(name = "prog_errors")]
@@ -44,6 +44,9 @@ pub enum EbpfError {
     #[error("IpError: {0}")]
     IpError(#[from] IpError),
 
+    #[error("ICMP error: {0:?}")]
+    IcmpError(IcmpError),
+
     #[error("Protocol not supported: {0}")]
     UnsupportedProtocol(u8),
 
@@ -54,6 +57,12 @@ pub enum EbpfError {
     CsumL3,
 }
 
+impl From<IcmpError> for EbpfError {
+    fn from(err: IcmpError) -> Self {
+        Self::IcmpError(err)
+    }
+}
+
 impl EbpfError {
     pub const fn verdict(&self) -> Verdict {
         match self {
@@ -62,6 +71,7 @@ impl EbpfError {
             | EbpfError::IpError(_)
             | EbpfError::TtlExceeded
             | EbpfError::CsumL3 => Verdict::Drop,
+            EbpfError::IcmpError(_) => Verdict::Drop,
 
             EbpfError::UnsupportedProtocol(_) => Verdict::Pass,
         }
@@ -75,6 +85,7 @@ impl EbpfError {
             EbpfError::UnsupportedProtocol(_) => 4,
             EbpfError::TtlExceeded => 5,
             EbpfError::CsumL3 => 6,
+            EbpfError::IcmpError(_) => 7,
         }
     }
 }
