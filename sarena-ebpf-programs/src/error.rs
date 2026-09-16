@@ -38,8 +38,8 @@ pub enum EbpfError {
     #[error(transparent)]
     Common(#[from] CommonError),
 
-    #[error("Internal Error: {0}")]
-    InternalError(&'static str),
+    #[error("Internal Error")]
+    InternalError,
 
     #[error("IpError: {0}")]
     IpError(#[from] IpError),
@@ -49,6 +49,9 @@ pub enum EbpfError {
 
     #[error("Protocol not supported: {0}")]
     UnsupportedProtocol(u8),
+
+    #[error("Map error: {0}")]
+    MapError(i32),
 
     #[error("TTL exceeded")]
     TtlExceeded,
@@ -67,11 +70,12 @@ impl EbpfError {
     pub const fn verdict(&self) -> Verdict {
         match self {
             EbpfError::Common(_)
-            | EbpfError::InternalError(_)
+            | EbpfError::InternalError
             | EbpfError::IpError(_)
             | EbpfError::TtlExceeded
-            | EbpfError::CsumL3 => Verdict::Drop,
-            EbpfError::IcmpError(_) => Verdict::Drop,
+            | EbpfError::CsumL3
+            | EbpfError::MapError(_)
+            | EbpfError::IcmpError(_) => Verdict::Drop,
 
             EbpfError::UnsupportedProtocol(_) => Verdict::Pass,
         }
@@ -80,12 +84,13 @@ impl EbpfError {
     pub const fn code(&self) -> u32 {
         match self {
             EbpfError::Common(_) => 1,
-            EbpfError::InternalError(_) => 2,
+            EbpfError::InternalError => 2,
             EbpfError::IpError(_) => 3,
             EbpfError::UnsupportedProtocol(_) => 4,
             EbpfError::TtlExceeded => 5,
             EbpfError::CsumL3 => 6,
             EbpfError::IcmpError(_) => 7,
+            EbpfError::MapError(_) => 8,
         }
     }
 }

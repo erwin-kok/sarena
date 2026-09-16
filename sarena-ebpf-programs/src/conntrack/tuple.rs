@@ -1,5 +1,4 @@
 use aya_ebpf::{bpf_printk, programs::TcContext};
-use aya_log_ebpf::info;
 use network_types::{
     eth::EthHdr,
     icmp::{Icmpv4Hdr, Icmpv4HdrData},
@@ -53,7 +52,7 @@ impl ConnTrackTuple {
         })
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn print_key(&self) {
         let src = self.src_addr.octets();
         let dst = self.dst_addr.octets();
@@ -75,7 +74,7 @@ impl ConnTrackTuple {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn extract_for_tcp(ctx: &TcContext, offset: usize) -> Res<(u16, u16, Option<TcpFlags>)> {
         let tcphdr: *const TcpHdr = unsafe { ptr_at(&ctx, offset)? };
         let tcp = unsafe { &*tcphdr };
@@ -86,14 +85,14 @@ impl ConnTrackTuple {
         ))
     }
 
-    #[inline]
+    #[inline(always)]
     fn extract_for_udp(ctx: &TcContext, offset: usize) -> Res<(u16, u16, Option<TcpFlags>)> {
         let udphdr: *const UdpHdr = unsafe { ptr_at(&ctx, offset)? };
         let udp = unsafe { &*udphdr };
         Ok((udp.src_port(), udp.dst_port(), None))
     }
 
-    #[inline]
+    #[inline(always)]
     fn extract_for_sctp(ctx: &TcContext, offset: usize) -> Res<(u16, u16, Option<TcpFlags>)> {
         let sctphdr: *const SctpHdr = unsafe { ptr_at(&ctx, offset)? };
         let sctp = unsafe { &*sctphdr };
@@ -104,7 +103,7 @@ impl ConnTrackTuple {
         ))
     }
 
-    #[inline]
+    #[inline(always)]
     fn extract_for_icmp(ctx: &TcContext, offset: usize) -> Res<(u16, u16, Option<TcpFlags>)> {
         let icmphdr: *const Icmpv4Hdr = unsafe { ptr_at(&ctx, offset)? };
         let icmp = unsafe { &*icmphdr };

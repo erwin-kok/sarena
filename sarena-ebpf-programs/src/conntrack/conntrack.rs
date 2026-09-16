@@ -1,52 +1,29 @@
-use aya_ebpf::{btf_maps::LruHashMap, macros::btf_map, programs::TcContext};
+use aya_ebpf::{btf_maps::LruHashMap, macros::btf_map};
 use bitflags::bitflags;
-use network_types::{
-    eth::EthHdr,
-    ip::{IpProto, Ipv4Hdr},
-};
-use sarena_ebpf_common::ptr_at;
 use sarena_shared::Ipv4Key;
 
-use crate::{conntrack::tuple::ConnTrackTuple, error::Res};
+use crate::{EbpfError, conntrack::tuple::ConnTrackTuple, error::Res};
 
 const CONNTRACK_MAX_ENTRIES: usize = 4096;
 
-#[derive(Clone, Copy, PartialEq)]
-pub enum ConnTrackDirection {
-    Egress,
-    Ingress,
-    Service,
-}
+#[btf_map(name = "conntrack_map")]
+static CONNTRACK_MAP: LruHashMap<ConnTrackKey, ConnTrackEntry, CONNTRACK_MAX_ENTRIES, 0> =
+    LruHashMap::new();
 
+#[repr(u8)]
 #[derive(Clone, Copy, PartialEq)]
-pub enum ConnTrackStatus {
-    New,
-    Established,
-    Reply,
-    Related,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub enum ConnTrackAction {
-    Create,
-    Close,
-    Unspecified,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub enum ConnTrackScope {
-    Forward,
-    Reverse,
-    BiDir,
+pub enum ConnTrackState {
+    New = 0,
+    Established = 1,
+    Closing = 2,
 }
 
 bitflags! {
     #[derive(Debug, Clone, Copy)]
-    struct TupleFlags: u8 {
-        const OUT     = 0; // Outgoing flow
-        const IN      = 1; // Incoming flow
-        const RELATED = 2; // Flow represents related packets
-        const SERVICE = 4; // Flow represents packets to service
+    pub struct SeenFlags: u8 {
+        const SEEN_FIN_ORIG     = 0b001;
+        const SEEN_FIN_REPLY    = 0b010;
+        const SEEN_RST          = 0b100;
     }
 }
 
@@ -59,11 +36,12 @@ pub struct ConnTrackKey {
     pub port_hi: u16,
     pub proto: u8,
     pub _pad: [u8; 3],
-}
+} // 16 bytes
 
 impl ConnTrackKey {
     /// Canonical key for a flow between (a_addr,a_port) and (b_addr,b_port).
     /// Order-independent: swapping the two arguments produces the same key.
+    #[inline(always)]
     pub fn new(a_addr: u32, a_port: u16, b_addr: u32, b_port: u16, proto: u8) -> Self {
         if (a_addr, a_port) <= (b_addr, b_port) {
             Self {
@@ -95,12 +73,14 @@ pub struct ConnTrackEntry {
     pub orig_src_port: u16,
     pub orig_dst_port: u16,
 
+    pub state: ConnTrackState,
+    pub flags: SeenFlags,
     pub expires_ns: u64, // active-expiry check, independent of LRU eviction
 
     pub packets: u64,
     pub rx_closing: bool,
     pub tx_closing: bool,
-}
+} // 64 bytes
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum FlowDir {
@@ -125,17 +105,51 @@ pub enum ConnTrackVerdict {
     Related(FlowDir),
 }
 
-#[btf_map(name = "conntrack_map")]
-static CONNTRACK_MAP: LruHashMap<ConnTrackKey, ConnTrackEntry, CONNTRACK_MAX_ENTRIES, 0> =
-    LruHashMap::new();
-
-pub fn ct_lookup(t: &ConnTrackTuple, now: u64) -> Option<(ConnTrackVerdict, ConnTrackEntry)> {
-    let key = ConnTrackKey::new(t.src_addr, t.src_port, t.dst_addr, t.dst_port, t.proto);
+#[inline(always)]
+pub fn ct_lookup(tuple: &ConnTrackTuple, now: u64) -> Option<(ConnTrackVerdict, ConnTrackEntry)> {
+    let key = ConnTrackKey::new(
+        tuple.src_addr,
+        tuple.src_port,
+        tuple.dst_addr,
+        tuple.dst_port,
+        tuple.proto,
+    );
     let entry = unsafe { CONNTRACK_MAP.get(&key) }?;
     if now > entry.expires_ns {
         return None;
     }
 
-    let dir = FlowDir::of(entry, t.src_addr, t.src_port);
+    let dir = FlowDir::of(entry, tuple.src_addr, tuple.src_port);
     Some((ConnTrackVerdict::Seen(dir), *entry))
+}
+
+#[inline(always)]
+pub fn ct_create(
+    tuple: &ConnTrackTuple,
+    now: u64,
+    nat: Option<(u32, u16)>,
+    service_id: u32,
+) -> Res<()> {
+    let key = ConnTrackKey::new(
+        tuple.src_addr,
+        tuple.src_port,
+        tuple.dst_addr,
+        tuple.dst_port,
+        tuple.proto,
+    );
+    let entry = ConnTrackEntry {
+        orig_src_addr: tuple.src_addr,
+        orig_dst_addr: tuple.dst_addr,
+        orig_src_port: tuple.src_port,
+        orig_dst_port: tuple.dst_port,
+        state: ConnTrackState::New,
+        flags: SeenFlags::empty(),
+        expires_ns: 0,
+        packets: 0,
+        rx_closing: false,
+        tx_closing: false,
+    };
+    CONNTRACK_MAP
+        .insert(&key, &entry, 0)
+        .map_err(EbpfError::MapError)
 }

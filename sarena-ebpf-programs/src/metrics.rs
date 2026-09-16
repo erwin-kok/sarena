@@ -11,7 +11,7 @@ static METRICS_MAP: PerCpuHashMap<
     { BPF_F_NO_PREALLOC as usize },
 > = PerCpuHashMap::new();
 
-#[inline]
+#[inline(always)]
 pub fn update_metrics(bytes: u64, obs_point: u8) {
     let key = MetricsKey {
         obs_point,

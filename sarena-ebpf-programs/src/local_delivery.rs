@@ -11,7 +11,7 @@ use crate::{
 /// Offset of the IPv4 header checksum field within the frame.
 const IPV4_CSUM_OFF: usize = EthHdr::LEN + 10;
 
-#[inline]
+#[inline(always)]
 pub fn local_delivery(ctx: &TcContext, ep: *const EndpointInfo) -> Res<Verdict> {
     let src_mac = unsafe { (*ep).host_mac };
     let dst_mac = unsafe { (*ep).container_mac };
@@ -23,7 +23,7 @@ pub fn local_delivery(ctx: &TcContext, ep: *const EndpointInfo) -> Res<Verdict> 
     Ok(Verdict::Redirect(ctx_redirect(ifindex, 0) as i32))
 }
 
-#[inline]
+#[inline(always)]
 fn ipv4_dec_ttl(ctx: &TcContext) -> Res<()> {
     let ip4: &mut Ipv4Hdr = unsafe { at_mut(ctx, EthHdr::LEN)? };
 
@@ -39,7 +39,7 @@ fn ipv4_dec_ttl(ctx: &TcContext) -> Res<()> {
     Ok(())
 }
 
-#[inline]
+#[inline(always)]
 fn rewrite_eth(ctx: &TcContext, src_mac: [u8; 6], dst_mac: [u8; 6]) -> Res<()> {
     let eth: &mut EthHdr = unsafe { at_mut(ctx, 0)? };
     eth.dst_addr = dst_mac;

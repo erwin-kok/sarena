@@ -1,4 +1,4 @@
-use aya_ebpf::programs::TcContext;
+use aya_ebpf::{helpers::generated::bpf_ktime_get_ns, programs::TcContext};
 use aya_log_ebpf::debug;
 use network_types::{
     eth::{EthHdr, EtherType},
@@ -9,14 +9,17 @@ use sarena_shared::{Ipv4Key, Ipv4KeyExt as _, OBS_POINT_CONTAINER_FORWARD};
 
 use crate::{
     arp::process_arp,
-    conntrack::tuple::ConnTrackTuple,
+    conntrack::{
+        conntrack::{ct_create, ct_lookup},
+        tuple::ConnTrackTuple,
+    },
     endpoint::{get_endpoint_config, lookup_ipv4_endpoint},
     error::{Res, Verdict},
     ipv4::is_fragmented,
     local_delivery, metrics,
 };
 
-#[inline]
+#[inline(always)]
 pub fn try_from_container(ctx: TcContext) -> Res<Verdict> {
     let eth: &EthHdr = unsafe { at(&ctx, 0)? };
     let Ok(ether_type) = eth.ether_type() else {
@@ -36,12 +39,12 @@ pub fn try_from_container(ctx: TcContext) -> Res<Verdict> {
     }
 }
 
-#[inline]
+#[inline(always)]
 pub fn try_to_container(_ctx: TcContext) -> Res<Verdict> {
     Ok(Verdict::Pass)
 }
 
-#[inline]
+#[inline(always)]
 fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
     let (fragmented, src_ip, dst_ip) = {
         let ip4: &Ipv4Hdr = unsafe { at(ctx, EthHdr::LEN)? };
@@ -57,8 +60,7 @@ fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
         return Ok(Verdict::Drop);
     }
 
-    let tuple = ConnTrackTuple::new(ctx)?;
-    tuple.print_key();
+    conntrack(ctx)?;
 
     {
         let eth: &EthHdr = unsafe { at(ctx, 0)? };
@@ -79,4 +81,21 @@ fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
     };
 
     Ok(Verdict::Pass)
+}
+
+#[inline(always)]
+fn conntrack(ctx: &TcContext) -> Res<()> {
+    // let now = unsafe { bpf_ktime_get_ns() };
+
+    let tuple = ConnTrackTuple::new(ctx)?;
+    tuple.print_key();
+
+    match ct_lookup(&tuple, 0) {
+        Some((v, e)) => {}
+        None => {
+            ct_create(&tuple, 0, None, 0)?;
+        }
+    }
+
+    Ok(())
 }

@@ -10,7 +10,7 @@ use crate::{
     skb::{ctx_get_ifindex, ctx_redirect_peer},
 };
 
-#[inline]
+#[inline(always)]
 pub fn process_arp(ctx: &TcContext, config: &EndpointConfig) -> Res<Verdict> {
     let (is_request, dst_mac, src_mac, sender_ip, target_ip) = {
         let eth: &EthHdr = unsafe { at(ctx, 0)? };
@@ -48,13 +48,13 @@ pub fn process_arp(ctx: &TcContext, config: &EndpointConfig) -> Res<Verdict> {
     Ok(Verdict::Redirect(ctx_redirect_peer(ifindex, 0) as i32))
 }
 
-#[inline]
+#[inline(always)]
 fn eth_is_bcast(a: &[u8; 6]) -> bool {
     bpf_memcmp(a.as_ptr(), ETH_BROADCAST.as_ptr(), ETH_BROADCAST.len()) == 0
 }
 
 /// Turn the ARP request currently in the packet into a reply from us.
-#[inline]
+#[inline(always)]
 fn write_arp_reply(
     ctx: &TcContext,
     our_mac: [u8; 6],

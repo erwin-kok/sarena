@@ -24,7 +24,5 @@ pub fn lookup_ipv4_endpoint(ip: Ipv4Key) -> Option<*const EndpointInfo> {
 
 #[inline(always)]
 pub fn get_endpoint_config<'a>() -> Res<&'a EndpointConfig> {
-    ENDPOINT_CONFIG.get(0).ok_or(EbpfError::InternalError(
-        "endpoint does not have EndpointConfig",
-    ))
+    ENDPOINT_CONFIG.get(0).ok_or(EbpfError::InternalError)
 }

@@ -14,7 +14,7 @@ use crate::{
     local_delivery, metrics,
 };
 
-#[inline]
+#[inline(always)]
 pub fn try_from_host(ctx: TcContext) -> Res<Verdict> {
     let eth: &EthHdr = unsafe { at(&ctx, 0)? };
     let Ok(ether_type) = eth.ether_type() else {
@@ -33,12 +33,12 @@ pub fn try_from_host(ctx: TcContext) -> Res<Verdict> {
     }
 }
 
-#[inline]
+#[inline(always)]
 pub fn try_to_host(_ctx: TcContext) -> Res<Verdict> {
     Ok(Verdict::Pass)
 }
 
-#[inline]
+#[inline(always)]
 fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
     let (fragmented, dst_ip) = {
         let ip4: &Ipv4Hdr = unsafe { at(ctx, EthHdr::LEN)? };
