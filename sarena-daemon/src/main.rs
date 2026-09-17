@@ -1,13 +1,20 @@
-use std::net::{IpAddr, Ipv4Addr};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    time::Duration,
+};
 
 use ipnet::{IpNet, Ipv4Net};
 use sarena_api_server::ApiServer;
-use sarena_control_plane::{ControlPlane, ControlPlaneConfig};
+use sarena_control_plane::{ControlPlane, ControlPlaneConfig, ControlPlaneHandle};
 use sarena_utils::{LogFormat, LoggingConfig, logging};
-use tokio::signal::unix::{SignalKind, signal};
+use tokio::{
+    signal::unix::{SignalKind, signal},
+    task::{JoinError, JoinSet},
+};
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{error, info};
 
+const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_SOCKET_PATH: &str = "/tmp/sarena.sock";
 const TCP_PORT: u16 = 3000;
 
@@ -31,27 +38,76 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let control_plane = ControlPlane::new(config);
-    let state = control_plane.start().await?;
+    let ControlPlaneHandle {
+        state,
+        loader_handle,
+        loader_thread,
+    } = control_plane.start().await?;
+
     let shutdown = CancellationToken::new();
+    let mut tasks = JoinSet::new();
 
-    let server_shutdown = shutdown.clone();
-    let server = tokio::spawn(async move {
-        ApiServer::new()
-            .start(&socket_path, TCP_PORT, state, server_shutdown)
-            .await
-    });
+    {
+        // API SERVER
+        let server_shutdown = shutdown.child_token();
+        tasks.spawn(async move {
+            ApiServer::new()
+                .start(&socket_path, TCP_PORT, state, server_shutdown)
+                .await
+        });
+    }
 
-    let mut sigterm = signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
+    {
+        // TODO: Start K8S Controllers/Reconcilers
+    }
 
+    // Wait for either an OS shutdown signal or a task exiting unexpectedly
+    // (e.g. panicking, or returning before we asked it to stop). Whichever
+    // happens first triggers the same graceful shutdown path below, instead
+    // of a crashed task leaving us stuck waiting for a signal that may never
+    // come.
     tokio::select! {
-        _ = tokio::signal::ctrl_c() => info!("received SIGINT, shutting down"),
-        _ = sigterm.recv() => info!("received SIGTERM, shutting down"),
+        () = wait_for_signal() => {
+            info!("shutdown signal received");
+        }
+
+        Some(result) = tasks.join_next() => {
+            error!("daemon task exited before shutdown was requested");
+            log_task_result(result);
+        }
     }
 
     shutdown.cancel();
-    server.await??;
+
+    let drain = async {
+        while let Some(result) = tasks.join_next().await {
+            log_task_result(result);
+        }
+    };
+    if tokio::time::timeout(SHUTDOWN_TIMEOUT, drain).await.is_err() {
+        error!("timed out waiting for tasks to shut down gracefully");
+    }
+
+    loader_handle.shutdown(loader_thread).await?;
 
     logging::shutdown_logging();
 
     Ok(())
+}
+
+fn log_task_result(result: Result<anyhow::Result<()>, JoinError>) {
+    match result {
+        Ok(Ok(())) => info!("daemon task exited"),
+        Ok(Err(err)) => error!(?err, "daemon task failed"),
+        Err(err) => error!(?err, "daemon task panicked"),
+    }
+}
+
+async fn wait_for_signal() {
+    let mut sigterm = signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
+
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => info!("received SIGINT"),
+        _ = sigterm.recv() => info!("received SIGTERM"),
+    }
 }

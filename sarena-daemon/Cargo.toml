@@ -17,7 +17,7 @@ sarena-utils = { path = "../sarena-utils" }
 
 anyhow = { workspace = true }
 ipnet = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal", "time"] }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 

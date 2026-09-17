@@ -28,7 +28,7 @@ async fn load_multiple_links() {
         format!("{PIN_ROOT}/globals"),
     );
     let loader = Loader::new(backend, PIN_ROOT);
-    let loader_handle = LoaderHandle::spawn(loader, 16);
+    let (loader_handle, _loader_thread) = LoaderHandle::spawn(loader, 16);
 
     test_support::with_temp_netns("dpi-p1-", |peer1_ns| async move {
         test_support::with_temp_netns("dpi-p2-", |peer2_ns| async move {

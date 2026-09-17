@@ -24,12 +24,18 @@ pub struct ControlPlane {
     pub config: ControlPlaneConfig,
 }
 
+pub struct ControlPlaneHandle {
+    pub state: AppState,
+    pub loader_handle: LoaderHandle,
+    pub loader_thread: std::thread::JoinHandle<()>,
+}
+
 impl ControlPlane {
     pub fn new(config: ControlPlaneConfig) -> Self {
         Self { config }
     }
 
-    pub async fn start(&self) -> Res<AppState> {
+    pub async fn start(&self) -> Res<ControlPlaneHandle> {
         let _ = fs::remove_dir_all(PIN_ROOT);
 
         std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
@@ -41,7 +47,8 @@ impl ControlPlane {
         );
         let loader: Loader<AyaBackend> = Loader::new(backend, PIN_ROOT);
 
-        let loader_handle = LoaderHandle::spawn(loader, 16);
+        let (loader_handle, loader_thread) = LoaderHandle::spawn(loader, 16);
+        let shutdown_loader_handle = loader_handle.clone();
 
         loader_handle.load_global_maps().await?;
 
@@ -90,7 +97,11 @@ impl ControlPlane {
 
         let state = AppState::new(ipam, endpoint, daemon);
 
-        Ok(state)
+        Ok(ControlPlaneHandle {
+            state,
+            loader_handle: shutdown_loader_handle,
+            loader_thread,
+        })
     }
 }
 

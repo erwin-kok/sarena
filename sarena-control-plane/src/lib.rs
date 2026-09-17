@@ -8,7 +8,7 @@ mod setup;
 mod state;
 
 pub use config::ControlPlaneConfig;
-pub use setup::ControlPlane;
+pub use setup::{ControlPlane, ControlPlaneHandle};
 pub use state::AppState;
 
 #[derive(Debug, Error)]

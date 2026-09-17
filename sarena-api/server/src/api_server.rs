@@ -61,7 +61,7 @@ impl ApiServer {
         tokio::select! {
             biased;
 
-            _ = shutdown.cancelled() => {
+            () = shutdown.cancelled() => {
                 info!("API server shutting down");
             }
 
@@ -100,7 +100,7 @@ async fn unix_listener(
     let mut connections = tokio::task::JoinSet::new();
     loop {
         tokio::select! {
-             _ = shutdown.cancelled() => {
+             () = shutdown.cancelled() => {
                 info!("Unix API listener shutting down");
                 break;
             }
@@ -159,7 +159,7 @@ async fn tcp_listener(
     let mut connections = tokio::task::JoinSet::new();
     loop {
         tokio::select! {
-            _ = shutdown.cancelled() => {
+            () = shutdown.cancelled() => {
                 info!("TCP API listener shutting down");
                 break;
             }

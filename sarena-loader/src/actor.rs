@@ -1,3 +1,5 @@
+use std::thread::JoinHandle;
+
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
@@ -52,14 +54,19 @@ impl LoaderHandle {
     /// which is what guarantees two calls (e.g. an ADD and a DEL racing
     /// for the same id) never interleave against the same pin tree -
     /// no locking needed anywhere else.
-    pub fn spawn<B>(loader: Loader<B>, channel_buffer: usize) -> Self
+    ///
+    /// Returns the handle together with the actor thread's `JoinHandle`,
+    /// so a caller that wants an orderly shutdown (see [`LoaderHandle::shutdown`])
+    /// can wait for the thread to actually finish rather than just
+    /// dropping its senders and hoping.
+    pub fn spawn<B>(loader: Loader<B>, channel_buffer: usize) -> (Self, JoinHandle<()>)
     where
         B: BpfBackend + Send + 'static,
         B::Instance: Send,
     {
         let (tx, mut rx) = mpsc::channel(channel_buffer);
 
-        std::thread::Builder::new()
+        let thread = std::thread::Builder::new()
             .name("sarena-loader".into())
             .spawn(move || {
                 let mut loader = loader;
@@ -70,7 +77,28 @@ impl LoaderHandle {
             })
             .expect("failed to spawn sarena-loader actor thread");
 
-        Self { tx }
+        (Self { tx }, thread)
+    }
+
+    /// Tears down all loaded eBPF state and waits for the actor thread to
+    /// exit. `self` is the last clone the caller is holding onto for this
+    /// purpose; once it's dropped here the channel closes, which is what
+    /// lets the actor thread's `blocking_recv` loop end.
+    ///
+    /// Any other clones of this handle (e.g. ones handed to request
+    /// handlers) must already have been dropped before calling this, or
+    /// the thread will never see the channel close and `thread.join()`
+    /// will hang.
+    pub async fn shutdown(self, thread: JoinHandle<()>) -> Res<()> {
+        self.teardown_all().await?;
+        drop(self);
+
+        tokio::task::spawn_blocking(move || thread.join())
+            .await
+            .expect("failed to join sarena-loader actor thread")
+            .expect("sarena-loader actor thread panicked");
+
+        Ok(())
     }
 
     pub async fn load_global_maps(&self) -> Res<()> {
@@ -150,7 +178,7 @@ mod tests {
     #[tokio::test]
     async fn actor_serializes_calls_and_reports_state_after_restart() {
         let loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
-        let handle = LoaderHandle::spawn(loader, 16);
+        let (handle, _thread) = LoaderHandle::spawn(loader, 16);
 
         let kind = EndpointKind::Container;
         let link = "lxc00123";
@@ -166,7 +194,7 @@ mod tests {
     #[tokio::test]
     async fn dropping_a_cloned_handle_does_not_affect_other_handles() {
         let loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
-        let handle = LoaderHandle::spawn(loader, 16);
+        let (handle, _thread) = LoaderHandle::spawn(loader, 16);
         drop(handle.clone());
 
         let active = handle.list_active_endpoints().await.unwrap();

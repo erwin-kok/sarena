@@ -98,7 +98,7 @@ impl FakeApiServer {
             format!("{PIN_ROOT}/globals"),
         );
         let loader = Loader::new(backend, PIN_ROOT);
-        let loader_handle = LoaderHandle::spawn(loader, 16);
+        let (loader_handle, _loader_thread) = LoaderHandle::spawn(loader, 16);
         loader_handle
             .load_global_maps()
             .await
