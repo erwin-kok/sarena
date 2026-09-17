@@ -2553,6 +2553,7 @@ dependencies = [
  "ipnet",
  "sarena-api-server",
  "sarena-control-plane",
+ "sarena-kubernetes",
  "sarena-utils",
  "tokio",
  "tokio-util",
@@ -2632,20 +2633,16 @@ dependencies = [
 name = "sarena-kubernetes"
 version = "0.1.0"
 dependencies = [
- "aya",
- "aya-log",
+ "futures",
  "k8s-openapi",
  "kube",
- "log",
- "nix 0.31.3",
- "sarena-infra",
- "sarena-shared",
  "schemars",
  "serde",
  "serde_json",
  "serde_yaml",
  "thiserror",
  "tokio",
+ "tokio-util",
  "tracing",
 ]
 

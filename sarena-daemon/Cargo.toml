@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 sarena-api-server = { path = "../sarena-api/server" }
 sarena-control-plane = { path = "../sarena-control-plane" }
+sarena-kubernetes = { path = "../sarena-kubernetes" }
 sarena-utils = { path = "../sarena-utils" }
 
 anyhow = { workspace = true }

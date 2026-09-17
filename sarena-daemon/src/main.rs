@@ -4,7 +4,6 @@ use std::{
 };
 
 use ipnet::{IpNet, Ipv4Net};
-use sarena_api_server::ApiServer;
 use sarena_control_plane::{ControlPlane, ControlPlaneConfig, ControlPlaneHandle};
 use sarena_utils::{LogFormat, LoggingConfig, logging};
 use tokio::{
@@ -51,14 +50,20 @@ async fn main() -> anyhow::Result<()> {
         // API SERVER
         let server_shutdown = shutdown.child_token();
         tasks.spawn(async move {
-            ApiServer::new()
+            sarena_api_server::ApiServer::new()
                 .start(&socket_path, TCP_PORT, state, server_shutdown)
                 .await
         });
     }
 
     {
-        // TODO: Start K8S Controllers/Reconcilers
+        // Kubernetes controllers
+        let token = shutdown.child_token();
+        tasks.spawn(async move {
+            sarena_kubernetes::controllers::orchestrator::start(token)
+                .await
+                .map_err(anyhow::Error::from)
+        });
     }
 
     // Wait for either an OS shutdown signal or a task exiting unexpectedly

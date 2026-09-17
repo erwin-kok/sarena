@@ -11,23 +11,17 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-sarena-infra = { path = "../sarena-infra", features = ["test"] }
-sarena-shared = { path = "../sarena-shared" }
-
-aya = { workspace = true }
-aya-log = { workspace = true }
+futures = { workspace = true }
 kube = { workspace = true }
 k8s-openapi = { workspace = true }
-log = { workspace = true }
-nix = { workspace = true, features = ["poll"] }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-tokio = { workspace = true, features = ["rt"] }
+tokio = { workspace = true, features = ["rt", "macros"] }
+tokio-util = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-
 
 [[bin]]
 name = "sarena-crdgen"
