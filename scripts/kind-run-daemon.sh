@@ -23,6 +23,11 @@ if [[ ! -f "${daemon_bin}" ]]; then
     exit 1
 fi
 
+sudo mkdir -p /root/.kube
+kind get kubeconfig --name "${cluster_name}" --internal \
+    | sed "s#https://${node_name}:6443#https://127.0.0.1:6443#" \
+    | sudo tee /root/.kube/config >/dev/null
+
 node_pid="$(docker inspect -f '{{.State.Pid}}' "${node_name}" 2>/dev/null)" || {
     echo "kind node '${node_name}' not found/running -- run 'just kind-up' first"
     exit 1
