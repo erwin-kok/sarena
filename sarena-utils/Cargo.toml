@@ -11,6 +11,11 @@ version.workspace = true
 workspace = true
 
 [dependencies]
+
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-semantic-conventions = { workspace = true }
+opentelemetry-otlp = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }

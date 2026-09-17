@@ -3,6 +3,10 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
+use opentelemetry::{KeyValue, trace::TracerProvider};
+use opentelemetry_otlp::SpanExporter;
+use opentelemetry_sdk::{Resource, trace::SdkTracerProvider};
+use opentelemetry_semantic_conventions::resource;
 use tracing::Level;
 use tracing_appender::{non_blocking::WorkerGuard, rolling};
 use tracing_subscriber::{
@@ -12,7 +16,7 @@ use tracing_subscriber::{
     util::SubscriberInitExt,
 };
 
-use crate::{LogFormat, TracingConfig};
+use crate::{LogFormat, TracingConfig, version};
 
 static LOG_INIT: OnceLock<()> = OnceLock::new();
 static LOG_GUARD: Mutex<Option<WorkerGuard>> = Mutex::new(None);
@@ -46,9 +50,24 @@ pub fn init_tracing(config: &TracingConfig) {
                     .boxed(),
             };
 
+        let resource = Resource::builder()
+            .with_attribute(KeyValue::new(resource::SERVICE_NAME, "sarena-daemon"))
+            .with_attribute(KeyValue::new(resource::SERVICE_VERSION, version::VERSION))
+            .build();
+        let exporter = SpanExporter::builder()
+            .with_tonic()
+            .build()
+            .expect("failed to initialize SpanExporter");
+        let provider = SdkTracerProvider::builder()
+            .with_batch_exporter(exporter)
+            .with_resource(resource)
+            .build();
+        let tracer = provider.tracer("sarena-daemon");
+
         let subscriber = tracing_subscriber::registry()
             .with(env_filter)
-            .with(stderr_layer);
+            .with(stderr_layer)
+            .with(tracing_opentelemetry::layer().with_tracer(tracer));
 
         if let Some(log_path) = &config.log_file {
             let path = Path::new(log_path);

@@ -1,4 +1,5 @@
 pub mod logging;
+pub mod version;
 
 use serde::{Deserialize, Serialize};
 
