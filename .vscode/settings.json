@@ -32,8 +32,17 @@
     // scapy module only exists in ./scapyenv. Prepend it to PATH so RA's
     // flycheck build scripts find it even when VS Code wasn't launched
     // from a shell with the venv activated.
+    //
+    // rust-analyzer doesn't actually substitute `${env:PATH}` here (it's
+    // an open upstream request, rust-lang/rust-analyzer#9419), so this
+    // setting was silently replacing PATH with just scapyenv/bin, dropping
+    // /usr/bin and breaking `cc` for any proc-macro/build-script crate
+    // that needs a fresh link (masked until now because everything else
+    // was already cached in target/). Append the standard system dirs
+    // explicitly so the linker is always found regardless of whether that
+    // substitution ever starts working.
     "rust-analyzer.cargo.extraEnv": {
-        "PATH": "${workspaceFolder}/scapyenv/bin:${env:PATH}"
+        "PATH": "${workspaceFolder}/scapyenv/bin:${env:PATH}:/usr/local/bin:/usr/bin:/bin"
     },
 
     // Insert auto-imports the way rustfmt.toml (imports_granularity="Crate",

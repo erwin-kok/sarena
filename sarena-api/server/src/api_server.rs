@@ -12,6 +12,7 @@ use hyper::{body::Incoming, server::conn::http1};
 use hyper_util::rt::TokioIo;
 use sarena_control_plane::AppState;
 use tokio::net::{TcpListener, UnixListener};
+use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
 use tower_http::trace::{MakeSpan, TraceLayer};
 use tracing::info;
@@ -39,75 +40,167 @@ impl ApiServer {
         driver_sock: &str,
         tcp_port: u16,
         state: AppState,
+        shutdown: CancellationToken,
     ) -> anyhow::Result<()> {
         let router = build_router(state);
-        unix_listener(driver_sock, router.clone())?;
-        tcp_listener(tcp_port, router).await?;
+
+        let unix_router = router.clone();
+        let unix_shutdown = shutdown.child_token();
+        let unix_driver_sock = driver_sock.to_owned();
+
+        let tcp_router = router;
+        let tcp_shutdown = shutdown.child_token();
+
+        let mut unix = tokio::spawn(async move {
+            unix_listener(&unix_driver_sock, unix_router, unix_shutdown).await
+        });
+
+        let mut tcp =
+            tokio::spawn(async move { tcp_listener(tcp_port, tcp_router, tcp_shutdown).await });
+
+        tokio::select! {
+            biased;
+
+            _ = shutdown.cancelled() => {
+                info!("API server shutting down");
+            }
+
+            result = &mut unix => {
+                result??;
+                anyhow::bail!("Unix API server exited unexpectedly");
+            }
+
+            result = &mut tcp => {
+                result??;
+                anyhow::bail!("TCP API server exited unexpectedly");
+            }
+        }
+
+        // Wait for both listener tasks to finish draining in-flight connections.
+        unix.await??;
+        tcp.await??;
+
         Ok(())
     }
 }
 
-fn unix_listener(driver_sock: &str, router: Router) -> anyhow::Result<()> {
+async fn unix_listener(
+    driver_sock: &str,
+    router: Router,
+    shutdown: CancellationToken,
+) -> anyhow::Result<()> {
     if Path::new(driver_sock).exists() {
         std::fs::remove_file(driver_sock)?;
         info!("Removed stale socket: {}", driver_sock);
     }
 
-    let unix_listener = UnixListener::bind(driver_sock)?;
+    let listener = UnixListener::bind(driver_sock)?;
     info!("Listening on Unix domain socket {}", driver_sock);
 
-    tokio::spawn(async move {
-        loop {
-            match unix_listener.accept().await {
-                Ok((stream, _peer_addr)) => {
-                    let io = TokioIo::new(UnixStreamCompat(stream));
-                    let router = router.clone();
-                    tokio::spawn(async move {
-                        let service =
-                            hyper::service::service_fn(move |req: hyper::Request<Incoming>| {
-                                router.clone().oneshot(req)
-                            });
+    let mut connections = tokio::task::JoinSet::new();
+    loop {
+        tokio::select! {
+             _ = shutdown.cancelled() => {
+                info!("Unix API listener shutting down");
+                break;
+            }
 
-                        if let Err(err) = http1::Builder::new().serve_connection(io, service).await
-                        {
-                            tracing::error!("Unix socket connection error: {:?}", err);
-                        }
-                    });
+            result = listener.accept() => {
+                let (stream, _peer_addr) = result?;
+                let router = router.clone();
+                connections.spawn(async move {
+                    let io = TokioIo::new(UnixStreamCompat(stream));
+                    let service =
+                        hyper::service::service_fn(move |req: hyper::Request<Incoming>| {
+                            router.clone().oneshot(req)
+                        });
+
+                    if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
+                        tracing::error!(
+                            ?err,
+                            "Unix connection closed with error"
+                        );
+                    }
+                });
+            }
+
+            Some(result) = connections.join_next() => {
+                if let Err(err) = result {
+                    tracing::error!(
+                        ?err,
+                        "Unix connection task failed"
+                    );
                 }
-                Err(e) => tracing::error!("Unix socket accept error: {:?}", e),
             }
         }
-    });
+    }
+
+    // No more accepts. Wait for active connections.
+    while let Some(result) = connections.join_next().await {
+        if let Err(err) = result {
+            tracing::error!(?err, "Unix connection task failed during shutdown");
+        }
+    }
+
+    // Remove our socket rather than leaving it behind.
+    let _ = std::fs::remove_file(driver_sock);
 
     Ok(())
 }
 
-async fn tcp_listener(tcp_port: u16, router: Router) -> anyhow::Result<()> {
-    let tcp_listener = TcpListener::bind(("127.0.0.1", tcp_port)).await?;
+async fn tcp_listener(
+    tcp_port: u16,
+    router: Router,
+    shutdown: CancellationToken,
+) -> anyhow::Result<()> {
+    let listener = TcpListener::bind(("127.0.0.1", tcp_port)).await?;
     info!("Listening on TCP 127.0.0.1:{}", tcp_port);
 
-    tokio::spawn(async move {
-        loop {
-            match tcp_listener.accept().await {
-                Ok((stream, _peer_addr)) => {
-                    let io = TokioIo::new(stream);
-                    let router = router.clone();
-                    tokio::spawn(async move {
-                        let service =
-                            hyper::service::service_fn(move |req: hyper::Request<Incoming>| {
-                                router.clone().oneshot(req)
-                            });
+    let mut connections = tokio::task::JoinSet::new();
+    loop {
+        tokio::select! {
+            _ = shutdown.cancelled() => {
+                info!("TCP API listener shutting down");
+                break;
+            }
 
-                        if let Err(err) = http1::Builder::new().serve_connection(io, service).await
-                        {
-                            tracing::error!("TCP connection error: {:?}", err);
-                        }
-                    });
+            result = listener.accept() => {
+                let (stream, peer) = result?;
+                let router = router.clone();
+                connections.spawn(async move {
+                let io = TokioIo::new(stream);
+                    let service =
+                        hyper::service::service_fn(move |req: hyper::Request<Incoming>| {
+                            router.clone().oneshot(req)
+                        });
+
+                    if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
+                        tracing::error!(
+                            %peer,
+                            ?err,
+                            "TCP HTTP connection closed with error"
+                        );
+                    }
+                });
+            }
+
+            Some(result) = connections.join_next() => {
+                if let Err(err) = result {
+                    tracing::error!(
+                        ?err,
+                        "HTTP connection task failed"
+                    );
                 }
-                Err(e) => tracing::error!("TCP accept error: {:?}", e),
             }
         }
-    });
+    }
+
+    // No more accepts. Wait for active connections.
+    while let Some(result) = connections.join_next().await {
+        if let Err(err) = result {
+            tracing::error!(?err, "HTTP connection task failed during shutdown");
+        }
+    }
 
     Ok(())
 }

@@ -5,6 +5,7 @@ use sarena_api_server::ApiServer;
 use sarena_control_plane::{ControlPlane, ControlPlaneConfig};
 use sarena_utils::{LogFormat, LoggingConfig, logging};
 use tokio::signal::unix::{SignalKind, signal};
+use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 const DEFAULT_SOCKET_PATH: &str = "/tmp/sarena.sock";
@@ -31,10 +32,14 @@ async fn main() -> anyhow::Result<()> {
 
     let control_plane = ControlPlane::new(config);
     let state = control_plane.start().await?;
+    let shutdown = CancellationToken::new();
 
-    ApiServer::new()
-        .start(&socket_path, TCP_PORT, state)
-        .await?;
+    let server_shutdown = shutdown.clone();
+    let server = tokio::spawn(async move {
+        ApiServer::new()
+            .start(&socket_path, TCP_PORT, state, server_shutdown)
+            .await
+    });
 
     let mut sigterm = signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
 
@@ -42,6 +47,9 @@ async fn main() -> anyhow::Result<()> {
         _ = tokio::signal::ctrl_c() => info!("received SIGINT, shutting down"),
         _ = sigterm.recv() => info!("received SIGTERM, shutting down"),
     }
+
+    shutdown.cancel();
+    server.await??;
 
     logging::shutdown_logging();
 

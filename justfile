@@ -45,6 +45,9 @@ build-ebpf:
 install-ebpf: build-ebpf
     cargo xtask install-ebpf
 
+gen-crd:
+    cargo run --bin sarena-crdgen
+
 netns-clean:
     #!/usr/bin/env bash
     set -euo pipefail
