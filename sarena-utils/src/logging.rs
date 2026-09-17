@@ -19,7 +19,14 @@ use tracing_subscriber::{
 use crate::{LogFormat, TracingConfig, version};
 
 static LOG_INIT: OnceLock<()> = OnceLock::new();
-static LOG_GUARD: Mutex<Option<WorkerGuard>> = Mutex::new(None);
+static LOG_GUARD: Mutex<Option<LoggingGuard>> = Mutex::new(None);
+
+struct LoggingGuard {
+    // Held only to flush buffered logs/spans on drop; never read otherwise.
+    #[allow(dead_code)]
+    worker_guard: Option<WorkerGuard>,
+    tracer_provider: Option<SdkTracerProvider>,
+}
 
 pub fn init_tracing(config: &TracingConfig) {
     LOG_INIT.get_or_init(|| {
@@ -50,6 +57,7 @@ pub fn init_tracing(config: &TracingConfig) {
                     .boxed(),
             };
 
+        let mut tracer_provider = None;
         let otel_layer = config.otel_endpoint.as_ref().map(|otel_endpoint| {
             let resource = Resource::builder()
                 .with_attribute(KeyValue::new(resource::SERVICE_NAME, "sarena-daemon"))
@@ -65,8 +73,11 @@ pub fn init_tracing(config: &TracingConfig) {
                 .with_resource(resource)
                 .build();
             let tracer = provider.tracer("sarena-daemon");
+            let layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
-            tracing_opentelemetry::layer().with_tracer(tracer)
+            tracer_provider = Some(provider);
+
+            layer
         });
 
         let subscriber = tracing_subscriber::registry()
@@ -74,7 +85,7 @@ pub fn init_tracing(config: &TracingConfig) {
             .with(stderr_layer)
             .with(otel_layer);
 
-        if let Some(log_path) = &config.log_file {
+        let worker_guard = if let Some(log_path) = &config.log_file {
             let path = Path::new(log_path);
 
             let dir = path
@@ -98,16 +109,31 @@ pub fn init_tracing(config: &TracingConfig) {
                 .try_init()
                 .expect("failed to initialize tracing");
 
-            *LOG_GUARD.lock().expect("logging guard mutex poisoned") = Some(guard);
+            Some(guard)
         } else {
             let _ = subscriber.try_init();
-        }
+            None
+        };
+
+        *LOG_GUARD.lock().expect("logging guard mutex poisoned") = Some(LoggingGuard {
+            worker_guard,
+            tracer_provider,
+        });
     });
 }
 
 pub fn shutdown_tracing() {
-    LOG_GUARD
+    let Some(guard) = LOG_GUARD
         .lock()
         .expect("logging guard mutex poisoned")
-        .take();
+        .take()
+    else {
+        return;
+    };
+
+    if let Some(provider) = &guard.tracer_provider
+        && let Err(err) = provider.shutdown()
+    {
+        tracing::error!(?err, "failed to shut down OTel tracer provider");
+    }
 }

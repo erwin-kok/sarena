@@ -120,6 +120,7 @@ opentelemetry_sdk = "0.32"
 opentelemetry-semantic-conventions = { version = "0.32", features = ["semconv_experimental"] }
 opentelemetry-otlp = { version = "0.32", features = ["grpc-tonic"] }
 opentelemetry-prometheus = "0.32"
+prometheus = "0.14"
 proc-macro2 = { version = "1", default-features = false }
 quote = { version = "1", default-features = false }
 rand = { version = "0.10", default-features = false }

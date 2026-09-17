@@ -10,6 +10,7 @@ use axum::{
 use http::{HeaderName, HeaderValue};
 use hyper::{body::Incoming, server::conn::http1};
 use hyper_util::rt::TokioIo;
+use prometheus::Registry;
 use sarena_control_plane::AppState;
 use tokio::net::{TcpListener, UnixListener};
 use tokio_util::sync::CancellationToken;
@@ -40,9 +41,10 @@ impl ApiServer {
         driver_sock: &str,
         tcp_port: u16,
         state: AppState,
+        metrics_registry: Registry,
         shutdown: CancellationToken,
     ) -> anyhow::Result<()> {
-        let router = build_router(state);
+        let router = build_router(state, metrics_registry);
 
         let unix_router = router.clone();
         let unix_shutdown = shutdown.child_token();
@@ -205,7 +207,7 @@ async fn tcp_listener(
     Ok(())
 }
 
-fn build_router(state: AppState) -> Router {
+fn build_router(state: AppState, metrics_registry: Registry) -> Router {
     Router::new()
         .nest(
             sarena_api_types_v1::DEFAULT_BASE_PATH,
@@ -217,6 +219,7 @@ fn build_router(state: AppState) -> Router {
         .layer(TraceLayer::new_for_http().make_span_with(HttpRequestSpan))
         .layer(middleware::from_fn(request_id_middleware))
         .with_state(state)
+        .merge(handlers::metrics::routes(metrics_registry))
 }
 
 #[derive(Clone, Debug)]

@@ -5,7 +5,7 @@ use std::{
 
 use ipnet::{IpNet, Ipv4Net};
 use sarena_control_plane::{ControlPlane, ControlPlaneConfig, ControlPlaneHandle};
-use sarena_utils::{LogFormat, TracingConfig, logging};
+use sarena_utils::{LogFormat, TracingConfig, logging, metrics::init_metrics};
 use tokio::{
     signal::unix::{SignalKind, signal},
     task::{JoinError, JoinSet},
@@ -21,9 +21,10 @@ const TCP_PORT: u16 = 3000;
 async fn main() -> anyhow::Result<()> {
     logging::init_tracing(&TracingConfig {
         format: LogFormat::Text,
-        otel_endpoint: Some("http://otel-collector:4317".to_string()),
         ..Default::default()
     });
+
+    let metrics_state = init_metrics()?;
 
     let socket_path =
         std::env::var("SARENA_SOCKET").unwrap_or_else(|_| DEFAULT_SOCKET_PATH.to_string());
@@ -50,9 +51,16 @@ async fn main() -> anyhow::Result<()> {
     {
         // API SERVER
         let server_shutdown = shutdown.child_token();
+        let metrics_registry = metrics_state.registry.clone();
         tasks.spawn(async move {
             sarena_api_server::ApiServer::new()
-                .start(&socket_path, TCP_PORT, state, server_shutdown)
+                .start(
+                    &socket_path,
+                    TCP_PORT,
+                    state,
+                    metrics_registry,
+                    server_shutdown,
+                )
                 .await
         });
     }
@@ -90,11 +98,18 @@ async fn main() -> anyhow::Result<()> {
             log_task_result(result);
         }
     };
+
     if tokio::time::timeout(SHUTDOWN_TIMEOUT, drain).await.is_err() {
         error!("timed out waiting for tasks to shut down gracefully");
     }
 
-    loader_handle.shutdown(loader_thread).await?;
+    if let Err(err) = loader_handle.shutdown(loader_thread).await {
+        error!(?err, "failed to shut down eBPF loader");
+    }
+
+    if let Err(err) = metrics_state.provider.shutdown() {
+        error!(?err, "failed to shut down OTel meter provider");
+    }
 
     logging::shutdown_tracing();
 

@@ -22,6 +22,7 @@ axum = { workspace = true }
 http = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
+prometheus = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
 tokio-util = { workspace = true }
