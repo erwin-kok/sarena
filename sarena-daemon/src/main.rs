@@ -21,6 +21,7 @@ const TCP_PORT: u16 = 3000;
 async fn main() -> anyhow::Result<()> {
     logging::init_tracing(&TracingConfig {
         format: LogFormat::Text,
+        otel_endpoint: Some("http://otel-collector:4317".to_string()),
         ..Default::default()
     });
 

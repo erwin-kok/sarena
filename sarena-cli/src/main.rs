@@ -21,6 +21,7 @@ async fn main() -> Result<()> {
         enable_debug: config.debug,
         log_file: config.log_file.clone(),
         format: config.log_format,
+        otel_endpoint: None,
     });
 
     let client = ApiClient::new_client(config.host.clone())?;
