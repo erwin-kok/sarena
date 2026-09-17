@@ -1,5 +1,8 @@
 export PATH := justfile_directory() / "scapyenv/bin" + ":" + env_var("PATH")
 
+manifests_dir := "./manifests/base"
+crd_dir := manifests_dir + "/crd"
+
 default:
   @just --list
 
@@ -17,8 +20,8 @@ check:
 
 # clean up target
 clean:
-    cargo clean
-    rm -rf target-ebpf
+    cargo clean    
+    rm -rf target-ebpf    
 
 # fmt up target
 fmt:
@@ -46,7 +49,11 @@ install-ebpf: build-ebpf
     cargo xtask install-ebpf
 
 gen-crd:
-    cargo run --bin sarena-crdgen
+    cargo run --bin sarena-crdgen -- > {{crd_dir}}/sarena-crd.yaml
+
+# Apply the kustomize manifests to the current kubectl context
+apply-manifests: gen-crd
+    kubectl apply -k {{manifests_dir}}
 
 netns-clean:
     #!/usr/bin/env bash
@@ -72,7 +79,7 @@ kind-up:
 kind-down:
     bash "{{justfile_directory()}}/scripts/kind-down.sh"
 
-kind-install: build build-ebpf
+kind-install: build build-ebpf apply-manifests
     bash "{{justfile_directory()}}/scripts/kind-install.sh"
 
 kind-run-daemon: build build-ebpf
