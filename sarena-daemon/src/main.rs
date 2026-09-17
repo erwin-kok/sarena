@@ -1,5 +1,7 @@
 use std::{
+    future::Future,
     net::{IpAddr, Ipv4Addr},
+    process,
     time::Duration,
 };
 
@@ -14,6 +16,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
+const TELEMETRY_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_SOCKET_PATH: &str = "/tmp/sarena.sock";
 const TCP_PORT: u16 = 3000;
 
@@ -68,8 +71,9 @@ async fn main() -> anyhow::Result<()> {
     {
         // Kubernetes controllers
         let token = shutdown.child_token();
+        let metrics_registry = metrics_state.registry.clone();
         tasks.spawn(async move {
-            sarena_kubernetes::controllers::orchestrator::start(token)
+            sarena_kubernetes::controllers::orchestrator::start(metrics_registry, token)
                 .await
                 .map_err(anyhow::Error::from)
         });
@@ -93,27 +97,51 @@ async fn main() -> anyhow::Result<()> {
 
     shutdown.cancel();
 
-    let drain = async {
+    shutdown_step("daemon tasks", SHUTDOWN_TIMEOUT, async {
         while let Some(result) = tasks.join_next().await {
             log_task_result(result);
         }
-    };
+    })
+    .await;
 
-    if tokio::time::timeout(SHUTDOWN_TIMEOUT, drain).await.is_err() {
-        error!("timed out waiting for tasks to shut down gracefully");
+    shutdown_step("eBPF loader", SHUTDOWN_TIMEOUT, async {
+        if let Err(err) = loader_handle.shutdown(loader_thread).await {
+            error!(?err, "failed to shut down eBPF loader");
+        }
+    })
+    .await;
+
+    shutdown_step(
+        "OTel meter provider",
+        TELEMETRY_SHUTDOWN_TIMEOUT,
+        shutdown_blocking("OTel meter provider", move || {
+            if let Err(err) = metrics_state.provider.shutdown() {
+                error!(?err, "failed to shut down OTel meter provider");
+            }
+        }),
+    )
+    .await;
+
+    shutdown_step(
+        "OTel tracer provider",
+        TELEMETRY_SHUTDOWN_TIMEOUT,
+        shutdown_blocking("OTel tracer provider", logging::shutdown_tracing),
+    )
+    .await;
+
+    process::exit(0)
+}
+
+async fn shutdown_step(name: &str, timeout: Duration, fut: impl Future<Output = ()>) {
+    if tokio::time::timeout(timeout, fut).await.is_err() {
+        error!("timed out shutting down {name}");
     }
+}
 
-    if let Err(err) = loader_handle.shutdown(loader_thread).await {
-        error!(?err, "failed to shut down eBPF loader");
+async fn shutdown_blocking(name: &str, f: impl FnOnce() + Send + 'static) {
+    if tokio::task::spawn_blocking(f).await.is_err() {
+        error!("{name} shutdown task panicked");
     }
-
-    if let Err(err) = metrics_state.provider.shutdown() {
-        error!(?err, "failed to shut down OTel meter provider");
-    }
-
-    logging::shutdown_tracing();
-
-    Ok(())
 }
 
 fn log_task_result(result: Result<anyhow::Result<()>, JoinError>) {

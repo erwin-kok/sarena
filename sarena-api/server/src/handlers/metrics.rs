@@ -1,11 +1,9 @@
 use axum::{
-    Router,
-    extract::State,
-    http::header::CONTENT_TYPE,
-    response::{IntoResponse, Response},
-    routing::get,
+    Router, extract::State, http::header::CONTENT_TYPE, response::IntoResponse, routing::get,
 };
 use prometheus::{Encoder, Registry, TextEncoder};
+
+use crate::error::{ApiError, ResultExt};
 
 pub fn routes(registry: Registry) -> Router {
     Router::new()
@@ -13,15 +11,13 @@ pub fn routes(registry: Registry) -> Router {
         .with_state(registry)
 }
 
-async fn get_metrics(State(registry): State<Registry>) -> Response {
+async fn get_metrics(State(registry): State<Registry>) -> Result<impl IntoResponse, ApiError> {
     let encoder = TextEncoder::new();
+    let content_type = encoder.format_type().to_owned();
     let metric_families = registry.gather();
 
     let mut buf = Vec::new();
-    if let Err(err) = encoder.encode(&metric_families, &mut buf) {
-        tracing::error!(?err, "failed to encode metrics");
-        return (http::StatusCode::INTERNAL_SERVER_ERROR).into_response();
-    }
+    encoder.encode(&metric_families, &mut buf).internal()?;
 
-    ([(CONTENT_TYPE, encoder.format_type())], buf).into_response()
+    Ok(([(CONTENT_TYPE, content_type)], buf))
 }

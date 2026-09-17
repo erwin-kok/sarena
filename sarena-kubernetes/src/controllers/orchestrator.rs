@@ -1,4 +1,5 @@
 use kube::Client;
+use prometheus::Registry;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
@@ -7,7 +8,7 @@ use crate::{
     error::{KubernetesError, Res},
 };
 
-pub async fn start(shutdown: CancellationToken) -> Res<()> {
+pub async fn start(_metrics_registry: Registry, shutdown: CancellationToken) -> Res<()> {
     let client = Client::try_default().await?;
     let mut tasks = JoinSet::new();
 

@@ -2922,6 +2922,7 @@ dependencies = [
  "futures",
  "k8s-openapi",
  "kube",
+ "prometheus",
  "schemars",
  "serde",
  "serde_json",
