@@ -25,10 +25,10 @@ impl std::str::FromStr for LogFormat {
 }
 
 #[derive(Debug, Default)]
-pub struct LoggingConfig {
+pub struct TracingConfig {
     pub enable_debug: bool,
     pub log_file: Option<String>,
     pub format: LogFormat,
 }
 
-pub use logging::{init_logging, shutdown_logging};
+pub use logging::{init_tracing, shutdown_tracing};

@@ -8,7 +8,7 @@ use rscni_plugin::{
 use sarena_cni_plugin::SarenaPlugin;
 use sarena_cni_test::test_daemon::{FakeApiServer, PodSpec};
 use sarena_infra::{InfraError, Netns, NetnsGuard};
-use sarena_utils::{LoggingConfig, logging};
+use sarena_utils::{TracingConfig, logging};
 use serde_json::json;
 use tracing::info;
 
@@ -23,7 +23,7 @@ const UDP_PORT: u16 = 9999;
 #[tokio::test(flavor = "current_thread")]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn cni_add_creates_working_connectivity_between_two_pods() {
-    logging::init_logging(&LoggingConfig::default());
+    logging::init_tracing(&TracingConfig::default());
 
     // Must run before anything else on this thread: makes "the default
     // namespace" for the rest of this process a fresh, private one instead

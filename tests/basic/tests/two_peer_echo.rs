@@ -13,7 +13,7 @@ use sarena_loader::{
     AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, LxcMap, PinRoot,
 };
 use sarena_shared::{EndpointConfig, EndpointInfo};
-use sarena_utils::{LoggingConfig, logging};
+use sarena_utils::{TracingConfig, logging};
 use tracing::info;
 
 const PIN_ROOT: &str = "/sys/fs/bpf/sarena";
@@ -26,7 +26,7 @@ async fn two_peer_udp_echo_through_loader() {
         .await
         .expect("failed to unshare a private default namespace");
 
-    logging::init_logging(&LoggingConfig::default());
+    logging::init_tracing(&TracingConfig::default());
 
     info!("Application started");
 

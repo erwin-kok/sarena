@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use sarena_api_client::ApiClient;
-use sarena_utils::{LoggingConfig, logging};
+use sarena_utils::{TracingConfig, logging};
 
 use crate::{app::App, cli::Cli};
 
@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
 
     let config = config::load_config(&cli)?;
 
-    logging::init_logging(&LoggingConfig {
+    logging::init_tracing(&TracingConfig {
         enable_debug: config.debug,
         log_file: config.log_file.clone(),
         format: config.log_format,
@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
 
     app.run(&cli.command).await?;
 
-    logging::shutdown_logging();
+    logging::shutdown_tracing();
 
     Ok(())
 }

@@ -1,27 +1,26 @@
 use std::{convert::Infallible, sync::Arc, time::Duration};
 
 use futures::stream::StreamExt;
+use k8s_openapi::api::core::v1::Service;
 use kube::{
     Api, Client, ResourceExt,
     runtime::{Controller, controller::Action, watcher},
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error};
-
-use crate::crd::address_pool::AddressPool;
+use tracing::{debug, error, info, warn};
 
 struct Context {
     _client: Client,
 }
 
 pub async fn run(client: Client, shutdown: CancellationToken) {
-    let api: Api<AddressPool> = Api::all(client.clone());
+    let api: Api<Service> = Api::all(client.clone());
 
     let context = Arc::new(Context {
         _client: client.clone(),
     });
 
-    debug!("starting AddressPool controller");
+    debug!("starting Service controller");
 
     Controller::new(api, watcher::Config::default())
         .run(reconcile, error_policy, context)
@@ -43,16 +42,17 @@ pub async fn run(client: Client, shutdown: CancellationToken) {
         })
         .await;
 
-    debug!("AddressPool controller stopped");
+    debug!("Service controller stopped");
 }
 
-async fn reconcile(_resource: Arc<AddressPool>, _ctx: Arc<Context>) -> Result<Action, Infallible> {
+async fn reconcile(_resource: Arc<Service>, _ctx: Arc<Context>) -> Result<Action, Infallible> {
+    info!("HERE");
+
     Ok(Action::requeue(Duration::from_secs(30)))
 }
 
-#[allow(clippy::trivially_copy_pass_by_ref)]
-fn error_policy(resource: Arc<AddressPool>, error: &Infallible, _ctx: Arc<Context>) -> Action {
-    tracing::error!(
+fn error_policy(resource: Arc<Service>, error: &Infallible, _ctx: Arc<Context>) -> Action {
+    warn!(
         resource = %resource.name_any(),
         ?error,
         "reconciliation error"

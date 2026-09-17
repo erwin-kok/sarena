@@ -5,7 +5,7 @@ use std::{
 
 use ipnet::{IpNet, Ipv4Net};
 use sarena_control_plane::{ControlPlane, ControlPlaneConfig, ControlPlaneHandle};
-use sarena_utils::{LogFormat, LoggingConfig, logging};
+use sarena_utils::{LogFormat, TracingConfig, logging};
 use tokio::{
     signal::unix::{SignalKind, signal},
     task::{JoinError, JoinSet},
@@ -19,8 +19,8 @@ const TCP_PORT: u16 = 3000;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    logging::init_logging(&LoggingConfig {
-        format: LogFormat::Json,
+    logging::init_tracing(&TracingConfig {
+        format: LogFormat::Text,
         ..Default::default()
     });
 
@@ -95,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
 
     loader_handle.shutdown(loader_thread).await?;
 
-    logging::shutdown_logging();
+    logging::shutdown_tracing();
 
     Ok(())
 }

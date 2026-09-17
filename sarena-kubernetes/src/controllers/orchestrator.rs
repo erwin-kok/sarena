@@ -3,7 +3,7 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    controllers::address_pool,
+    controllers::{address_pool, service},
     error::{KubernetesError, Res},
 };
 
@@ -12,6 +12,7 @@ pub async fn start(shutdown: CancellationToken) -> Res<()> {
     let mut tasks = JoinSet::new();
 
     tasks.spawn(address_pool::run(client.clone(), shutdown.child_token()));
+    tasks.spawn(service::run(client.clone(), shutdown.child_token()));
 
     tokio::select! {
         () = shutdown.cancelled() => {

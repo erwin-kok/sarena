@@ -21,7 +21,7 @@ async fn main() {
     let plugin = Plugin::new(CNI_VERSION, SUPPORTED_VERSIONS.to_vec()).msg(ABOUT_MSG);
     let sarena_plugin = SarenaPlugin;
     let result = plugin.run(&sarena_plugin).await;
-    logging::shutdown_logging();
+    logging::shutdown_tracing();
     if let Err(e) = result {
         let code = u32::from(&e);
         eprintln!("{e}: {}", e.details());

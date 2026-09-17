@@ -4,13 +4,13 @@ use rscni_plugin::{async_cni::Cni, test_util::ArgsBuilder, types::Args};
 use sarena_cni_plugin::SarenaPlugin;
 use sarena_cni_test::test_daemon::FakeApiServer;
 use sarena_infra::Netns;
-use sarena_utils::{LoggingConfig, logging};
+use sarena_utils::{TracingConfig, logging};
 use serde_json::json;
 
 #[tokio::test(flavor = "current_thread")]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn cni_status_reports_daemon_ready() {
-    logging::init_logging(&LoggingConfig::default());
+    logging::init_tracing(&TracingConfig::default());
 
     Netns::unshare_self()
         .await

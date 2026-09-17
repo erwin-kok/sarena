@@ -12,12 +12,12 @@ use tracing_subscriber::{
     util::SubscriberInitExt,
 };
 
-use crate::{LogFormat, LoggingConfig};
+use crate::{LogFormat, TracingConfig};
 
 static LOG_INIT: OnceLock<()> = OnceLock::new();
 static LOG_GUARD: Mutex<Option<WorkerGuard>> = Mutex::new(None);
 
-pub fn init_logging(config: &LoggingConfig) {
+pub fn init_tracing(config: &TracingConfig) {
     LOG_INIT.get_or_init(|| {
         let _ = tracing_log::LogTracer::init();
 
@@ -32,6 +32,7 @@ pub fn init_logging(config: &LoggingConfig) {
         let stderr_layer: Box<dyn Layer<Layered<EnvFilter, Registry>> + Send + Sync> =
             match config.format {
                 LogFormat::Text => fmt::layer()
+                    .with_ansi(true)
                     .with_writer(std::io::stderr)
                     .compact()
                     .with_span_events(FmtSpan::CLOSE)
@@ -80,7 +81,7 @@ pub fn init_logging(config: &LoggingConfig) {
     });
 }
 
-pub fn shutdown_logging() {
+pub fn shutdown_tracing() {
     LOG_GUARD
         .lock()
         .expect("logging guard mutex poisoned")
