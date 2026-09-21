@@ -23,7 +23,7 @@ pub async fn run(client: Client, shutdown: CancellationToken) {
     debug!("starting Service controller");
 
     Controller::new(api, watcher::Config::default())
-        .run(reconcile, error_policy, context)
+        .run(reconciler, error_policy, context)
         .take_until(shutdown.cancelled())
         .for_each(|result| async move {
             match result {
@@ -42,10 +42,10 @@ pub async fn run(client: Client, shutdown: CancellationToken) {
         })
         .await;
 
-    debug!("Service controller stopped");
+    debug!("service controller stopped");
 }
 
-async fn reconcile(_resource: Arc<Service>, _ctx: Arc<Context>) -> Result<Action, Infallible> {
+async fn reconciler(_resource: Arc<Service>, _ctx: Arc<Context>) -> Result<Action, Infallible> {
     info!("HERE");
 
     Ok(Action::requeue(Duration::from_secs(30)))

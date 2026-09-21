@@ -82,7 +82,7 @@ fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
 
 #[inline(always)]
 fn conntrack(ctx: &TcContext) -> Res<()> {
-    let now = unsafe { bpf_ktime_get_ns() };
+    // let now = unsafe { bpf_ktime_get_ns() };
 
     let tuple = ConnTrackTuple::new(ctx)?;
     tuple.print_key();
@@ -91,9 +91,8 @@ fn conntrack(ctx: &TcContext) -> Res<()> {
         Some((ConnTrackVerdict::Seen(dir), _)) => {
             let _ = ct_update(&tuple, dir, 0);
         }
-        _ if tuple.is_related => {} /* ICMP error about a flow we don't track: pass through
-                                      * untouched */
-
+        _ if tuple.is_related => {} /* ICMP error about a flow we don't track: pass through */
+        // untouched
         _ => {
             ct_create(&tuple, 0, None, 0)?;
         }
