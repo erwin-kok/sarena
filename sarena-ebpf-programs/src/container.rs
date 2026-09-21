@@ -10,7 +10,7 @@ use sarena_shared::{Ipv4Key, Ipv4KeyExt as _, OBS_POINT_CONTAINER_FORWARD};
 use crate::{
     arp::process_arp,
     conntrack::{
-        conntrack::{ct_create, ct_lookup},
+        conntrack::{ConnTrackVerdict, ct_create, ct_lookup, ct_update},
         tuple::ConnTrackTuple,
     },
     endpoint::{get_endpoint_config, lookup_ipv4_endpoint},
@@ -46,14 +46,11 @@ pub fn try_to_container(_ctx: TcContext) -> Res<Verdict> {
 
 #[inline(always)]
 fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
-    let (fragmented, src_ip, dst_ip) = {
-        let ip4: &Ipv4Hdr = unsafe { at(ctx, EthHdr::LEN)? };
-        (
-            is_fragmented(ip4),
-            Ipv4Key::from_octets(ip4.src_addr),
-            Ipv4Key::from_octets(ip4.dst_addr),
-        )
-    };
+    let ip4: &Ipv4Hdr = unsafe { at(ctx, EthHdr::LEN)? };
+
+    let fragmented = is_fragmented(ip4);
+    let src_ip = Ipv4Key::from_octets(ip4.src_addr);
+    let dst_ip = Ipv4Key::from_octets(ip4.dst_addr);
 
     if fragmented {
         debug!(ctx, "drop fragmented IP packet");
@@ -85,14 +82,19 @@ fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
 
 #[inline(always)]
 fn conntrack(ctx: &TcContext) -> Res<()> {
-    // let now = unsafe { bpf_ktime_get_ns() };
+    let now = unsafe { bpf_ktime_get_ns() };
 
     let tuple = ConnTrackTuple::new(ctx)?;
     tuple.print_key();
 
     match ct_lookup(&tuple, 0) {
-        Some((v, e)) => {}
-        None => {
+        Some((ConnTrackVerdict::Seen(dir), _)) => {
+            let _ = ct_update(&tuple, dir, 0);
+        }
+        _ if tuple.is_related => {} /* ICMP error about a flow we don't track: pass through
+                                      * untouched */
+
+        _ => {
             ct_create(&tuple, 0, None, 0)?;
         }
     }

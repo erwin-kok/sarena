@@ -2,7 +2,11 @@ use aya_ebpf::{btf_maps::LruHashMap, macros::btf_map};
 use bitflags::bitflags;
 use sarena_shared::Ipv4Key;
 
-use crate::{EbpfError, conntrack::tuple::ConnTrackTuple, error::Res};
+use crate::{
+    EbpfError,
+    conntrack::{timeout::initial_timeout, tuple::ConnTrackTuple},
+    error::Res,
+};
 
 const CONNTRACK_MAX_ENTRIES: usize = 4096;
 
@@ -96,7 +100,7 @@ pub enum FlowDir {
 }
 
 impl FlowDir {
-    #[inline(always)]
+    #[inline]
     pub fn of(entry: &ConnTrackEntry, pkt_src_addr: Ipv4Key, pkt_src_port: u16) -> Self {
         if pkt_src_addr == entry.orig_src_addr && pkt_src_port == entry.orig_src_port {
             FlowDir::Original
@@ -112,7 +116,7 @@ pub enum ConnTrackVerdict {
     Related(FlowDir),
 }
 
-#[inline(always)]
+#[inline]
 pub fn ct_lookup(tuple: &ConnTrackTuple, now: u64) -> Option<(ConnTrackVerdict, ConnTrackEntry)> {
     let key = ConnTrackKey::new(
         tuple.src_addr,
@@ -130,7 +134,7 @@ pub fn ct_lookup(tuple: &ConnTrackTuple, now: u64) -> Option<(ConnTrackVerdict, 
     Some((ConnTrackVerdict::Seen(dir), *entry))
 }
 
-#[inline(always)]
+#[inline]
 pub fn ct_create(
     tuple: &ConnTrackTuple,
     now: u64,
@@ -150,9 +154,23 @@ pub fn ct_create(
         orig_src_port: tuple.src_port,
         orig_dst_port: tuple.dst_port,
         state: ConnTrackState::New,
-        ..Default::default()
+        flags: SeenFlags::empty(),
+        service_id,
+        nat_addr: nat.map(|n| n.0).unwrap_or(0),
+        nat_port: nat.map(|n| n.1).unwrap_or(0),
+        _pad: 0,
+        created_ns: now,
+        last_seen_ns: now,
+        expires_ns: now + initial_timeout(tuple.proto),
+        packets_orig: 1,
+        packets_reply: 0,
     };
     CONNTRACK_MAP
         .insert(&key, &entry, 0)
         .map_err(EbpfError::MapError)
+}
+
+#[inline]
+pub fn ct_update(t: &ConnTrackTuple, dir: FlowDir, now: u64) -> Result<(), ()> {
+    Ok(())
 }

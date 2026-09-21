@@ -12,17 +12,14 @@ use crate::{
 
 #[inline(always)]
 pub fn process_arp(ctx: &TcContext, config: &EndpointConfig) -> Res<Verdict> {
-    let (is_request, dst_mac, src_mac, sender_ip, target_ip) = {
-        let eth: &EthHdr = unsafe { at(ctx, 0)? };
-        let arp: &ArpHdr = unsafe { at(ctx, EthHdr::LEN)? };
-        (
-            arp.oper() == ARPOP_REQUEST && arp.htype() == ARPHRD_ETHER,
-            eth.dst_addr,
-            eth.src_addr,
-            arp.spa(),
-            arp.tpa(),
-        )
-    };
+    let eth: &EthHdr = unsafe { at(ctx, 0)? };
+    let arp: &ArpHdr = unsafe { at(ctx, EthHdr::LEN)? };
+
+    let is_request = arp.oper() == ARPOP_REQUEST && arp.htype() == ARPHRD_ETHER;
+    let dst_mac = eth.dst_addr;
+    let src_mac = eth.src_addr;
+    let sender_ip = arp.spa();
+    let target_ip = arp.tpa();
 
     debug!(ctx, "arp: dst mac {:mac}, src mac {:mac}", dst_mac, src_mac);
 
@@ -48,7 +45,7 @@ pub fn process_arp(ctx: &TcContext, config: &EndpointConfig) -> Res<Verdict> {
     Ok(Verdict::Redirect(ctx_redirect_peer(ifindex, 0) as i32))
 }
 
-#[inline(always)]
+#[inline]
 fn eth_is_bcast(a: &[u8; 6]) -> bool {
     bpf_memcmp(a.as_ptr(), ETH_BROADCAST.as_ptr(), ETH_BROADCAST.len()) == 0
 }
