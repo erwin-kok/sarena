@@ -23,6 +23,7 @@ pub struct ConnTrackTuple {
     pub dst_port: u16,
     pub proto: u8,
     pub tcp_flags: Option<TcpFlags>,
+    pub is_related: bool,
 }
 
 impl ConnTrackTuple {
@@ -32,24 +33,42 @@ impl ConnTrackTuple {
         let ipv4 = unsafe { &*ipv4hdr };
 
         let proto = ipv4.proto()?;
-        let ihl: usize = ipv4.ihl() as usize;
+        let l4_off: usize = EthHdr::LEN + ipv4.ihl() as usize;
 
-        let (src_port, dst_port, flags) = match proto {
-            IpProto::Udp => Self::extract_for_udp(ctx, EthHdr::LEN + ihl)?,
-            IpProto::Tcp => Self::extract_for_tcp(ctx, EthHdr::LEN + ihl)?,
-            IpProto::Sctp => Self::extract_for_sctp(ctx, EthHdr::LEN + ihl)?,
-            IpProto::Icmp => Self::extract_for_icmp(ctx, EthHdr::LEN + ihl)?,
+        let mut t = Self {
+            src_addr: Ipv4Key::from_octets(ipv4.src_addr),
+            dst_addr: Ipv4Key::from_octets(ipv4.dst_addr),
+            src_port: 0,
+            dst_port: 0,
+            proto: proto as u8,
+            tcp_flags: None,
+            is_related: false,
+        };
+
+        match proto {
+            IpProto::Udp => {
+                let (s, d, f) = Self::extract_for_udp(ctx, l4_off)?;
+                t.src_port = s;
+                t.dst_port = d;
+                t.tcp_flags = f;
+            }
+            IpProto::Tcp => {
+                let (s, d, f) = Self::extract_for_tcp(ctx, l4_off)?;
+                t.src_port = s;
+                t.dst_port = d;
+                t.tcp_flags = f;
+            }
+            IpProto::Sctp => {
+                let (s, d, f) = Self::extract_for_sctp(ctx, l4_off)?;
+                t.src_port = s;
+                t.dst_port = d;
+                t.tcp_flags = f;
+            }
+            IpProto::Icmp => t.fill_icmp(ctx, l4_off)?,
             _ => return Err(UnsupportedProtocol(proto as u8)),
         };
 
-        Ok(Self {
-            dst_addr: Ipv4Key::from_octets(ipv4.dst_addr),
-            src_addr: Ipv4Key::from_octets(ipv4.src_addr),
-            dst_port,
-            src_port,
-            proto: proto as u8,
-            tcp_flags: flags,
-        })
+        Ok(t)
     }
 
     #[inline(always)]
@@ -104,32 +123,46 @@ impl ConnTrackTuple {
     }
 
     #[inline(always)]
-    fn extract_for_icmp(ctx: &TcContext, offset: usize) -> Res<(u16, u16, Option<TcpFlags>)> {
+    fn fill_icmp(&mut self, ctx: &TcContext, offset: usize) -> Res<()> {
         let icmphdr: *const Icmpv4Hdr = unsafe { ptr_at(&ctx, offset)? };
         let icmp = unsafe { &*icmphdr };
         let data = icmp.data()?;
-        match data {
-            Icmpv4HdrData::EchoReply(id_seq) | Icmpv4HdrData::Echo(id_seq) => {
-                Ok((id_seq.id(), id_seq.id(), None))
+        match icmp.type_ {
+            0 | 8 => {
+                // Echo Reply / Echo Request: track by identifier, like a pseudo-port.
+                let id = u16::from_be_bytes([icmp.data[0], icmp.data[1]]);
+                self.src_port = id;
+                self.dst_port = id;
             }
 
-            Icmpv4HdrData::DestinationUnreachable(_) | Icmpv4HdrData::ParameterProblem(_) => {
-                let inner_offset = offset + Icmpv4Hdr::LEN;
-                let ipv4hdr_inner: *const Ipv4Hdr = unsafe { ptr_at(&ctx, inner_offset)? };
-                let ipv4_inner = unsafe { &*ipv4hdr_inner };
-                let proto = ipv4_inner.proto()?;
-                let ihl: usize = ipv4_inner.ihl() as usize;
-                let (src_port, dst_port, _) = match proto {
-                    IpProto::Udp => Self::extract_for_udp(ctx, inner_offset + ihl)?,
-                    IpProto::Tcp => Self::extract_for_tcp(ctx, inner_offset + ihl)?,
-                    IpProto::Sctp => Self::extract_for_sctp(ctx, inner_offset + ihl)?,
+            3 | 11 | 12 => {
+                // Destination Unreachable / Time Exceeded / Parameter Problem: the
+                // embedded packet, not this ICMP message, is what needs to match
+                // a live flow -- overwrite every identity field, addresses and
+                // protocol included, with its values.
+                let inner_off = offset + Icmpv4Hdr::LEN;
+                let inner_ipv4hdr: *const Ipv4Hdr = unsafe { ptr_at(&ctx, inner_off)? };
+                let inner_ipv4 = unsafe { &*inner_ipv4hdr };
+                let inner_proto = inner_ipv4.proto()?;
+
+                self.src_addr = Ipv4Key::from_octets(inner_ipv4.src_addr);
+                self.dst_addr = Ipv4Key::from_octets(inner_ipv4.dst_addr);
+                self.proto = inner_proto as u8;
+                self.is_related = true;
+
+                let inner_l4_off = inner_off + inner_ipv4.ihl() as usize;
+                let (s, d, _) = match inner_proto {
+                    IpProto::Udp => Self::extract_for_udp(ctx, inner_l4_off)?,
+                    IpProto::Tcp => Self::extract_for_tcp(ctx, inner_l4_off)?,
+                    IpProto::Sctp => Self::extract_for_sctp(ctx, inner_l4_off)?,
                     _ => (0, 0, None),
                 };
-
-                Ok((src_port, dst_port, None))
+                self.src_port = s;
+                self.dst_port = d;
             }
 
-            _ => Ok((0, 0, None)),
-        }
+            t => return Err(UnsupportedProtocol(t)),
+        };
+        Ok(())
     }
 }

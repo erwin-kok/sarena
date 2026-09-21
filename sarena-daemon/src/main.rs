@@ -73,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
         let token = shutdown.child_token();
         let metrics_registry = metrics_state.registry.clone();
         tasks.spawn(async move {
-            sarena_kubernetes::controllers::orchestrator::start(metrics_registry, token)
+            sarena_kubernetes::server::start(metrics_registry, token)
                 .await
                 .map_err(anyhow::Error::from)
         });

@@ -11,15 +11,16 @@ static CONNTRACK_MAP: LruHashMap<ConnTrackKey, ConnTrackEntry, CONNTRACK_MAX_ENT
     LruHashMap::new();
 
 #[repr(u8)]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Default, PartialEq)]
 pub enum ConnTrackState {
+    #[default]
     New = 0,
     Established = 1,
     Closing = 2,
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, Default)]
     pub struct SeenFlags: u8 {
         const SEEN_FIN_ORIG     = 0b001;
         const SEEN_FIN_REPLY    = 0b010;
@@ -66,7 +67,7 @@ impl ConnTrackKey {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct ConnTrackEntry {
     pub orig_src_addr: Ipv4Key,
     pub orig_dst_addr: Ipv4Key,
@@ -75,11 +76,17 @@ pub struct ConnTrackEntry {
 
     pub state: ConnTrackState,
     pub flags: SeenFlags,
-    pub expires_ns: u64, // active-expiry check, independent of LRU eviction
 
-    pub packets: u64,
-    pub rx_closing: bool,
-    pub tx_closing: bool,
+    pub service_id: u32,
+    pub nat_addr: u32,
+    pub nat_port: u16,
+    pub _pad: u16,
+
+    pub created_ns: u64,
+    pub last_seen_ns: u64,
+    pub expires_ns: u64,
+    pub packets_orig: u64,
+    pub packets_reply: u64,
 } // 64 bytes
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -143,11 +150,7 @@ pub fn ct_create(
         orig_src_port: tuple.src_port,
         orig_dst_port: tuple.dst_port,
         state: ConnTrackState::New,
-        flags: SeenFlags::empty(),
-        expires_ns: 0,
-        packets: 0,
-        rx_closing: false,
-        tx_closing: false,
+        ..Default::default()
     };
     CONNTRACK_MAP
         .insert(&key, &entry, 0)
