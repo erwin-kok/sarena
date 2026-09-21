@@ -11,10 +11,15 @@ version.workspace = true
 workspace = true
 
 [dependencies]
+axum = { workspace = true }
+axum-server = { workspace = true }
 futures = { workspace = true }
-kube = { workspace = true }
+ipnet = { workspace = true }
+kube = { workspace = true, features = ["admission"] }
 k8s-openapi = { workspace = true }
 prometheus = { workspace = true }
+rcgen = { workspace = true }
+rustls = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -27,3 +32,7 @@ tracing = { workspace = true }
 [[bin]]
 name = "sarena-crdgen"
 path = "src/bin/crdgen.rs"
+
+[[bin]]
+name = "sarena-certgen"
+path = "src/bin/certgen.rs"

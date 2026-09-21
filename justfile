@@ -2,6 +2,7 @@ export PATH := justfile_directory() / "scapyenv/bin" + ":" + env_var("PATH")
 
 manifests_dir := "./manifests/base"
 crd_dir := manifests_dir + "/crd"
+webhook_dir := manifests_dir + "/webhook"
 
 default:
   @just --list
@@ -51,8 +52,11 @@ install-ebpf: build-ebpf
 gen-crd:
     cargo run --bin sarena-crdgen -- > {{crd_dir}}/sarena-crd.yaml
 
+gen-cert:
+    cargo run --bin sarena-certgen -- > {{webhook_dir}}/sarena-webhook.yaml
+
 # Apply the kustomize manifests to the current kubectl context
-apply-manifests: gen-crd
+apply-manifests: gen-crd gen-cert
     kubectl apply -k {{manifests_dir}}
 
 netns-clean:

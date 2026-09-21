@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sarena-kubernetes-webhook
+  namespace: sarena-system
+spec:
+  selector:
+    app: sarena-daemon
+  ports:
+    - name: https
+      port: 443
+      targetPort: 8443

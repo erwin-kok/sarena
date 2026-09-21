@@ -9,6 +9,7 @@ use crate::{
     controllers::{address_pool, service},
     error::{KubernetesError, Res},
     metrics::Metrics,
+    webhook,
 };
 
 pub async fn start(metrics_registry: Registry, shutdown: CancellationToken) -> Res<()> {
@@ -23,6 +24,7 @@ pub async fn start(metrics_registry: Registry, shutdown: CancellationToken) -> R
 
     tasks.spawn(address_pool::run(client.clone(), shutdown.child_token()));
     tasks.spawn(service::run(client.clone(), shutdown.child_token()));
+    tasks.spawn(webhook::run(client.clone(), shutdown.child_token()));
 
     tokio::select! {
         () = shutdown.cancelled() => {
