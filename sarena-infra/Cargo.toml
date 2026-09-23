@@ -27,5 +27,8 @@ tracing = { workspace = true }
 rtnetlink = "0.23"
 netlink-packet-route = "0.33"
 
+[dev-dependencies]
+sarena-ebpf-objects = { path = "../sarena-ebpf-objects" }
+
 [features]
 test = []

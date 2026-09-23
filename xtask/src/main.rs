@@ -1,5 +1,4 @@
 mod build_ebpf;
-mod install_ebpf;
 
 use anyhow::Result;
 use clap::Parser;
@@ -14,23 +13,15 @@ pub struct XtaskOptions {
 #[derive(Debug, Parser)]
 enum Subcommand {
     /// Compile eBPF programs and place them in ./target-ebpf.
+    ///
+    /// From there, `sarena-ebpf-objects` embeds them into the userspace
+    /// binaries.
     BuildEbpf(build_ebpf::BuildEbpfOptions),
-
-    /// Install compiled eBPF objects to a system or development directory.
-    ///
-    /// Typical development workflow:
-    ///   cargo xtask build-ebpf
-    ///   cargo xtask install-ebpf --dir /usr/lib/myproject/ebpf
-    ///
-    /// Your userspace binary then loads them at runtime with:
-    ///   Bpf::load_file("/usr/lib/myproject/ebpf/my-prog.o")?
-    InstallEbpf(install_ebpf::InstallEbpfOptions),
 }
 
 fn main() -> Result<()> {
     let XtaskOptions { command } = Parser::parse();
     match command {
         Subcommand::BuildEbpf(opts) => build_ebpf::run(opts),
-        Subcommand::InstallEbpf(opts) => install_ebpf::run(opts),
     }
 }

@@ -11,12 +11,13 @@ setup:
     python3 -m venv scapyenv
     scapyenv/bin/pip install -r scapy/requirements.txt
 
-# Build all workspace packages (excluding eBPF programs)
-build:
+# Build all workspace packages; the eBPF programs are built first because
+# `sarena-ebpf-objects` embeds them
+build: build-ebpf
     cargo build
 
 # Quick compilation check without producing binaries
-check:
+check: build-ebpf
     cargo check
 
 # clean up target
@@ -29,11 +30,11 @@ fmt:
     cargo fmt
 
 # clippy
-clippy:
+clippy: build-ebpf
     cargo clippy
 
-# Run all tests except the eBPF test runner (requires root + installed eBPF programs)
-test:
+# Run all tests except the eBPF test runner (requires root)
+test: build-ebpf
     cargo test --workspace \
         --features test \
         --exclude sarena-test-runner \
@@ -44,10 +45,6 @@ test:
 # Build eBPF programs (outputs to ./target-ebpf/)
 build-ebpf:
     cargo xtask build-ebpf
-
-# Build and install eBPF programs to /usr/lib/sarena/ebpf (requires sudo)
-install-ebpf: build-ebpf
-    cargo xtask install-ebpf
 
 gen-crd:
     cargo run --bin sarena-crdgen -- > {{crd_dir}}/sarena-crd.yaml
@@ -83,10 +80,10 @@ kind-up:
 kind-down:
     bash "{{justfile_directory()}}/scripts/kind-down.sh"
 
-kind-install: build build-ebpf apply-manifests
+kind-install: build apply-manifests
     bash "{{justfile_directory()}}/scripts/kind-install.sh"
 
-kind-run-daemon: build build-ebpf
+kind-run-daemon: build
     bash "{{justfile_directory()}}/scripts/kind-run-daemon.sh"
 
 kind-sc *ARGS: build
@@ -100,7 +97,7 @@ kind-cni-logs:
     docker exec "${node_name}" sh -c "touch '${log_file}' && tail -f '${log_file}'"
 
 # Run the sarena-daemon (requires sudo: it manages netns/BPF attachments)
-run-daemon:
+run-daemon: build-ebpf
     #!/usr/bin/env bash
     set -euo pipefail
     exe=$(cargo build -p sarena-daemon --message-format=json \
@@ -108,7 +105,7 @@ run-daemon:
     sudo "$exe"
 
 # Run the sarena-cli, forwarding all arguments to it (e.g. `just sarena-cli service list`)
-sarena-cli *ARGS:
+sarena-cli *ARGS: build-ebpf
     cargo run --bin sarena-cli -- {{ARGS}}
 
 # Run all integration tests in the sarena-infra package (requires root)
@@ -117,7 +114,7 @@ infra-test: (_root-test "sarena-infra")
 # Run all integration tests in the sarena-loader package (requires root)
 loader-test: (_root-test "sarena-loader")
 
-ebpf-test:
+ebpf-test: build-ebpf
     #!/usr/bin/env bash
     set -euo pipefail
     exe=$(cargo test --no-run -p sarena-test-runner --message-format=json \
@@ -130,11 +127,11 @@ basic-test: (_root-test "sarena-basic-test")
 # Run the sarena-cni-test integration test (requires root)
 cni-test: (_root-test "sarena-cni-test")
 
-# Full workflow: build, test, install eBPF programs, run eBPF tests
-all: build test install-ebpf infra-test loader-test basic-test cni-test ebpf-test
+# Full workflow: build, test, and run all root-only test suites incl. the eBPF tests
+all: build test infra-test loader-test basic-test cni-test ebpf-test
 
 # Run all `#[ignore]`d integration tests (requiring root/CAP_NET_ADMIN) for `package`
-_root-test package: netns-clean
+_root-test package: build-ebpf netns-clean
     #!/usr/bin/env bash
     set -euo pipefail
     exes=$(cargo test -p {{package}} --features test --tests --no-run --message-format=json \

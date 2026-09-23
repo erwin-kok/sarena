@@ -18,7 +18,7 @@ pub async fn start(metrics_registry: Registry, shutdown: CancellationToken) -> R
 
     tracing::info!("starting Kubernetes reconcilers");
 
-    let metrics = Arc::new(Mutex::new(
+    let _metrics = Arc::new(Mutex::new(
         Metrics::default().register(&metrics_registry).unwrap(),
     ));
 

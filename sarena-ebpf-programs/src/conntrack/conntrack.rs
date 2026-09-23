@@ -171,6 +171,6 @@ pub fn ct_create(
 }
 
 #[inline(always)]
-pub fn ct_update(t: &ConnTrackTuple, dir: FlowDir, now: u64) -> Result<(), ()> {
+pub fn ct_update(_tuple: &ConnTrackTuple, _dir: FlowDir, _now: u64) -> Result<(), ()> {
     Ok(())
 }

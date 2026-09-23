@@ -7,7 +7,7 @@ use kube::{
     runtime::{Controller, controller::Action, watcher},
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 struct Context {
     _client: Client,
@@ -46,8 +46,6 @@ pub async fn run(client: Client, shutdown: CancellationToken) {
 }
 
 async fn reconciler(_resource: Arc<Service>, _ctx: Arc<Context>) -> Result<Action, Infallible> {
-    info!("HERE");
-
     Ok(Action::requeue(Duration::from_secs(30)))
 }
 

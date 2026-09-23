@@ -1,0 +1,19 @@
+[package]
+name = "sarena-ebpf-objects"
+description = "The compiled sarena eBPF objects, embedded into the binary at build time."
+
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+aya = { workspace = true }
+
+[build-dependencies]
+hex = { workspace = true, features = ["alloc"] }
+sha2 = { workspace = true }

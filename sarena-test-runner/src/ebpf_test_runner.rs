@@ -39,16 +39,14 @@ fn ebpf_test_runner() -> Res<()> {
     println!("\x1b[36m===== RUNNING eBPF TESTS =====\x1b[0m");
     println!("\n");
 
-    let dir = std::env::var("EBPF_DIR").unwrap_or_else(|_| "/usr/lib/sarena/ebpf".into());
-
     reset_pin_dir(PIN_DIR)?;
 
     let mut prod_bpf = EbpfLoader::new()
         .default_map_pin_directory(format!("{PIN_DIR}/prod"))
-        .load_file(format!("{dir}/sarena-ebpf-programs.o"))?;
+        .load(sarena_ebpf_objects::PROGRAMS.bytes)?;
     let mut test_bpf = EbpfLoader::new()
         .default_map_pin_directory(format!("{PIN_DIR}/test"))
-        .load_file(format!("{dir}/sarena-ebpf-test-programs.o"))?;
+        .load(sarena_ebpf_objects::TEST_PROGRAMS.bytes)?;
 
     fill_entry_call_map(&mut prod_bpf, &mut test_bpf)?;
 

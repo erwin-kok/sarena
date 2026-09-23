@@ -2,6 +2,7 @@
 members = [
     "sarena-cli",
     "sarena-control-plane",
+    "sarena-ebpf-objects",
     "sarena-plugins/cni",
     "sarena-plugins/common",
     "sarena-daemon",
@@ -23,11 +24,7 @@ members = [
     # Shared (userspace & eBPF)
     "sarena-shared",
     "sarena-shared-test",
-    "sarena-test-scapy",
-
-    # Integration tests
-    "tests/basic",
-    "tests/cni",
+    "sarena-test-scapy",    
 
     # eBPF framework 
     "sarena-ebpf-common",
@@ -37,6 +34,10 @@ members = [
     "sarena-ebpf-programs",
     "sarena-ebpf-test-programs",
 
+    # Integration tests
+    "tests/basic",
+    "tests/cni",
+
     # Build tooling
     "xtask",
 ]
@@ -44,6 +45,7 @@ members = [
 default-members = [
     "sarena-cli",
     "sarena-control-plane",
+    "sarena-ebpf-objects",
     "sarena-plugins/cni",
     "sarena-plugins/common",
     "sarena-daemon",
@@ -67,7 +69,7 @@ default-members = [
     "sarena-shared-test",
     "sarena-test-scapy",
 
-    # Integration tests is not included here because it needs previleges to run.
+    # Integration tests is not included here because it needs privileges to run.
     # eBPF crates are not included because these are build separately by xtask
     # the xtask is also not included because its a build crate
 ]

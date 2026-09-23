@@ -172,11 +172,10 @@ async fn upsert_tcx_program_rejects_non_local_link() {
 }
 
 fn load_test_bpf(map_pin_dir: &Path) -> Ebpf {
-    let dir = std::env::var("EBPF_DIR").unwrap_or_else(|_| "/usr/lib/sarena/ebpf".into());
     let _ = fs::remove_dir_all(map_pin_dir);
     fs::create_dir_all(map_pin_dir).unwrap();
     EbpfLoader::new()
         .default_map_pin_directory(map_pin_dir)
-        .load_file(format!("{dir}/sarena-ebpf-test-programs.o"))
+        .load(sarena_ebpf_objects::TEST_PROGRAMS.bytes)
         .unwrap()
 }

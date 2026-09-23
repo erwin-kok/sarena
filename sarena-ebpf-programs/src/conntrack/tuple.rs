@@ -1,7 +1,7 @@
 use aya_ebpf::{bpf_printk, programs::TcContext};
 use network_types::{
     eth::EthHdr,
-    icmp::{Icmpv4Hdr, Icmpv4HdrData},
+    icmp::Icmpv4Hdr,
     ip::{IpProto, Ipv4Hdr},
     sctp::SctpHdr,
     tcp::TcpHdr,

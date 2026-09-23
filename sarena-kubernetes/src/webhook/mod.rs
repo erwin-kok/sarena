@@ -21,6 +21,7 @@ const DEFAULT_ADDR: &str = "0.0.0.0:8443";
 const DEFAULT_TLS_CERT_PATH: &str = "/etc/sarena/webhook/tls.crt";
 const DEFAULT_TLS_KEY_PATH: &str = "/etc/sarena/webhook/tls.key";
 const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+const TLS_RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
 pub async fn run(_client: Client, shutdown: CancellationToken) {
     if rustls::crypto::CryptoProvider::get_default().is_none() {
@@ -31,7 +32,8 @@ pub async fn run(_client: Client, shutdown: CancellationToken) {
     let addr: SocketAddr = match addr.parse() {
         Ok(addr) => addr,
         Err(err) => {
-            error!(%addr, %err, "invalid SARENA_WEBHOOK_ADDR");
+            error!(%addr, %err, "invalid SARENA_WEBHOOK_ADDR, webhook server disabled");
+            shutdown.cancelled().await;
             return;
         }
     };
@@ -41,12 +43,9 @@ pub async fn run(_client: Client, shutdown: CancellationToken) {
     let key_path = std::env::var("SARENA_WEBHOOK_TLS_KEY")
         .unwrap_or_else(|_| DEFAULT_TLS_KEY_PATH.to_string());
 
-    let tls_config = match RustlsConfig::from_pem_file(&cert_path, &key_path).await {
-        Ok(tls_config) => tls_config,
-        Err(err) => {
-            error!(cert_path, key_path, %err, "failed to load webhook TLS certificate");
-            return;
-        }
+    let Some(tls_config) = load_tls_config(&cert_path, &key_path, &shutdown).await else {
+        debug!("webhook server shutting down before TLS certificate became available");
+        return;
     };
 
     let app = Router::new().route(ADDRESS_POOL_VALIDATE_PATH, post(address_pool::validate));
@@ -71,4 +70,45 @@ pub async fn run(_client: Client, shutdown: CancellationToken) {
     }
 
     debug!("webhook server stopped");
+}
+
+async fn load_tls_config(
+    cert_path: &str,
+    key_path: &str,
+    shutdown: &CancellationToken,
+) -> Option<RustlsConfig> {
+    let mut attempt: u32 = 0;
+
+    loop {
+        match RustlsConfig::from_pem_file(cert_path, key_path).await {
+            Ok(tls_config) => {
+                if attempt > 0 {
+                    debug!(
+                        cert_path,
+                        key_path, "loaded webhook TLS certificate after retry"
+                    );
+                }
+                return Some(tls_config);
+            }
+            Err(err) => {
+                if attempt == 0 {
+                    error!(
+                        cert_path,
+                        key_path,
+                        %err,
+                        "failed to load webhook TLS certificate, will retry"
+                    );
+                } else {
+                    debug!(cert_path, key_path, %err, "still no webhook TLS certificate");
+                }
+            }
+        }
+
+        attempt += 1;
+
+        tokio::select! {
+            () = tokio::time::sleep(TLS_RETRY_INTERVAL) => {}
+            () = shutdown.cancelled() => return None,
+        }
+    }
 }

@@ -92,11 +92,7 @@ impl FakeApiServer {
 
         std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
 
-        let dir = std::env::var("EBPF_DIR").unwrap_or_else(|_| "/usr/lib/sarena/ebpf".into());
-        let backend = AyaBackend::new(
-            format!("{dir}/sarena-ebpf-programs.o"),
-            format!("{PIN_ROOT}/globals"),
-        );
+        let backend = AyaBackend::new(format!("{PIN_ROOT}/globals"));
         let loader = Loader::new(backend, PIN_ROOT);
         let (loader_handle, _loader_thread) = LoaderHandle::spawn(loader, 16);
         loader_handle

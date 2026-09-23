@@ -15,6 +15,7 @@ use aya::{
 };
 use aya_log::EbpfLogger;
 use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
+use sarena_ebpf_objects::EbpfObject;
 use sarena_infra::{
     Link as _, NetlinkNetworkProvisioner, NetworkProvisioner, TcxAttach as _,
     netlink_link::NetlinkLink,
@@ -34,16 +35,23 @@ struct LoggerHandle {
 }
 
 pub struct AyaBackend {
-    object_path: PathBuf,
+    object: EbpfObject,
     globals_dir: PathBuf,
     provisioner: NetlinkNetworkProvisioner,
     loggers: HashMap<String, LoggerHandle>,
 }
 
 impl AyaBackend {
-    pub fn new(object_path: impl Into<PathBuf>, globals_dir: impl Into<PathBuf>) -> Self {
+    pub fn new(globals_dir: impl Into<PathBuf>) -> Self {
+        let object = sarena_ebpf_objects::PROGRAMS;
+        tracing::info!(
+            object = object.name,
+            size = object.bytes.len(),
+            sha256 = object.sha256,
+            "using embedded eBPF object"
+        );
         Self {
-            object_path: object_path.into(),
+            object,
             globals_dir: globals_dir.into(),
             provisioner: NetlinkNetworkProvisioner,
             loggers: HashMap::new(),
@@ -69,7 +77,7 @@ impl AyaBackend {
             loader = loader.map_pin_path(name.as_str(), path);
         }
         let bpf = loader
-            .load_file(&self.object_path)
+            .load(self.object.bytes)
             .map_err(|e| LoaderError::ObjectLoad(e.to_string()))?;
 
         for name in maps.keys() {

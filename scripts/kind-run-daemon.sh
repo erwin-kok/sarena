@@ -35,9 +35,8 @@ node_pid="$(docker inspect -f '{{.State.Pid}}' "${node_name}" 2>/dev/null)" || {
 
 echo "==> running sarena-daemon locally (${daemon_bin})"
 echo "    attached to ${node_name}'s network namespace (pid ${node_pid})"
-echo "    eBPF object from: ${repo_root}/target-ebpf (run 'just build-ebpf' first)"
+echo "    eBPF object embedded in the binary"
 echo "    reachable from the node (and the CNI plugin) at tcp://127.0.0.1:${tcp_port}"
 echo
 
-exec sudo nsenter --target "${node_pid}" --net -- \
-    env EBPF_DIR="${repo_root}/target-ebpf" "${daemon_bin}"
+exec sudo nsenter --target "${node_pid}" --net -- "${daemon_bin}"

@@ -3042,6 +3042,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sarena-ebpf-objects"
+version = "0.1.0"
+dependencies = [
+ "aya",
+ "hex",
+ "sha2",
+]
+
+[[package]]
 name = "sarena-ebpf-programs"
 version = "0.1.0"
 dependencies = [
@@ -3095,6 +3104,7 @@ dependencies = [
  "nix 0.31.3",
  "rand 0.10.3",
  "rtnetlink",
+ "sarena-ebpf-objects",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -3131,6 +3141,7 @@ dependencies = [
  "aya-log",
  "log",
  "nix 0.31.3",
+ "sarena-ebpf-objects",
  "sarena-infra",
  "sarena-shared",
  "thiserror 2.0.20",
@@ -3205,6 +3216,7 @@ version = "0.1.0"
 dependencies = [
  "aya",
  "regex",
+ "sarena-ebpf-objects",
  "sarena-shared-test",
  "serde_json",
  "thiserror 2.0.20",

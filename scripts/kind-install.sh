@@ -7,7 +7,6 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 daemon_bin="${repo_root}/target/debug/sarena-daemon"
 cni_bin="${repo_root}/target/debug/sarena-cni"
-ebpf_obj="${repo_root}/target-ebpf/sarena-ebpf-programs.o"
 
 have_kind() {
     [[ -n "$(command -v kind)" ]]
@@ -28,12 +27,12 @@ if ! have_docker; then
     exit 1
 fi
 
-required_artifacts=("${cni_bin}" "${ebpf_obj}")
+required_artifacts=("${cni_bin}")
 
 for f in "${required_artifacts[@]}"; do
     if [[ ! -f "${f}" ]]; then
         echo "missing build artifact: ${f}"
-        echo "run 'just build' and 'just build-ebpf' first (or just 'just kind-install', which does both)"
+        echo "run 'just build' first (or just 'just kind-install', which does it)"
         exit 1
     fi
 done
@@ -47,9 +46,7 @@ fi
 for node_name in ${nodes}; do
     echo "==> installing sarena onto node ${node_name}"
 
-    docker exec "${node_name}" mkdir -p /usr/lib/sarena/ebpf /opt/cni/bin /etc/cni/net.d
-
-    docker cp "${ebpf_obj}" "${node_name}:/usr/lib/sarena/ebpf/sarena-ebpf-programs.o"
+    docker exec "${node_name}" mkdir -p /opt/cni/bin /etc/cni/net.d
 
     docker cp "${cni_bin}" "${node_name}:/opt/cni/bin/sarena-cni"
     docker exec "${node_name}" chmod +x /opt/cni/bin/sarena-cni

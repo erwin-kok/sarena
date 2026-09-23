@@ -10,7 +10,7 @@ impl Default for Metrics {
 }
 
 impl Metrics {
-    pub fn register(self, registry: &Registry) -> Result<Self, prometheus::Error> {
+    pub fn register(self, _registry: &Registry) -> Result<Self, prometheus::Error> {
         Ok(self)
     }
 }

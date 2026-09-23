@@ -17,6 +17,7 @@ test = []
 
 [dependencies]
 sarena-infra = { path = "../sarena-infra", features = ["test"] }
+sarena-ebpf-objects = { path = "../sarena-ebpf-objects" }
 sarena-shared = { path = "../sarena-shared" }
 
 aya = { workspace = true }
