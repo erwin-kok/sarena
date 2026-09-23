@@ -1,8 +1,11 @@
 export PATH := justfile_directory() / "scapyenv/bin" + ":" + env_var("PATH")
 
-manifests_dir := "./manifests/base"
-crd_dir := manifests_dir + "/crd"
-webhook_dir := manifests_dir + "/webhook"
+manifests_dir := "./manifests"
+crd_dir := manifests_dir + "/base/crd"
+webhook_dir := manifests_dir + "/base/webhook"
+
+cluster_name := "sarena"
+image_tag := "sarena:dev"
 
 default:
   @just --list
@@ -52,9 +55,10 @@ gen-crd:
 gen-cert:
     cargo run --bin sarena-certgen -- > {{webhook_dir}}/sarena-webhook.yaml
 
-# Apply the kustomize manifests to the current kubectl context
-apply-manifests: gen-crd gen-cert
-    kubectl apply -k {{manifests_dir}}
+apply-manifests overlay: gen-crd gen-cert
+    kubectl apply -k {{crd_dir}}
+    kubectl wait --for=condition=Established --timeout=60s -f {{crd_dir}}/sarena-crd.yaml
+    kubectl apply -k {{manifests_dir}}/overlays/{{overlay}}
 
 netns-clean:
     #!/usr/bin/env bash
@@ -80,11 +84,19 @@ kind-up:
 kind-down:
     bash "{{justfile_directory()}}/scripts/kind-down.sh"
 
-kind-install: build apply-manifests
+# Development install: the `dev` overlay (shared base, no DaemonSet) and the CNI
+# installed onto the nodes directly; run the daemon with `kind-run-daemon`
+kind-install: build (apply-manifests "dev")
     bash "{{justfile_directory()}}/scripts/kind-install.sh"
 
 kind-run-daemon: build
     bash "{{justfile_directory()}}/scripts/kind-run-daemon.sh"
+
+# Realistic install path: build the image, load it into kind, and apply the
+# `prod` overlay (shared base plus the DaemonSet)
+kind-deploy: _kind-load-image (apply-manifests "prod")
+    kubectl -n sarena-system rollout restart daemonset/sarena-daemon
+    kubectl -n sarena-system rollout status daemonset/sarena-daemon
 
 kind-sc *ARGS: build
     bash "{{justfile_directory()}}/scripts/kind-sc.sh" {{ARGS}}
@@ -140,3 +152,7 @@ _root-test package: build-ebpf netns-clean
         just netns-clean
         sudo "$exe" --ignored --no-capture
     done
+
+_kind-load-image:
+    bash "{{justfile_directory()}}/scripts/image-build.sh" "{{image_tag}}"
+    kind load docker-image {{image_tag}} --name {{cluster_name}}

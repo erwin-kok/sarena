@@ -1,0 +1,4 @@
+# In-cluster install: the shared base plus sarena-daemon as a DaemonSet.
+resources:
+  - ../../base
+  - daemonset.yaml

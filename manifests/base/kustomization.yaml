@@ -1,5 +1,6 @@
 resources:
-  - address-pool
-#  - daemonset
+  - namespace.yaml
+  - rbac
   - crd
-#  - webhook
+  - webhook
+  - address-pool

@@ -1,2 +1,4 @@
 [toolchain]
 channel = "nightly-2026-08-20"
+# rust-src: the eBPF crates are built with `-Z build-std=core`
+components = ["rust-src", "rustfmt", "clippy"]

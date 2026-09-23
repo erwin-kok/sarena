@@ -1,0 +1,6 @@
+# Development install: the shared base only. sarena-daemon runs outside the
+# cluster (`just kind-run-daemon`), and scripts/kind-install.sh installs the
+# CNI onto the nodes with the same scripts/install-cni.sh the DaemonSet's
+# init container runs.
+resources:
+  - ../../base

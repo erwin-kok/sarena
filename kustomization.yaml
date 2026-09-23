@@ -1,2 +1,2 @@
 resources:
-  - manifests/base
+  - manifests/overlays/prod

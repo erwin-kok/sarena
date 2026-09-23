@@ -24,11 +24,16 @@ jobs:
             clang \
             llvm
 
-      - uses: dtolnay/rust-toolchain@nightly
+      - name: Install Rust toolchain
+        run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
 
       - uses: extractions/setup-just@v3
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: bpf-linker
 
       - name: Set up Python
         uses: actions/setup-python@v5

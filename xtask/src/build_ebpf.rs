@@ -29,9 +29,10 @@ pub struct BuildEbpfOptions {
     pub packages: Vec<String>,
 
     /// Rust toolchain to use (e.g. "nightly", "nightly-2024-01-01").
-    /// Must be nightly because of -Z build-std.
-    #[clap(long, default_value = "nightly")]
-    pub toolchain: String,
+    /// Must be nightly because of -Z build-std. Defaults to the toolchain
+    /// pinned in rust-toolchain.toml, the same one the userspace build uses.
+    #[clap(long)]
+    pub toolchain: Option<String>,
 
     /// Output directory for the compiled eBPF objects.
     #[clap(long, default_value = "./target-ebpf")]
@@ -43,7 +44,7 @@ impl Default for BuildEbpfOptions {
         Self {
             target: DEFAULT_TARGET.to_string(),
             packages: vec![],
-            toolchain: "nightly".to_string(),
+            toolchain: None,
             out_dir: PathBuf::from("./target-ebpf"),
         }
     }
@@ -90,8 +91,13 @@ pub(crate) fn run(opts: BuildEbpfOptions) -> Result<()> {
     for pkg in &packages_to_build {
         println!("==> Building eBPF package `{pkg}`");
 
-        let artifacts = build_package(pkg, &opts.target, &opts.toolchain, &workspace_root)
-            .with_context(|| format!("failed to build package `{pkg}`"))?;
+        let artifacts = build_package(
+            pkg,
+            &opts.target,
+            opts.toolchain.as_deref(),
+            &workspace_root,
+        )
+        .with_context(|| format!("failed to build package `{pkg}`"))?;
 
         if artifacts.is_empty() {
             bail!(
@@ -138,15 +144,13 @@ pub(crate) fn run(opts: BuildEbpfOptions) -> Result<()> {
 fn build_package(
     pkg: &str,
     target: &str,
-    toolchain: &str,
+    toolchain: Option<&str>,
     workspace_root: &Path,
 ) -> Result<Vec<PathBuf>> {
-    let toolchain_arg = format!("+{toolchain}");
-
     // Build the argument list.  We keep it as Vec<String> so we can push
     // conditionally without lifetime headaches.
-    let args: Vec<String> = vec![
-        toolchain_arg,
+    let mut args: Vec<String> = toolchain.map(|t| format!("+{t}")).into_iter().collect();
+    args.extend([
         "build".into(),
         "-p".into(),
         pkg.into(),
@@ -159,7 +163,7 @@ fn build_package(
         // json-render-diagnostics: JSON on stdout, human-readable diagnostics
         // on stderr — best of both worlds.
         "--message-format=json-render-diagnostics".into(),
-    ];
+    ]);
 
     let mut child = Command::new("cargo")
         .args(&args)

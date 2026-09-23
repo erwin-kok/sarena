@@ -51,13 +51,18 @@ spec:
               protocol: TCP
           securityContext:
             privileged: true
+          # The API only listens on 127.0.0.1 (the CNI plugin reaches it
+          # over the node's loopback), so probe there rather than the pod
+          # IP, which with hostNetwork is the node address.
           readinessProbe:
             tcpSocket:
+              host: 127.0.0.1
               port: api
             initialDelaySeconds: 2
             periodSeconds: 5
           livenessProbe:
             tcpSocket:
+              host: 127.0.0.1
               port: api
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -65,9 +70,16 @@ spec:
             - name: bpffs
               mountPath: /sys/fs/bpf
               mountPropagation: Bidirectional
+            # sarena-infra resolves pod netns names under /run/netns
             - name: netns
-              mountPath: /var/run/netns
+              mountPath: /run/netns
               mountPropagation: HostToContainer
+            # Serving cert for the AddressPool validating webhook (see
+            # manifests/base/webhook), read from sarena-kubernetes'
+            # DEFAULT_TLS_{CERT,KEY}_PATH.
+            - name: webhook-tls
+              mountPath: /etc/sarena/webhook
+              readOnly: true
       volumes:
         - name: cni-bin
           hostPath:
@@ -83,5 +95,10 @@ spec:
             type: DirectoryOrCreate
         - name: netns
           hostPath:
-            path: /var/run/netns
+            path: /run/netns
             type: DirectoryOrCreate
+        - name: webhook-tls
+          secret:
+            secretName: sarena-kubernetes-webhook-tls
+            # The daemon retries until the secret exists, so don't block pod start on it.
+            optional: true

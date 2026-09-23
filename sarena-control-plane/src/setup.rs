@@ -1,4 +1,4 @@
-use std::{fs, net::IpAddr, sync::Arc};
+use std::{net::IpAddr, sync::Arc};
 
 use sarena_infra::{
     InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, NetworkProvisioner as _,
@@ -36,8 +36,6 @@ impl ControlPlane {
     }
 
     pub async fn start(&self) -> Res<ControlPlaneHandle> {
-        let _ = fs::remove_dir_all(PIN_ROOT);
-
         std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
 
         let backend = AyaBackend::new(format!("{PIN_ROOT}/globals"));
