@@ -1,7 +1,7 @@
 use aya_ebpf::programs::TcContext;
 use aya_log_ebpf::debug;
 use network_types::{arp::ArpHdr, eth::EthHdr};
-use sarena_ebpf_common::{at, at_mut, bpf_memcmp};
+use sarena_ebpf_common::{bpf_memcmp, ref_at, ref_at_mut};
 use sarena_shared::EndpointConfig;
 
 use crate::{
@@ -12,8 +12,8 @@ use crate::{
 
 #[inline(always)]
 pub fn process_arp(ctx: &TcContext, config: &EndpointConfig) -> Res<Verdict> {
-    let eth: &EthHdr = unsafe { at(ctx, 0)? };
-    let arp: &ArpHdr = unsafe { at(ctx, EthHdr::LEN)? };
+    let eth: &EthHdr = unsafe { ref_at(ctx, 0)? };
+    let arp: &ArpHdr = unsafe { ref_at(ctx, EthHdr::LEN)? };
 
     let is_request = arp.oper() == ARPOP_REQUEST && arp.htype() == ARPHRD_ETHER;
     let dst_mac = eth.dst_addr;
@@ -59,11 +59,11 @@ fn write_arp_reply(
     our_ip: [u8; 4],
     requester_ip: [u8; 4],
 ) -> Res<()> {
-    let eth: &mut EthHdr = unsafe { at_mut(ctx, 0)? };
+    let eth: &mut EthHdr = unsafe { ref_at_mut(ctx, 0)? };
     eth.src_addr = our_mac;
     eth.dst_addr = requester_mac;
 
-    let arp: &mut ArpHdr = unsafe { at_mut(ctx, EthHdr::LEN)? };
+    let arp: &mut ArpHdr = unsafe { ref_at_mut(ctx, EthHdr::LEN)? };
     arp.set_oper(ARPOP_REPLY);
     arp.set_sha(our_mac);
     arp.set_spa(our_ip);

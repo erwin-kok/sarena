@@ -1,6 +1,6 @@
 use aya_ebpf::programs::TcContext;
 use network_types::{eth::EthHdr, ip::Ipv4Hdr};
-use sarena_ebpf_common::at_mut;
+use sarena_ebpf_common::ref_at_mut;
 use sarena_shared::EndpointInfo;
 
 use crate::{
@@ -25,7 +25,7 @@ pub fn local_delivery(ctx: &TcContext, ep: *const EndpointInfo) -> Res<Verdict> 
 
 #[inline(always)]
 fn ipv4_dec_ttl(ctx: &TcContext) -> Res<()> {
-    let ip4: &mut Ipv4Hdr = unsafe { at_mut(ctx, EthHdr::LEN)? };
+    let ip4: &mut Ipv4Hdr = unsafe { ref_at_mut(ctx, EthHdr::LEN)? };
 
     if ip4.ttl <= 1 {
         return Err(EbpfError::TtlExceeded);
@@ -41,7 +41,7 @@ fn ipv4_dec_ttl(ctx: &TcContext) -> Res<()> {
 
 #[inline(always)]
 fn rewrite_eth(ctx: &TcContext, src_mac: [u8; 6], dst_mac: [u8; 6]) -> Res<()> {
-    let eth: &mut EthHdr = unsafe { at_mut(ctx, 0)? };
+    let eth: &mut EthHdr = unsafe { ref_at_mut(ctx, 0)? };
     eth.dst_addr = dst_mac;
     eth.src_addr = src_mac;
     Ok(())

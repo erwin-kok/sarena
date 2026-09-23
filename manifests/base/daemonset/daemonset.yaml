@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: sarena-daemon
+  namespace: sarena-system
+  labels:
+    app: sarena-daemon
+spec:
+  selector:
+    matchLabels:
+      app: sarena-daemon
+  template:
+    metadata:
+      labels:
+        app: sarena-daemon
+    spec:
+      serviceAccountName: sarena-daemon
+      hostNetwork: true
+      priorityClassName: system-node-critical
+      tolerations:
+        - operator: Exists
+      terminationGracePeriodSeconds: 10
+      initContainers:
+        - name: install-cni
+          image: sarena:dev
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/install-cni.sh"]
+          env:
+            - name: DAEMON_ENDPOINT
+              value: "tcp://127.0.0.1:3000"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: cni-bin
+              mountPath: /host/opt/cni/bin
+            - name: cni-net-d
+              mountPath: /host/etc/cni/net.d
+            - name: bpffs
+              mountPath: /sys/fs/bpf
+              mountPropagation: Bidirectional
+      containers:
+        - name: sarena-daemon
+          image: sarena:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: api
+              containerPort: 3000
+              protocol: TCP
+            - name: webhook
+              containerPort: 8443
+              protocol: TCP
+          securityContext:
+            privileged: true
+          readinessProbe:
+            tcpSocket:
+              port: api
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: bpffs
+              mountPath: /sys/fs/bpf
+              mountPropagation: Bidirectional
+            - name: netns
+              mountPath: /var/run/netns
+              mountPropagation: HostToContainer
+      volumes:
+        - name: cni-bin
+          hostPath:
+            path: /opt/cni/bin
+            type: DirectoryOrCreate
+        - name: cni-net-d
+          hostPath:
+            path: /etc/cni/net.d
+            type: DirectoryOrCreate
+        - name: bpffs
+          hostPath:
+            path: /sys/fs/bpf
+            type: DirectoryOrCreate
+        - name: netns
+          hostPath:
+            path: /var/run/netns
+            type: DirectoryOrCreate

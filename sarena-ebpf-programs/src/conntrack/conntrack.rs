@@ -100,7 +100,7 @@ pub enum FlowDir {
 }
 
 impl FlowDir {
-    #[inline]
+    #[inline(always)]
     pub fn of(entry: &ConnTrackEntry, pkt_src_addr: Ipv4Key, pkt_src_port: u16) -> Self {
         if pkt_src_addr == entry.orig_src_addr && pkt_src_port == entry.orig_src_port {
             FlowDir::Original
@@ -116,7 +116,7 @@ pub enum ConnTrackVerdict {
     Related(FlowDir),
 }
 
-#[inline]
+#[inline(always)]
 pub fn ct_lookup(tuple: &ConnTrackTuple, now: u64) -> Option<(ConnTrackVerdict, ConnTrackEntry)> {
     let key = ConnTrackKey::new(
         tuple.src_addr,
@@ -134,7 +134,7 @@ pub fn ct_lookup(tuple: &ConnTrackTuple, now: u64) -> Option<(ConnTrackVerdict, 
     Some((ConnTrackVerdict::Seen(dir), *entry))
 }
 
-#[inline]
+#[inline(always)]
 pub fn ct_create(
     tuple: &ConnTrackTuple,
     now: u64,
@@ -170,7 +170,7 @@ pub fn ct_create(
         .map_err(EbpfError::MapError)
 }
 
-#[inline]
+#[inline(always)]
 pub fn ct_update(t: &ConnTrackTuple, dir: FlowDir, now: u64) -> Result<(), ()> {
     Ok(())
 }

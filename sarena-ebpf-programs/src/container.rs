@@ -4,7 +4,7 @@ use network_types::{
     eth::{EthHdr, EtherType},
     ip::Ipv4Hdr,
 };
-use sarena_ebpf_common::at;
+use sarena_ebpf_common::ref_at;
 use sarena_shared::{Ipv4Key, Ipv4KeyExt as _, OBS_POINT_CONTAINER_FORWARD};
 
 use crate::{
@@ -21,7 +21,8 @@ use crate::{
 
 #[inline(always)]
 pub fn try_from_container(ctx: TcContext) -> Res<Verdict> {
-    let eth: &EthHdr = unsafe { at(&ctx, 0)? };
+    let eth: &EthHdr = unsafe { ref_at(&ctx, 0)? };
+
     let Ok(ether_type) = eth.ether_type() else {
         return Ok(Verdict::Pass);
     };
@@ -46,7 +47,7 @@ pub fn try_to_container(_ctx: TcContext) -> Res<Verdict> {
 
 #[inline(always)]
 fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
-    let ip4: &Ipv4Hdr = unsafe { at(ctx, EthHdr::LEN)? };
+    let ip4: &Ipv4Hdr = unsafe { ref_at(ctx, EthHdr::LEN)? };
 
     let fragmented = is_fragmented(ip4);
     let src_ip = Ipv4Key::from_octets(ip4.src_addr);
@@ -60,7 +61,7 @@ fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
     conntrack(ctx)?;
 
     {
-        let eth: &EthHdr = unsafe { at(ctx, 0)? };
+        let eth: &EthHdr = unsafe { ref_at(ctx, 0)? };
         debug!(
             ctx,
             "IPv4 -- dst-mac: {:mac}, src-mac: {:mac}, src-ip: {:i}, dst-ip: {:i}",
@@ -82,19 +83,19 @@ fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
 
 #[inline(always)]
 fn conntrack(ctx: &TcContext) -> Res<()> {
-    // let now = unsafe { bpf_ktime_get_ns() };
+    let now = 0; // unsafe { bpf_ktime_get_ns() };
 
     let tuple = ConnTrackTuple::new(ctx)?;
     tuple.print_key();
 
-    match ct_lookup(&tuple, 0) {
+    match ct_lookup(&tuple, now) {
         Some((ConnTrackVerdict::Seen(dir), _)) => {
-            let _ = ct_update(&tuple, dir, 0);
+            let _ = ct_update(&tuple, dir, now);
         }
         _ if tuple.is_related => {} /* ICMP error about a flow we don't track: pass through */
         // untouched
         _ => {
-            ct_create(&tuple, 0, None, 0)?;
+            ct_create(&tuple, now, None, 0)?;
         }
     }
 

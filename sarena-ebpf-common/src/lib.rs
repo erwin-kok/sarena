@@ -5,10 +5,10 @@ mod dump;
 mod error;
 mod mem;
 mod pktbld;
-mod ptr;
+mod ref_at;
 
 pub use dump::*;
 pub use error::CommonError;
 pub use mem::{bpf_memcmp, bpf_memcpy};
 pub use pktbld::*;
-pub use ptr::{at, at_mut, mut_ptr_at, ptr_at};
+pub use ref_at::{ref_at, ref_at_mut};

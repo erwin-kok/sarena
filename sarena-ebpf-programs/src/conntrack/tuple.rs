@@ -7,7 +7,7 @@ use network_types::{
     tcp::TcpHdr,
     udp::UdpHdr,
 };
-use sarena_ebpf_common::ptr_at;
+use sarena_ebpf_common::ref_at;
 use sarena_shared::{Ipv4Key, Ipv4KeyExt as _};
 
 use crate::{
@@ -29,8 +29,7 @@ pub struct ConnTrackTuple {
 impl ConnTrackTuple {
     #[inline(always)]
     pub fn new(ctx: &TcContext) -> Res<Self> {
-        let ipv4hdr: *const Ipv4Hdr = unsafe { ptr_at(&ctx, EthHdr::LEN)? };
-        let ipv4 = unsafe { &*ipv4hdr };
+        let ipv4: &Ipv4Hdr = unsafe { ref_at(&ctx, EthHdr::LEN)? };
 
         let proto = ipv4.proto()?;
         let l4_off: usize = EthHdr::LEN + ipv4.ihl() as usize;
@@ -95,8 +94,7 @@ impl ConnTrackTuple {
 
     #[inline(always)]
     fn extract_for_tcp(ctx: &TcContext, offset: usize) -> Res<(u16, u16, Option<TcpFlags>)> {
-        let tcphdr: *const TcpHdr = unsafe { ptr_at(&ctx, offset)? };
-        let tcp = unsafe { &*tcphdr };
+        let tcp: &TcpHdr = unsafe { ref_at(&ctx, offset)? };
         Ok((
             u16::from_be_bytes(tcp.source),
             u16::from_be_bytes(tcp.dest),
@@ -106,15 +104,13 @@ impl ConnTrackTuple {
 
     #[inline(always)]
     fn extract_for_udp(ctx: &TcContext, offset: usize) -> Res<(u16, u16, Option<TcpFlags>)> {
-        let udphdr: *const UdpHdr = unsafe { ptr_at(&ctx, offset)? };
-        let udp = unsafe { &*udphdr };
+        let udp: &UdpHdr = unsafe { ref_at(&ctx, offset)? };
         Ok((udp.src_port(), udp.dst_port(), None))
     }
 
     #[inline(always)]
     fn extract_for_sctp(ctx: &TcContext, offset: usize) -> Res<(u16, u16, Option<TcpFlags>)> {
-        let sctphdr: *const SctpHdr = unsafe { ptr_at(&ctx, offset)? };
-        let sctp = unsafe { &*sctphdr };
+        let sctp: &SctpHdr = unsafe { ref_at(&ctx, offset)? };
         Ok((
             u16::from_be_bytes(sctp.src),
             u16::from_be_bytes(sctp.dst),
@@ -124,8 +120,7 @@ impl ConnTrackTuple {
 
     #[inline(always)]
     fn fill_icmp(&mut self, ctx: &TcContext, offset: usize) -> Res<()> {
-        let icmphdr: *const Icmpv4Hdr = unsafe { ptr_at(&ctx, offset)? };
-        let icmp = unsafe { &*icmphdr };
+        let icmp: &Icmpv4Hdr = unsafe { ref_at(&ctx, offset)? };
         let data = icmp.data()?;
         match icmp.type_ {
             0 | 8 => {
@@ -141,8 +136,7 @@ impl ConnTrackTuple {
                 // a live flow -- overwrite every identity field, addresses and
                 // protocol included, with its values.
                 let inner_off = offset + Icmpv4Hdr::LEN;
-                let inner_ipv4hdr: *const Ipv4Hdr = unsafe { ptr_at(&ctx, inner_off)? };
-                let inner_ipv4 = unsafe { &*inner_ipv4hdr };
+                let inner_ipv4: &Ipv4Hdr = unsafe { ref_at(&ctx, inner_off)? };
                 let inner_proto = inner_ipv4.proto()?;
 
                 self.src_addr = Ipv4Key::from_octets(inner_ipv4.src_addr);

@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sarena-daemon
+rules:
+  - apiGroups: ["sarena.erwinkok.org"]
+    resources: ["addresspools"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sarena-daemon
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sarena-daemon
+subjects:
+  - kind: ServiceAccount
+    name: sarena-daemon
+    namespace: sarena-system
