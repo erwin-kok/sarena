@@ -17,7 +17,5 @@ pub fn setup_services(config: DataPlaneConfig, loader_handle: LoaderHandle) -> A
     );
     let daemon = Arc::new(sarena_services_daemon::DefaultDaemonService::new());
 
-    let state = AppState::new(ipam, endpoint, daemon);
-
-    state
+    AppState::new(ipam, endpoint, daemon)
 }

@@ -49,6 +49,7 @@ async fn reconciler(_resource: Arc<Service>, _ctx: Arc<Context>) -> Result<Actio
     Ok(Action::requeue(Duration::from_secs(30)))
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
 fn error_policy(resource: Arc<Service>, error: &Infallible, _ctx: Arc<Context>) -> Action {
     warn!(
         resource = %resource.name_any(),

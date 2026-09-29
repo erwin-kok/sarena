@@ -1,13 +1,7 @@
 use prometheus::Registry;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Metrics {}
-
-impl Default for Metrics {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 impl Metrics {
     pub fn register(self, _registry: &Registry) -> Result<Self, prometheus::Error> {

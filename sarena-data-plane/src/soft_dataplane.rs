@@ -407,11 +407,11 @@ fn ip_proto_from_byte(byte: u8) -> Option<IpProto> {
 /// RFC 1071 internet checksum.
 fn internet_checksum(bytes: &[u8]) -> u16 {
     let mut sum: u32 = 0;
-    let mut chunks = bytes.chunks_exact(2);
-    for chunk in &mut chunks {
-        sum += u32::from(u16::from_be_bytes([chunk[0], chunk[1]]));
+    let (chunks, remainder) = bytes.as_chunks::<2>();
+    for chunk in chunks {
+        sum += u32::from(u16::from_be_bytes(*chunk));
     }
-    if let [last] = chunks.remainder() {
+    if let [last] = remainder {
         sum += u32::from(*last) << 8;
     }
     while sum >> 16 != 0 {

@@ -4,7 +4,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     error::{DataPlaneError, Res},
-    loader::{backend::BpfBackend, endpoint::EndpointKind, loader::Loader},
+    loader::{Loader, backend::BpfBackend, endpoint::EndpointKind},
 };
 
 enum Command {
