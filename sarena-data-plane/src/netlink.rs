@@ -3,7 +3,7 @@ use sarena_infra::{
     NetworkProvisioner as _, VethSpec, netlink_link::NetlinkLink,
 };
 
-use crate::error::{ControlPlaneError, Res};
+use crate::error::{DataPlaneError, Res};
 
 pub const SARENA_HOST: &str = "sarena_host";
 pub const SARENA_NET: &str = "sarena_net";
@@ -25,9 +25,9 @@ pub async fn setup_host_device(
                 peer_mac: Some(peer_mac),
             })
             .await
-            .map_err(|e| ControlPlaneError::CouldNotCreateVethPair(e.to_string()))?;
+            .map_err(|e| DataPlaneError::CouldNotCreateVethPair(e.to_string()))?;
     } else {
-        link.map_err(|src| ControlPlaneError::LinkLookup {
+        link.map_err(|src| DataPlaneError::LinkLookup {
             name: SARENA_HOST.to_string(),
             src: src.to_string(),
         })?;
@@ -45,14 +45,13 @@ async fn setup_link(
     name: &str,
     device_mtu: u32,
 ) -> Res<NetlinkLink> {
-    let mut link =
-        provisioner
-            .get_link(name)
-            .await
-            .map_err(|src| ControlPlaneError::LinkLookup {
-                name: SARENA_HOST.to_string(),
-                src: src.to_string(),
-            })?;
+    let mut link = provisioner
+        .get_link(name)
+        .await
+        .map_err(|src| DataPlaneError::LinkLookup {
+            name: SARENA_HOST.to_string(),
+            src: src.to_string(),
+        })?;
 
     link.set_up().await?;
 

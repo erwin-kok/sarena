@@ -4,7 +4,7 @@ use aya::maps::{Map, MapData, MapError, PerCpuHashMap};
 use sarena_shared::{MetricsKey, MetricsValue};
 
 use crate::{
-    error::{ControlPlaneError, Res},
+    error::{DataPlaneError, Res},
     loader::PinRoot,
     maps::GlobalMap,
 };
@@ -20,7 +20,7 @@ impl MetricsMap {
     }
 
     fn from_pin(path: &Path) -> Res<Self> {
-        let data = MapData::from_pin(path).map_err(|e| ControlPlaneError::MapOpen {
+        let data = MapData::from_pin(path).map_err(|e| DataPlaneError::MapOpen {
             path: path.to_path_buf(),
             src: e.to_string(),
         })?;
@@ -62,8 +62,8 @@ impl MetricsMap {
     }
 }
 
-fn access(e: &MapError) -> ControlPlaneError {
-    ControlPlaneError::MapAccess {
+fn access(e: &MapError) -> DataPlaneError {
+    DataPlaneError::MapAccess {
         map: METRICS_MAP_NAME,
         src: e.to_string(),
     }

@@ -1,8 +1,8 @@
-pub mod calls_map;
-pub mod conntrack_map;
-pub mod endpoint_config_map;
-pub mod lxc_map;
-pub mod metrics_map;
+mod calls_map;
+mod conntrack_map;
+mod endpoint_config_map;
+mod lxc_map;
+mod metrics_map;
 
 pub use calls_map::CallsMap;
 pub use endpoint_config_map::EndpointConfigMap;

@@ -6,7 +6,7 @@ use std::{
 use sarena_infra::{Link as _, mock_link::MockLink};
 
 use crate::{
-    error::{ControlPlaneError, Res},
+    error::{DataPlaneError, Res},
     loader::{backend::BpfBackend, manifest::Hook},
 };
 
@@ -53,7 +53,7 @@ impl MockBackend {
         if let Some((fail_n, _)) = &self.fail_at {
             if n == *fail_n {
                 let (_, msg) = self.fail_at.take().unwrap();
-                return Err(ControlPlaneError::Injected(msg));
+                return Err(DataPlaneError::Injected(msg));
             }
         }
         Ok(())

@@ -22,7 +22,7 @@ use sarena_infra::{
 };
 
 use crate::{
-    error::{ControlPlaneError, Res},
+    error::{DataPlaneError, Res},
     loader::{backend::BpfBackend, manifest::Hook},
 };
 
@@ -60,9 +60,9 @@ impl AyaBackend {
     fn sched_classifier<'a>(bpf: &'a mut Ebpf, name: &'static str) -> Res<&'a mut SchedClassifier> {
         let sched = bpf
             .program_mut(name)
-            .ok_or(ControlPlaneError::ProgramNotFound { name })?
+            .ok_or(DataPlaneError::ProgramNotFound { name })?
             .try_into()
-            .map_err(|_| ControlPlaneError::ProgramLoad {
+            .map_err(|_| DataPlaneError::ProgramLoad {
                 name,
                 src: "program section exists but is not a SchedClassifier (tc) program".into(),
             })?;
@@ -77,11 +77,11 @@ impl AyaBackend {
         }
         let bpf = loader
             .load(self.object.bytes)
-            .map_err(|e| ControlPlaneError::ObjectLoad(e.to_string()))?;
+            .map_err(|e| DataPlaneError::ObjectLoad(e.to_string()))?;
 
         for name in maps.keys() {
             if bpf.map(name.as_str()).is_none() {
-                return Err(ControlPlaneError::MapNotFound { name: name.clone() });
+                return Err(DataPlaneError::MapNotFound { name: name.clone() });
             }
         }
         Ok(bpf)
@@ -125,12 +125,12 @@ impl BpfBackend for AyaBackend {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .map_err(|e| ControlPlaneError::LinkResolve {
+            .map_err(|e| DataPlaneError::LinkResolve {
                 link: link.to_string(),
                 src: format!("failed to build link-resolution runtime: {e}"),
             })?;
         rt.block_on(self.provisioner.get_link(link))
-            .map_err(|e| ControlPlaneError::LinkResolve {
+            .map_err(|e| DataPlaneError::LinkResolve {
                 link: link.to_string(),
                 src: e.to_string(),
             })
@@ -160,14 +160,14 @@ impl BpfBackend for AyaBackend {
         };
 
         let prog = Self::sched_classifier(instance, program_name)?;
-        prog.load().map_err(|e| ControlPlaneError::ProgramLoad {
+        prog.load().map_err(|e| DataPlaneError::ProgramLoad {
             name: program_name,
             src: e.to_string(),
         })?;
 
         let mut link = link.clone();
         link.upsert_tcx_program(prog, link_pin_dir, attach_type)
-            .map_err(|e| ControlPlaneError::Attach {
+            .map_err(|e| DataPlaneError::Attach {
                 name: program_name,
                 ifname: link.ifname().to_string(),
                 src: e.to_string(),
@@ -179,7 +179,7 @@ impl BpfBackend for AyaBackend {
         match std::fs::remove_file(path) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()), // idempotent by contract
-            Err(e) => Err(ControlPlaneError::Unpin {
+            Err(e) => Err(DataPlaneError::Unpin {
                 path: path.to_path_buf(),
                 src: e.to_string(),
             }),
@@ -190,7 +190,7 @@ impl BpfBackend for AyaBackend {
         match std::fs::remove_dir_all(dir) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()), // idempotent by contract
-            Err(e) => Err(ControlPlaneError::Unpin {
+            Err(e) => Err(DataPlaneError::Unpin {
                 path: dir.to_path_buf(),
                 src: e.to_string(),
             }),
@@ -199,7 +199,7 @@ impl BpfBackend for AyaBackend {
 
     fn list_pins(&self, prefix: &Path) -> Res<Vec<PathBuf>> {
         let mut out = Vec::new();
-        walk_dir(prefix, prefix, &mut out).map_err(|e| ControlPlaneError::ListPins {
+        walk_dir(prefix, prefix, &mut out).map_err(|e| DataPlaneError::ListPins {
             prefix: prefix.to_path_buf(),
             src: e.to_string(),
         })?;

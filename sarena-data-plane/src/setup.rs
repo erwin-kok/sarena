@@ -8,13 +8,13 @@ use sarena_shared::EndpointConfig;
 
 use crate::{
     AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, PIN_ROOT, PinRoot,
-    config::ControlPlaneConfig,
+    config::DataPlaneConfig,
     error::Res,
     netlink::{SARENA_HOST, setup_host_device},
 };
 
 pub async fn start_control_plane(
-    config: &ControlPlaneConfig,
+    config: &DataPlaneConfig,
 ) -> Res<(LoaderHandle, std::thread::JoinHandle<()>)> {
     std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
 

@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use sarena_data_plane::{ControlPlaneConfig, LoaderHandle, PIN_ROOT};
+use sarena_data_plane::{DataPlaneConfig, LoaderHandle, PIN_ROOT};
 use sarena_infra::NetlinkNetworkProvisioner;
 
 use crate::state::AppState;
 
-pub fn setup_services(config: ControlPlaneConfig, loader_handle: LoaderHandle) -> AppState {
+pub fn setup_services(config: DataPlaneConfig, loader_handle: LoaderHandle) -> AppState {
     let provisioner = NetlinkNetworkProvisioner;
     let ipam = Arc::new(sarena_services_ipam::DefaultIpamService::new(
         config.gateway_ip,

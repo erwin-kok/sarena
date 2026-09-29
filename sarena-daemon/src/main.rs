@@ -6,7 +6,7 @@ use std::{
 };
 
 use ipnet::{IpNet, Ipv4Net};
-use sarena_data_plane::{ControlPlaneConfig, start_control_plane};
+use sarena_data_plane::{DataPlaneConfig, start_control_plane};
 use sarena_services_setup::setup_services;
 use sarena_utils::{LogFormat, TracingConfig, logging, metrics::init_metrics};
 use tokio::{
@@ -35,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
 
     info!("starting sarena-daemon, socket = {socket_path}");
 
-    let config = ControlPlaneConfig {
+    let config = DataPlaneConfig {
         gateway_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5)),
         internal_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 7)),
         ipam_ipv4_subnet: Some(IpNet::V4(Ipv4Net::new(Ipv4Addr::new(10, 0, 10, 0), 24)?)),

@@ -10,7 +10,7 @@ pub struct HookFailure {
 }
 
 #[derive(Debug, Error)]
-pub enum ControlPlaneError {
+pub enum DataPlaneError {
     #[error("failed to look up link {name:?}: {src}")]
     LinkLookup { name: String, src: String },
 
@@ -68,4 +68,4 @@ pub enum ControlPlaneError {
     Injected(String),
 }
 
-pub type Res<T> = Result<T, ControlPlaneError>;
+pub type Res<T> = Result<T, DataPlaneError>;

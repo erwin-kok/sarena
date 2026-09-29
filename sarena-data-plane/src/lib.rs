@@ -8,9 +8,9 @@ mod reconciler;
 mod setup;
 mod soft_dataplane;
 
-pub use config::ControlPlaneConfig;
-pub use error::{ControlPlaneError, HookFailure};
-pub use loader::*;
+pub use config::DataPlaneConfig;
+pub use error::DataPlaneError;
+pub use loader::{AyaBackend, EndpointKind, Loader, LoaderHandle, PinRoot};
 pub use maps::{CallsMap, EndpointConfigMap, LxcMap, MetricsMap};
 pub use setup::start_control_plane;
 
