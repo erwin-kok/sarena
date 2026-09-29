@@ -3111,7 +3111,6 @@ dependencies = [
  "rand 0.10.3",
  "sarena-api-types-v1",
  "sarena-data-plane",
- "sarena-infra",
  "sarena-shared",
  "sarena-utils",
  "thiserror 2.0.21",

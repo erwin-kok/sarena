@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use sarena_data_plane::{DataPlaneConfig, LoaderHandle, PIN_ROOT};
-use sarena_infra::NetlinkNetworkProvisioner;
+use sarena_data_plane::{DataPlaneConfig, LoaderHandle};
 
 use crate::{
     DaemonService, DefaultDaemonService, DefaultEndpointService, DefaultIpamService,
@@ -30,17 +29,13 @@ impl AppState {
 }
 
 pub fn setup_services(config: DataPlaneConfig, loader_handle: LoaderHandle) -> AppState {
-    let provisioner = NetlinkNetworkProvisioner;
     let ipam = Arc::new(DefaultIpamService::new(
         config.gateway_ip,
         config.ipam_ipv4_subnet,
         config.ipam_ipv6_subnet,
     ));
-    let endpoint: Arc<DefaultEndpointService> = Arc::new(DefaultEndpointService::new(
-        loader_handle,
-        provisioner,
-        PIN_ROOT,
-    ));
+    let endpoint: Arc<DefaultEndpointService> =
+        Arc::new(DefaultEndpointService::new(loader_handle));
     let daemon = Arc::new(DefaultDaemonService::new());
 
     AppState::new(ipam, endpoint, daemon)

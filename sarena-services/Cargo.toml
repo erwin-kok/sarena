@@ -16,7 +16,6 @@ test-util = []
 [dependencies]
 sarena-api-types-v1 = { path = "../sarena-api/types/v1" }
 sarena-data-plane = { path = "../sarena-data-plane" }
-sarena-infra = { path = "../sarena-infra" }
 sarena-shared = { path = "../sarena-shared" }
 sarena-utils = { path = "../sarena-utils" }
 
