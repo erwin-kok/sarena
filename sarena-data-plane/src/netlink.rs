@@ -3,7 +3,7 @@ use sarena_infra::{
     NetworkProvisioner as _, VethSpec, netlink_link::NetlinkLink,
 };
 
-use crate::{ControlPlaneError, Res1};
+use crate::error::{ControlPlaneError, Res};
 
 pub const SARENA_HOST: &str = "sarena_host";
 pub const SARENA_NET: &str = "sarena_net";
@@ -12,7 +12,7 @@ pub async fn setup_host_device(
     provisioner: &mut NetlinkNetworkProvisioner,
     device_mtu: u32,
     addr: InterfaceAddress,
-) -> Res1<(NetlinkLink, NetlinkLink)> {
+) -> Res<(NetlinkLink, NetlinkLink)> {
     let link = provisioner.get_link(SARENA_HOST).await;
     if matches!(&link, Err(InfraError::LinkNotFound(_))) {
         let host_mac = MacAddress::generate_rand();
@@ -44,7 +44,7 @@ async fn setup_link(
     provisioner: &mut NetlinkNetworkProvisioner,
     name: &str,
     device_mtu: u32,
-) -> Res1<NetlinkLink> {
+) -> Res<NetlinkLink> {
     let mut link =
         provisioner
             .get_link(name)

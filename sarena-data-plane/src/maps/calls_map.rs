@@ -3,7 +3,7 @@ use std::path::Path;
 use aya::maps::{Array, Map, MapData, MapError};
 
 use crate::{
-    error::{LoaderError, Res},
+    error::{ControlPlaneError, Res},
     loader::PinRoot,
     maps::EndpointMap,
 };
@@ -27,7 +27,7 @@ impl CallsMap {
     }
 
     fn from_pin(path: &Path) -> Res<Self> {
-        let data = MapData::from_pin(path).map_err(|e| LoaderError::MapOpen {
+        let data = MapData::from_pin(path).map_err(|e| ControlPlaneError::MapOpen {
             path: path.to_path_buf(),
             src: e.to_string(),
         })?;
@@ -45,8 +45,8 @@ impl CallsMap {
     }
 }
 
-fn access(e: &MapError) -> LoaderError {
-    LoaderError::MapAccess {
+fn access(e: &MapError) -> ControlPlaneError {
+    ControlPlaneError::MapAccess {
         map: CALLS_MAP_NAME,
         src: e.to_string(),
     }

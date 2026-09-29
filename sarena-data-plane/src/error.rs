@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use sarena_infra::InfraError;
 use thiserror::Error;
 
 #[derive(Debug)]
@@ -9,7 +10,19 @@ pub struct HookFailure {
 }
 
 #[derive(Debug, Error)]
-pub enum LoaderError {
+pub enum ControlPlaneError {
+    #[error("failed to look up link {name:?}: {src}")]
+    LinkLookup { name: String, src: String },
+
+    #[error("could not create veth pair {0}")]
+    CouldNotCreateVethPair(String),
+
+    #[error("Prefix length error: {0}")]
+    PrefixLengthError(#[from] ipnet::PrefixLenError),
+
+    #[error("infra error: {0}")]
+    InfraError(#[from] InfraError),
+
     #[error("failed to load eBPF object: {0}")]
     ObjectLoad(String),
 
@@ -55,4 +68,4 @@ pub enum LoaderError {
     Injected(String),
 }
 
-pub type Res<T> = Result<T, LoaderError>;
+pub type Res<T> = Result<T, ControlPlaneError>;

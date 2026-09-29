@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    error::{HookFailure, LoaderError, Res},
+    error::{ControlPlaneError, HookFailure, Res},
     loader::{
         backend::BpfBackend,
         endpoint::EndpointKind,
@@ -74,7 +74,7 @@ impl<B: BpfBackend> Loader<B> {
         }
 
         if !failures.is_empty() {
-            return Err(LoaderError::Partial(failures));
+            return Err(ControlPlaneError::Partial(failures));
         }
 
         Ok(())
@@ -127,7 +127,7 @@ impl<B: BpfBackend> Loader<B> {
     pub fn reconcile(
         &mut self,
         desired: &[(EndpointKind, String)],
-    ) -> Res<Vec<(EndpointKind, String, LoaderError)>> {
+    ) -> Res<Vec<(EndpointKind, String, ControlPlaneError)>> {
         let mut errors = Vec::new();
 
         for (kind, link) in desired {
@@ -353,7 +353,7 @@ mod tests {
         let result = loader.add_endpoint(EndpointKind::Container, &link(1));
         assert!(result.is_err());
         assert!(
-            !matches!(result, Err(LoaderError::Partial(_))),
+            !matches!(result, Err(ControlPlaneError::Partial(_))),
             "a load_instance failure is not a partial-hook failure"
         );
 
@@ -377,7 +377,7 @@ mod tests {
 
         let result = loader.add_endpoint(EndpointKind::Container, &link(1));
         assert!(result.is_err());
-        assert!(!matches!(result, Err(LoaderError::Partial(_))));
+        assert!(!matches!(result, Err(ControlPlaneError::Partial(_))));
 
         let load_calls = loader
             .backend

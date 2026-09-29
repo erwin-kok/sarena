@@ -3,7 +3,7 @@ use std::thread::JoinHandle;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-    error::{LoaderError, Res},
+    error::{ControlPlaneError, Res},
     loader::{backend::BpfBackend, endpoint::EndpointKind, loader::Loader},
 };
 
@@ -26,7 +26,7 @@ enum Command {
     },
     Reconcile {
         desired: Vec<(EndpointKind, String)>,
-        reply: oneshot::Sender<Res<Vec<(EndpointKind, String, LoaderError)>>>,
+        reply: oneshot::Sender<Res<Vec<(EndpointKind, String, ControlPlaneError)>>>,
     },
     TeardownAll {
         reply: oneshot::Sender<Res<()>>,
@@ -123,7 +123,7 @@ impl LoaderHandle {
     pub async fn reconcile(
         &self,
         desired: Vec<(EndpointKind, String)>,
-    ) -> Res<Vec<(EndpointKind, String, LoaderError)>> {
+    ) -> Res<Vec<(EndpointKind, String, ControlPlaneError)>> {
         self.call(|reply| Command::Reconcile { desired, reply })
             .await
     }
@@ -137,8 +137,8 @@ impl LoaderHandle {
         self.tx
             .send(build(reply))
             .await
-            .map_err(|_| LoaderError::ActorGone)?;
-        rx.await.map_err(|_| LoaderError::ActorGone)?
+            .map_err(|_| ControlPlaneError::ActorGone)?;
+        rx.await.map_err(|_| ControlPlaneError::ActorGone)?
     }
 }
 

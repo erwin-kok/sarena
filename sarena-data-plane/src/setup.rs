@@ -7,8 +7,9 @@ use sarena_infra::{
 use sarena_shared::EndpointConfig;
 
 use crate::{
-    AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, PinRoot, Res1,
+    AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, PinRoot,
     config::ControlPlaneConfig,
+    error::Res,
     netlink::{SARENA_HOST, setup_host_device},
 };
 
@@ -22,7 +23,7 @@ pub const DEFAULT_PIN_ROOT: &str = "/sys/fs/bpf/sarena";
 
 pub async fn start_control_plane(
     config: &ControlPlaneConfig,
-) -> Res1<(LoaderHandle, std::thread::JoinHandle<()>)> {
+) -> Res<(LoaderHandle, std::thread::JoinHandle<()>)> {
     std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
 
     let backend = AyaBackend::new(format!("{PIN_ROOT}/globals"));

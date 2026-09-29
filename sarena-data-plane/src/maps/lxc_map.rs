@@ -4,7 +4,7 @@ use aya::maps::{HashMap, Map, MapData, MapError};
 use sarena_shared::{EndpointInfo, Ipv4Key, Ipv4KeyExt as _};
 
 use crate::{
-    error::{LoaderError, Res},
+    error::{ControlPlaneError, Res},
     loader::PinRoot,
     maps::GlobalMap,
 };
@@ -23,7 +23,7 @@ impl LxcMap {
     }
 
     fn from_pin(path: &Path) -> Res<Self> {
-        let data = MapData::from_pin(path).map_err(|e| LoaderError::MapOpen {
+        let data = MapData::from_pin(path).map_err(|e| ControlPlaneError::MapOpen {
             path: path.to_path_buf(),
             src: e.to_string(),
         })?;
@@ -68,8 +68,8 @@ impl LxcMap {
     }
 }
 
-fn access(e: &MapError) -> LoaderError {
-    LoaderError::MapAccess {
+fn access(e: &MapError) -> ControlPlaneError {
+    ControlPlaneError::MapAccess {
         map: LXC_MAP_NAME,
         src: e.to_string(),
     }
