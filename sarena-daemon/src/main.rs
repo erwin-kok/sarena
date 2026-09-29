@@ -6,7 +6,7 @@ use std::{
 };
 
 use ipnet::{IpNet, Ipv4Net};
-use sarena_data_plane::{DataPlaneConfig, start_control_plane};
+use sarena_data_plane::{DataPlane as _, DataPlaneConfig, DefaultDataPlane};
 use sarena_services::setup_services;
 use sarena_utils::{LogFormat, TracingConfig, logging, metrics::init_metrics};
 use tokio::{
@@ -42,8 +42,8 @@ async fn main() -> anyhow::Result<()> {
         ipam_ipv6_subnet: None,
     };
 
-    let (loader_handle, loader_thread) = start_control_plane(&config).await?;
-    let state = setup_services(config, loader_handle.clone());
+    let data_plane = DefaultDataPlane::new(&config).await?;
+    let state = setup_services(config, data_plane.loader_handle());
 
     let shutdown = CancellationToken::new();
     let mut tasks = JoinSet::new();
@@ -101,9 +101,9 @@ async fn main() -> anyhow::Result<()> {
     })
     .await;
 
-    shutdown_step("eBPF loader", SHUTDOWN_TIMEOUT, async {
-        if let Err(err) = loader_handle.shutdown(loader_thread).await {
-            error!(?err, "failed to shut down eBPF loader");
+    shutdown_step("data plane", SHUTDOWN_TIMEOUT, async {
+        if let Err(err) = data_plane.shutdown().await {
+            error!(?err, "failed to shutdown data plane");
         }
     })
     .await;

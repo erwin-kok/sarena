@@ -12,11 +12,11 @@ mod soft_dataplane;
 use async_trait::async_trait;
 pub use config::DataPlaneConfig;
 pub use container::add_container;
-pub use error::DataPlaneError;
+pub use error::{DataPlaneError, Res};
 pub use loader::{AyaBackend, EndpointKind, Loader, LoaderHandle, PinRoot};
 pub use maps::{CallsMap, EndpointConfigMap, LxcMap, MetricsMap};
 pub use sarena_infra::{InterfaceAddress, MacAddress};
-pub use setup::start_control_plane;
+pub use setup::DefaultDataPlane;
 
 /// Where eBPF program/link state gets pinned.
 pub const PIN_ROOT: &str = "/sys/fs/bpf/sarena";
@@ -25,15 +25,7 @@ pub const PIN_ROOT: &str = "/sys/fs/bpf/sarena";
 pub trait DataPlane: Send + Sync {
     type Error: std::error::Error + Send + Sync + 'static;
 
-    fn new() -> Self;
-}
+    async fn shutdown(self) -> Res<()>;
 
-pub struct DefaultDataPlane {}
-
-impl DataPlane for DefaultDataPlane {
-    type Error = DataPlaneError;
-
-    fn new() -> Self {
-        Self {}
-    }
+    fn loader_handle(&self) -> LoaderHandle;
 }

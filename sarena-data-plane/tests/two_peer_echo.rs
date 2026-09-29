@@ -16,7 +16,7 @@ use sarena_shared::{EndpointConfig, EndpointInfo};
 use sarena_utils::{TracingConfig, logging};
 use tracing::info;
 
-const PIN_ROOT: &str = "/sys/fs/bpf/sarena-two-peer-echo";
+const TEST_PIN_ROOT: &str = "/sys/fs/bpf/sarena-two-peer-echo";
 const IPV4_DEFAULT_ROUTE: IpNet = IpNet::V4(Ipv4Net::new_assert(Ipv4Addr::UNSPECIFIED, 0));
 
 #[tokio::test(flavor = "current_thread")]
@@ -30,11 +30,11 @@ async fn two_peer_udp_echo_through_loader() {
 
     info!("Application started");
 
-    let _ = std::fs::remove_dir_all(PIN_ROOT);
-    std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
+    let _ = std::fs::remove_dir_all(TEST_PIN_ROOT);
+    std::fs::create_dir_all(format!("{TEST_PIN_ROOT}/globals")).expect("creating globals dir");
 
-    let backend = AyaBackend::new(format!("{PIN_ROOT}/globals"));
-    let loader = Loader::new(backend, PIN_ROOT);
+    let backend = AyaBackend::new(format!("{TEST_PIN_ROOT}/globals"));
+    let loader = Loader::new(backend, TEST_PIN_ROOT);
     let (loader_handle, _loader_thread) = LoaderHandle::spawn(loader, 16);
     loader_handle
         .load_global_maps()
@@ -186,7 +186,7 @@ async fn create_endpoint(
 
     info!("endpoint {} attached", lxc_ifname);
 
-    let pins = PinRoot::new(PIN_ROOT);
+    let pins = PinRoot::new(TEST_PIN_ROOT);
 
     EndpointConfigMap::for_link(&pins, &lxc_ifname)
         .expect("open endpoint_config map")

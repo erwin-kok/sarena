@@ -11,6 +11,6 @@ mod mock_backend;
 
 pub use actor::LoaderHandle;
 pub use aya_backend::AyaBackend;
-pub use endpoint::EndpointKind;
 pub use data_plane_loader::Loader;
+pub use endpoint::EndpointKind;
 pub use pin::PinRoot;

@@ -1,5 +1,6 @@
-use std::net::IpAddr;
+use std::{net::IpAddr, sync::Arc};
 
+use async_trait::async_trait;
 use sarena_infra::{
     InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, NetworkProvisioner as _,
     route::Route,
@@ -7,23 +8,53 @@ use sarena_infra::{
 use sarena_shared::EndpointConfig;
 
 use crate::{
-    AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, PIN_ROOT, PinRoot,
+    AyaBackend, DataPlane, DataPlaneError, EndpointConfigMap, EndpointKind, Loader, LoaderHandle,
+    PIN_ROOT, PinRoot,
     config::DataPlaneConfig,
     error::Res,
     netlink::{SARENA_HOST, setup_host_device},
 };
 
-pub async fn start_control_plane(
-    config: &DataPlaneConfig,
-) -> Res<(LoaderHandle, std::thread::JoinHandle<()>)> {
+#[derive(Clone)]
+pub struct DefaultDataPlane {
+    inner: Arc<DefaultDataPlaneInner>,
+}
+
+#[async_trait]
+impl DataPlane for DefaultDataPlane {
+    type Error = DataPlaneError;
+
+    async fn shutdown(self) -> Res<()> {
+        let inner = Arc::into_inner(self.inner).ok_or(DataPlaneError::StillShared)?;
+        inner.loader_handle.shutdown(inner.loader_thread).await
+    }
+
+    fn loader_handle(&self) -> LoaderHandle {
+        self.inner.loader_handle.clone()
+    }
+}
+
+impl DefaultDataPlane {
+    pub async fn new(config: &DataPlaneConfig) -> Res<Self> {
+        let data_plane = start_control_plane(config).await?;
+        Ok(Self {
+            inner: Arc::new(data_plane),
+        })
+    }
+}
+
+pub struct DefaultDataPlaneInner {
+    loader_handle: LoaderHandle,
+    loader_thread: std::thread::JoinHandle<()>,
+}
+
+async fn start_control_plane(config: &DataPlaneConfig) -> Res<DefaultDataPlaneInner> {
     std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
 
     let backend = AyaBackend::new(format!("{PIN_ROOT}/globals"));
-
     let loader: Loader<AyaBackend> = Loader::new(backend, PIN_ROOT);
 
     let (loader_handle, loader_thread) = LoaderHandle::spawn(loader, 16);
-    let shutdown_loader_handle = loader_handle.clone();
 
     loader_handle.load_global_maps().await?;
 
@@ -58,7 +89,10 @@ pub async fn start_control_plane(
 
     set_endpoint_config(host.mac(), config.internal_ip);
 
-    Ok((shutdown_loader_handle, loader_thread))
+    Ok(DefaultDataPlaneInner {
+        loader_handle,
+        loader_thread,
+    })
 }
 
 fn set_endpoint_config(host_mac: MacAddress, addr: IpAddr) {

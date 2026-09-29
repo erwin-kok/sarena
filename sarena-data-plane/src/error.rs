@@ -63,6 +63,9 @@ pub enum DataPlaneError {
     #[error("loader actor is no longer running")]
     ActorGone,
 
+    #[error("cannot shut down data plane while other clones are still alive")]
+    StillShared,
+
     #[cfg(any(test, feature = "test-util"))]
     #[error("injected failure: {0}")]
     Injected(String),

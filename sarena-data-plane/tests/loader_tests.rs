@@ -9,7 +9,7 @@ use sarena_infra::{
     Link, NetlinkNetworkProvisioner, Netns, NetworkProvisioner, TcxAttach, VethSpec, test_support,
 };
 
-const PIN_ROOT: &str = "/sys/fs/bpf/test";
+const TEST_PIN_ROOT: &str = "/sys/fs/bpf/test";
 
 #[tokio::test]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
@@ -18,12 +18,12 @@ async fn load_multiple_links() {
         .await
         .expect("unshare_self failed -- needs CAP_NET_ADMIN");
 
-    let _ = fs::remove_dir_all(PIN_ROOT);
+    let _ = fs::remove_dir_all(TEST_PIN_ROOT);
 
-    std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
+    std::fs::create_dir_all(format!("{TEST_PIN_ROOT}/globals")).expect("creating globals dir");
 
-    let backend = AyaBackend::new(format!("{PIN_ROOT}/globals"));
-    let loader = Loader::new(backend, PIN_ROOT);
+    let backend = AyaBackend::new(format!("{TEST_PIN_ROOT}/globals"));
+    let loader = Loader::new(backend, TEST_PIN_ROOT);
     let (loader_handle, _loader_thread) = LoaderHandle::spawn(loader, 16);
 
     test_support::with_temp_netns("dpi-p1-", |peer1_ns| async move {
@@ -84,7 +84,7 @@ async fn load_multiple_links() {
                     .expect("expect program")
             );
 
-            let pins = collect_pins(Path::new(PIN_ROOT));
+            let pins = collect_pins(Path::new(TEST_PIN_ROOT));
             for host_name in [&host1_name, &host2_name] {
                 for prog_name in ["from_host", "to_host"] {
                     let expected = PathBuf::from(format!("links/host/{host_name}/{prog_name}"));

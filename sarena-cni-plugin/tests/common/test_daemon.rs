@@ -33,7 +33,7 @@ static POD_IPS: LazyLock<HashMap<&'static str, Ipv4Addr>> = LazyLock::new(|| {
 
 const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(10, 0, 0, 5);
 
-const PIN_ROOT: &str = "/sys/fs/bpf/sarena-test-daemon";
+const TEST_PIN_ROOT: &str = "/sys/fs/bpf/sarena-test-daemon";
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -90,12 +90,12 @@ impl FakeApiServer {
     }
 
     pub async fn start(&self, driver_sock: &str) {
-        let _ = fs::remove_dir_all(PIN_ROOT);
+        let _ = fs::remove_dir_all(TEST_PIN_ROOT);
 
-        std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
+        std::fs::create_dir_all(format!("{TEST_PIN_ROOT}/globals")).expect("creating globals dir");
 
-        let backend = AyaBackend::new(format!("{PIN_ROOT}/globals"));
-        let loader = Loader::new(backend, PIN_ROOT);
+        let backend = AyaBackend::new(format!("{TEST_PIN_ROOT}/globals"));
+        let loader = Loader::new(backend, TEST_PIN_ROOT);
         let (loader_handle, _loader_thread) = LoaderHandle::spawn(loader, 16);
         loader_handle
             .load_global_maps()
@@ -212,7 +212,7 @@ pub async fn create_endpoint(
             IpAddr::V6(_) => panic!("IPv6 peer addresses are not supported"),
         };
 
-        let pins = PinRoot::new(PIN_ROOT);
+        let pins = PinRoot::new(TEST_PIN_ROOT);
 
         let host_mac = MacAddress::parse(&ep.host_mac).expect("parse host mac");
         EndpointConfigMap::for_link(&pins, &ep.host_iface_name)
