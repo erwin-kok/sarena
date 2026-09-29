@@ -6,7 +6,7 @@ use sarena_api_types_v1::daemon::{
 };
 use sarena_utils::version;
 
-use crate::{DaemonService, Res};
+use crate::daemon::{DaemonService, Res};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct DefaultDaemonService;

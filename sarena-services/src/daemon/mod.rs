@@ -4,11 +4,6 @@ use thiserror::Error;
 
 mod service;
 
-#[cfg(feature = "test-util")]
-mod mock;
-
-#[cfg(feature = "test-util")]
-pub use mock::MockDaemonService;
 pub use service::DefaultDaemonService;
 
 #[derive(Debug, Error)]

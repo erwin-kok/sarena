@@ -5,7 +5,7 @@ use std::{
 
 use ipnet::IpNet;
 
-use crate::{IpamError, POOL_DEFAULT, Res, bitmap::AllocationBitmap};
+use crate::ipam::{IpamError, POOL_DEFAULT, Res, bitmap::AllocationBitmap};
 
 pub struct HostScopeAllocator {
     net: IpNet,

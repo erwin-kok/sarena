@@ -12,7 +12,7 @@ use sarena_infra::{
 use sarena_shared::{EndpointConfig, EndpointInfo};
 use tracing::info;
 
-use crate::{EndpointService, Res};
+use crate::endpoint::{EndpointService, Res};
 
 pub struct DefaultEndpointService {
     loader_handle: LoaderHandle,

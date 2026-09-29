@@ -2877,10 +2877,7 @@ dependencies = [
  "hyper-util",
  "prometheus",
  "sarena-api-types-v1",
- "sarena-services-daemon",
- "sarena-services-endpoint",
- "sarena-services-ipam",
- "sarena-services-setup",
+ "sarena-services",
  "serde",
  "tokio",
  "tokio-util",
@@ -2976,7 +2973,7 @@ dependencies = [
  "sarena-api-server",
  "sarena-data-plane",
  "sarena-kubernetes",
- "sarena-services-setup",
+ "sarena-services",
  "sarena-utils",
  "tokio",
  "tokio-util",
@@ -3106,50 +3103,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "sarena-services-daemon"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "sarena-api-types-v1",
- "sarena-utils",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "sarena-services-endpoint"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "sarena-api-types-v1",
- "sarena-data-plane",
- "sarena-infra",
- "sarena-shared",
- "thiserror 2.0.21",
- "tracing",
-]
-
-[[package]]
-name = "sarena-services-ipam"
+name = "sarena-services"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "ipnet",
  "rand 0.10.3",
  "sarena-api-types-v1",
+ "sarena-data-plane",
+ "sarena-infra",
+ "sarena-shared",
+ "sarena-utils",
  "thiserror 2.0.21",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "sarena-services-setup"
-version = "0.1.0"
-dependencies = [
- "sarena-data-plane",
- "sarena-infra",
- "sarena-services-daemon",
- "sarena-services-endpoint",
- "sarena-services-ipam",
 ]
 
 [[package]]

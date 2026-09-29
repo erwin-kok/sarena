@@ -1,6 +1,6 @@
 use axum::{Json, Router, extract::State, routing::get};
 use sarena_api_types_v1::daemon;
-use sarena_services_setup::AppState;
+use sarena_services::AppState;
 
 use crate::error::{ApiResult, ApiStatus, Res};
 

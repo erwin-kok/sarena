@@ -5,7 +5,7 @@ use ipnet::IpNet;
 use sarena_api_types_v1::ipam::{ContainerAddressing, HostAddressing, IpamAllocateResponse};
 use tracing::info;
 
-use crate::{IpamError, IpamService, POOL_DEFAULT, Res, host_scope::HostScopeAllocator};
+use crate::ipam::{IpamError, IpamService, POOL_DEFAULT, Res, host_scope::HostScopeAllocator};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AllocationResult {

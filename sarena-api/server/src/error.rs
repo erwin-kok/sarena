@@ -7,9 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use http::StatusCode;
-use sarena_services_daemon::DaemonError;
-use sarena_services_endpoint::EndpointError;
-use sarena_services_ipam::IpamError;
+use sarena_services::{DaemonError, EndpointError, IpamError};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, Serialize)]

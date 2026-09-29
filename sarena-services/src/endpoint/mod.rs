@@ -5,13 +5,8 @@ use sarena_api_types_v1::endpoint::{
 use thiserror::Error;
 
 mod service;
+
 pub use service::DefaultEndpointService;
-
-#[cfg(feature = "test-util")]
-mod mock;
-
-#[cfg(feature = "test-util")]
-pub use mock::MockEndpointService;
 
 #[derive(Debug, Error)]
 pub enum EndpointError {}

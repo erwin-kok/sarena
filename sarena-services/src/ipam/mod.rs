@@ -8,11 +8,6 @@ mod bitmap;
 mod host_scope;
 mod service;
 
-#[cfg(feature = "test-util")]
-mod mock;
-
-#[cfg(feature = "test-util")]
-pub use mock::MockIpamService;
 pub use service::DefaultIpamService;
 
 pub const POOL_DEFAULT: &str = "default";

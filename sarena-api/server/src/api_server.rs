@@ -11,7 +11,7 @@ use http::{HeaderName, HeaderValue};
 use hyper::{body::Incoming, server::conn::http1};
 use hyper_util::rt::TokioIo;
 use prometheus::Registry;
-use sarena_services_setup::AppState;
+use sarena_services::AppState;
 use tokio::net::{TcpListener, UnixListener};
 use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;

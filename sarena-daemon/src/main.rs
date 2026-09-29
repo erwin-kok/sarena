@@ -7,7 +7,7 @@ use std::{
 
 use ipnet::{IpNet, Ipv4Net};
 use sarena_data_plane::{DataPlaneConfig, start_control_plane};
-use sarena_services_setup::setup_services;
+use sarena_services::setup_services;
 use sarena_utils::{LogFormat, TracingConfig, logging, metrics::init_metrics};
 use tokio::{
     signal::unix::{SignalKind, signal},

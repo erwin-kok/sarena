@@ -12,10 +12,7 @@ workspace = true
 
 [dependencies]
 sarena-api-types-v1 = { path = "../../sarena-api/types/v1" }
-sarena-services-daemon = { path = "../../sarena-services/daemon" }
-sarena-services-endpoint = { path = "../../sarena-services/endpoint" }
-sarena-services-ipam = { path = "../../sarena-services/ipam" }
-sarena-services-setup = { path = "../../sarena-services/setup" }
+sarena-services = { path = "../../sarena-services" }
 
 anyhow = { workspace = true }
 axum = { workspace = true }
