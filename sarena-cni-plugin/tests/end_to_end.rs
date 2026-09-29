@@ -6,15 +6,18 @@ use rscni_plugin::{
     types::{Args, CNIResult},
 };
 use sarena_cni_plugin::SarenaPlugin;
-use sarena_cni_test::test_daemon::{FakeApiServer, PodSpec};
 use sarena_infra::{InfraError, Netns, NetnsGuard};
 use sarena_utils::{TracingConfig, logging};
 use serde_json::json;
 use tracing::info;
 
+use crate::common::{FakeApiServer, PodSpec};
+
 const DEMO_NETNS_PREFIX: &str = "cnidemo";
 
 const UDP_PORT: u16 = 9999;
+
+mod common;
 
 // `current_thread`, not the default multi-threaded flavor: `Netns::unshare_self`
 // below is only safe before the runtime's worker pool exists (see its doc

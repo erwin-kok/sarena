@@ -13,10 +13,6 @@ use sarena_api_types_v1::{
     endpoint::{self, Addressing},
     ipam,
 };
-use sarena_common_plugin::{
-    ipam::{ipv4_routes, ipv6_routes},
-    names::{endpoint_to_ifname, endpoint_to_temp_ifname},
-};
 use sarena_infra::{
     InfraError, InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, Netns,
     NetworkProvisioner as _, VethSpec,
@@ -25,7 +21,12 @@ use sarena_infra::{
 };
 use tracing::{debug, instrument, warn};
 
-use crate::{Res, args::ArgsSpec};
+use crate::{
+    Res,
+    args::ArgsSpec,
+    ipam::{ipv4_routes, ipv6_routes},
+    names::{endpoint_to_ifname, endpoint_to_temp_ifname},
+};
 
 struct IpamLease<T: Transport + 'static> {
     client: Arc<ApiClient<T>>,

@@ -2922,46 +2922,23 @@ name = "sarena-cni-plugin"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum",
+ "hex",
+ "ipnet",
+ "libc",
  "rscni-plugin",
  "sarena-api-client",
  "sarena-api-types-v1",
- "sarena-common-plugin",
- "sarena-infra",
- "sarena-utils",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "sarena-cni-test"
-version = "0.1.0"
-dependencies = [
- "axum",
- "rscni-plugin",
- "sarena-api-types-v1",
- "sarena-cni-plugin",
  "sarena-data-plane",
  "sarena-infra",
  "sarena-shared",
  "sarena-utils",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "sarena-common-plugin"
-version = "0.1.0"
-dependencies = [
- "hex",
- "ipnet",
- "libc",
- "sarena-infra",
- "sha2",
+ "uuid",
 ]
 
 [[package]]
@@ -3111,7 +3088,6 @@ dependencies = [
  "rand 0.10.3",
  "sarena-api-types-v1",
  "sarena-data-plane",
- "sarena-shared",
  "sarena-utils",
  "thiserror 2.0.21",
  "tokio",

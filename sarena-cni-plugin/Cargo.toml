@@ -11,19 +11,28 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-sarena-api-types-v1 = { path = "../../sarena-api/types/v1" }
-sarena-api-client = { path = "../../sarena-api/client" }
-sarena-common-plugin = { path = "../common" }
-sarena-infra = { path = "../../sarena-infra" }
-sarena-utils = { path = "../../sarena-utils" }
+sarena-api-types-v1 = { path = "../sarena-api/types/v1" }
+sarena-api-client = { path = "../sarena-api/client" }
+sarena-data-plane = { path = "../sarena-data-plane" }
+sarena-shared = { path = "../sarena-shared" }
+sarena-infra = { path = "../sarena-infra" }
+sarena-utils = { path = "../sarena-utils" }
 
 async-trait = { workspace = true }
+axum = { workspace = true }
+hex = { workspace = true, features = ["std"] }
+ipnet = { workspace = true }
+libc = { workspace = true }
 rscni-plugin = { workspace = true, features = ["async"] }
 serde = { workspace = true, features = ["std"] }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
 tracing = { workspace = true }
 uuid = { workspace = true }
+
+[features]
+test-util = []
 
 [[bin]]
 name = "sarena-cni"

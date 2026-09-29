@@ -133,8 +133,8 @@ ebpf-test: build-ebpf
         | jq -r 'select(.profile.test == true) | .executable')
     sudo "$exe" --ignored --no-capture
 
-# Run the sarena-cni-test integration test (requires root)
-cni-test: (_root-test "sarena-cni-test")
+# Run the sarena-cni-plugin integration test (requires root)
+cni-test: (_root-test "sarena-cni-plugin")
 
 # Full workflow: build, test, and run all root-only test suites incl. the eBPF tests
 all: build test infra-test data-plane-test cni-test ebpf-test

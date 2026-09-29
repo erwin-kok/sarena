@@ -2,10 +2,13 @@ use std::env;
 
 use rscni_plugin::{async_cni::Cni, test_util::ArgsBuilder, types::Args};
 use sarena_cni_plugin::SarenaPlugin;
-use sarena_cni_test::test_daemon::FakeApiServer;
 use sarena_infra::Netns;
 use sarena_utils::{TracingConfig, logging};
 use serde_json::json;
+
+use crate::common::FakeApiServer;
+
+mod common;
 
 #[tokio::test(flavor = "current_thread")]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]

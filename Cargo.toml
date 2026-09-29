@@ -1,10 +1,9 @@
 [workspace]
 members = [
     "sarena-cli",
+    "sarena-cni-plugin",
     "sarena-data-plane",
-    "sarena-ebpf-objects",
-    "sarena-plugins/cni",
-    "sarena-plugins/common",
+    "sarena-ebpf-objects",    
     "sarena-daemon",
     "sarena-api/types/v1",
     "sarena-api/client",
@@ -31,19 +30,15 @@ members = [
     "sarena-ebpf-programs",
     "sarena-ebpf-test-programs",
 
-    # Integration tests
-    "tests/cni",
-
     # Build tooling
     "xtask",
 ]
 
 default-members = [
     "sarena-cli",
+    "sarena-cni-plugin",
     "sarena-data-plane",
     "sarena-ebpf-objects",
-    "sarena-plugins/cni",
-    "sarena-plugins/common",
     "sarena-daemon",
     "sarena-api/types/v1",
     "sarena-api/client",

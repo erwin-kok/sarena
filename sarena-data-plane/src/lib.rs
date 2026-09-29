@@ -9,6 +9,7 @@ mod reconciler;
 mod setup;
 mod soft_dataplane;
 
+use async_trait::async_trait;
 pub use config::DataPlaneConfig;
 pub use container::add_container;
 pub use error::DataPlaneError;
@@ -19,3 +20,20 @@ pub use setup::start_control_plane;
 
 /// Where eBPF program/link state gets pinned.
 pub const PIN_ROOT: &str = "/sys/fs/bpf/sarena";
+
+#[async_trait]
+pub trait DataPlane: Send + Sync {
+    type Error: std::error::Error + Send + Sync + 'static;
+
+    fn new() -> Self;
+}
+
+pub struct DefaultDataPlane {}
+
+impl DataPlane for DefaultDataPlane {
+    type Error = DataPlaneError;
+
+    fn new() -> Self {
+        Self {}
+    }
+}
