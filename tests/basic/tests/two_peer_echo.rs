@@ -5,12 +5,12 @@ use std::{
 };
 
 use ipnet::{IpNet, Ipv4Net};
+use sarena_data_plane::{
+    AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, LxcMap, PinRoot,
+};
 use sarena_infra::{
     InfraError, InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, Netns,
     NetnsGuard, NetworkProvisioner as _, VethSpec, netlink_link::NetlinkLink, route::Route,
-};
-use sarena_loader::{
-    AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, LxcMap, PinRoot,
 };
 use sarena_shared::{EndpointConfig, EndpointInfo};
 use sarena_utils::{TracingConfig, logging};

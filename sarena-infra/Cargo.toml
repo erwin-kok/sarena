@@ -31,4 +31,4 @@ netlink-packet-route = "0.33"
 sarena-ebpf-objects = { path = "../sarena-ebpf-objects" }
 
 [features]
-test = []
+test-util = []

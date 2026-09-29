@@ -17,7 +17,7 @@ pub mod netns;
 pub mod route;
 pub mod tcx;
 
-#[cfg(any(test, feature = "test"))]
+#[cfg(any(test, feature = "test-util"))]
 pub mod test_support;
 
 pub use address::{AddressFamily, InterfaceAddress};

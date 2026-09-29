@@ -6,9 +6,8 @@ use std::{
 use sarena_infra::{Link as _, mock_link::MockLink};
 
 use crate::{
-    backend::BpfBackend,
     error::{LoaderError, Res},
-    manifest::Hook,
+    loader::{backend::BpfBackend, manifest::Hook},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

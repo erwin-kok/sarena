@@ -1,4 +1,4 @@
-use aya_ebpf::{helpers::generated::bpf_ktime_get_ns, programs::TcContext};
+use aya_ebpf::programs::TcContext;
 use aya_log_ebpf::debug;
 use network_types::{
     eth::{EthHdr, EtherType},

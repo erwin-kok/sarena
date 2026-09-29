@@ -3,8 +3,11 @@ use std::path::Path;
 use aya::maps::{Map, MapData, MapError, PerCpuHashMap};
 use sarena_shared::{MetricsKey, MetricsValue};
 
-use crate::{LoaderError, PinRoot, error::Res, maps::GlobalMap};
-
+use crate::{
+    error::{LoaderError, Res},
+    loader::PinRoot,
+    maps::GlobalMap,
+};
 pub const METRICS_MAP_NAME: &str = "metrics_map";
 
 pub struct MetricsMap {

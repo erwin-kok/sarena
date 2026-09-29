@@ -50,7 +50,7 @@ pub enum LoaderError {
     #[error("loader actor is no longer running")]
     ActorGone,
 
-    #[cfg(any(test, feature = "test"))]
+    #[cfg(any(test, feature = "test-util"))]
     #[error("injected failure: {0}")]
     Injected(String),
 }

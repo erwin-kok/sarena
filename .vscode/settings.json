@@ -1,18 +1,4 @@
 {
-    // rust-analyzer's default flycheck runs `cargo check --workspace`, which
-    // force-includes the #![no_std] eBPF crates (sarena-ebpf-programs,
-    // sarena-ebpf-test-programs) on the host target. That causes their
-    // `sarena-shared` dependency to unify features with `sarena-core`
-    // (which needs `std`), leaking `std` into the no_std crates and
-    // colliding with their `#[panic_handler]` (E0152 duplicate lang item
-    // `panic_impl`). Those crates are only ever meant to be built
-    // cross-compiled to `bpfel-unknown-none` via `cargo xtask build-ebpf`
-    // (see `just build-ebpf`), not on the host target.
-    //
-    // Plain `cargo clippy` (no --workspace) respects `default-members` in
-    // the root Cargo.toml, which already excludes both eBPF crates — same
-    // as `just check` / `just clippy`. Overriding flycheck to use clippy
-    // (rather than plain check) surfaces lint diagnostics inline too.
     "rust-analyzer.check.overrideCommand": [
         "cargo",
         "clippy",
@@ -20,40 +6,13 @@
         "--message-format=json"
     ],
 
-    // Without this, rust-analyzer's own semantic analysis (hover, go-to-def,
-    // completion — separate from the flycheck diagnostics above) only sees
-    // each crate's default features. sarena-cni-plugin/src/test_daemon.rs
-    // (and other feature-gated test-only code, e.g. sarena-infra/sarena-loader's
-    // "test" feature) is behind non-default features, so without this it's
-    // treated as dead cfg'd-out code and none of it resolves.
     "rust-analyzer.cargo.features": "all",
-
-    // sarena-test-scapy's build.rs shells out to `python3 scapy/...`; the
-    // scapy module only exists in ./scapyenv. Prepend it to PATH so RA's
-    // flycheck build scripts find it even when VS Code wasn't launched
-    // from a shell with the venv activated.
-    //
-    // rust-analyzer doesn't actually substitute `${env:PATH}` here (it's
-    // an open upstream request, rust-lang/rust-analyzer#9419), so this
-    // setting was silently replacing PATH with just scapyenv/bin, dropping
-    // /usr/bin and breaking `cc` for any proc-macro/build-script crate
-    // that needs a fresh link (masked until now because everything else
-    // was already cached in target/). Append the standard system dirs
-    // explicitly so the linker is always found regardless of whether that
-    // substitution ever starts working.
     "rust-analyzer.cargo.extraEnv": {
         "PATH": "${workspaceFolder}/scapyenv/bin:${env:PATH}:/usr/local/bin:/usr/bin:/bin"
     },
-
-    // Insert auto-imports the way rustfmt.toml (imports_granularity="Crate",
-    // group_imports="StdExternalCrate") will format them, so adding a `use`
-    // doesn't churn on the next save.
     "rust-analyzer.imports.granularity.group": "crate",
     "rust-analyzer.imports.granularity.enforce": true,
     "rust-analyzer.imports.prefix": "crate",
-
-    // Format Rust files on save via rust-analyzer (which shells out to
-    // rustfmt with the crate's edition/rustfmt.toml applied).
     "[rust]": {
         "editor.defaultFormatter": "rust-lang.rust-analyzer",
         "editor.formatOnSave": true

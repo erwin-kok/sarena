@@ -3,10 +3,8 @@ use std::thread::JoinHandle;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-    backend::BpfBackend,
-    endpoint::EndpointKind,
     error::{LoaderError, Res},
-    loader::Loader,
+    loader::{backend::BpfBackend, endpoint::EndpointKind, loader::Loader},
 };
 
 enum Command {
@@ -67,7 +65,7 @@ impl LoaderHandle {
         let (tx, mut rx) = mpsc::channel(channel_buffer);
 
         let thread = std::thread::Builder::new()
-            .name("sarena-loader".into())
+            .name("sarena-data-plane".into())
             .spawn(move || {
                 let mut loader = loader;
                 while let Some(cmd) = rx.blocking_recv() {
@@ -75,7 +73,7 @@ impl LoaderHandle {
                 }
                 tracing::info!("loader actor channel closed, thread exiting");
             })
-            .expect("failed to spawn sarena-loader actor thread");
+            .expect("failed to spawn sarena-data-plane actor thread");
 
         (Self { tx }, thread)
     }
@@ -95,8 +93,8 @@ impl LoaderHandle {
 
         tokio::task::spawn_blocking(move || thread.join())
             .await
-            .expect("failed to join sarena-loader actor thread")
-            .expect("sarena-loader actor thread panicked");
+            .expect("failed to join sarena-data-plane actor thread")
+            .expect("sarena-data-plane actor thread panicked");
 
         Ok(())
     }
@@ -173,7 +171,7 @@ fn dispatch<B: BpfBackend>(loader: &mut Loader<B>, cmd: Command) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mock_backend::MockBackend;
+    use crate::loader::mock_backend::MockBackend;
 
     #[tokio::test]
     async fn actor_serializes_calls_and_reports_state_after_restart() {

@@ -121,7 +121,6 @@ impl ConnTrackTuple {
     #[inline(always)]
     fn fill_icmp(&mut self, ctx: &TcContext, offset: usize) -> Res<()> {
         let icmp: &Icmpv4Hdr = unsafe { ref_at(&ctx, offset)? };
-        let data = icmp.data()?;
         match icmp.type_ {
             0 | 8 => {
                 // Echo Reply / Echo Request: track by identifier, like a pseudo-port.

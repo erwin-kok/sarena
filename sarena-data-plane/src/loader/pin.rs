@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    endpoint::EndpointKind,
+    loader::endpoint::EndpointKind,
     maps::{EndpointMap, GlobalMap},
 };
 

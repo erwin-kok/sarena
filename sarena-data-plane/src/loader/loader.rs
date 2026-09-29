@@ -4,11 +4,13 @@ use std::{
 };
 
 use crate::{
-    backend::BpfBackend,
-    endpoint::EndpointKind,
     error::{HookFailure, LoaderError, Res},
-    manifest::{GLOBAL_MAPS, HookSpec},
-    pin::PinRoot,
+    loader::{
+        backend::BpfBackend,
+        endpoint::EndpointKind,
+        manifest::{GLOBAL_MAPS, HookSpec},
+        pin::PinRoot,
+    },
 };
 
 pub struct Loader<B: BpfBackend> {
@@ -171,7 +173,7 @@ fn match_pin(kind: EndpointKind, filename: &str) -> Option<&'static HookSpec> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mock_backend::{Call, MockBackend};
+    use crate::loader::mock_backend::{Call, MockBackend};
 
     fn link(n: u16) -> String {
         format!("veth{n}")

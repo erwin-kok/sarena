@@ -4,8 +4,8 @@ use aya::maps::{Array, Map, MapData, MapError};
 
 use crate::{
     error::{LoaderError, Res},
+    loader::PinRoot,
     maps::EndpointMap,
-    pin::PinRoot,
 };
 
 /// Per-endpoint tail-call / scratch array (`Array<u32>`).

@@ -12,14 +12,22 @@ workspace = true
 
 [features]
 test-util = []
+default = []
 
 [dependencies]
-sarena-infra = { path = "../sarena-infra" }
+sarena-infra = { path = "../sarena-infra", features = ["test-util"] }
+sarena-ebpf-objects = { path = "../sarena-ebpf-objects" }
+sarena-shared = { path = "../sarena-shared" }
 
 async-trait = { workspace = true }
+aya = { workspace = true }
+aya-log = { workspace = true }
 ipnet = { workspace = true }
+log = { workspace = true }
 network-types = { workspace = true, default-features = false }
+nix = { workspace = true, features = ["poll"] }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
+tracing = { workspace = true }
 uuid = { workspace = true }

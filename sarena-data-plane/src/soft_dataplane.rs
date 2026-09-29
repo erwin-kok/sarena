@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::{
     collections::{HashMap, HashSet},
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -13,7 +15,7 @@ use tokio::{
     sync::{Mutex, RwLock, mpsc},
 };
 
-use crate::{
+use crate::models::{
     ConnectionState, ConntrackEntry, ConntrackView, Dataplane, Endpoint, EndpointId, EndpointTable,
     FlowTuple, Identity, IdentityId, IdentityTable, Interface, InterfaceId, InterfaceTable, Nat,
     NextHop, Node, NodeId, NodeTable, Policy, PolicyId, PolicyTable, Route, RouteTable, Service,
@@ -740,9 +742,11 @@ mod tests {
     use sarena_infra::MacAddress;
 
     use crate::{
-        Endpoint, EndpointId, EndpointLocation, EndpointTable, IdentityId, Interface, InterfaceId,
-        InterfaceKind, InterfaceTable, Nat, NextHop, NodeId, Route, RouteTable, Service,
-        ServiceBackend, ServiceFrontend, ServiceTable,
+        models::{
+            Endpoint, EndpointId, EndpointLocation, EndpointTable, IdentityId, Interface,
+            InterfaceId, InterfaceKind, InterfaceTable, Nat, NextHop, NodeId, Route, RouteTable,
+            Service, ServiceBackend, ServiceFrontend, ServiceTable,
+        },
         soft_dataplane::{ChannelInterface, SoftDataplane, parse_ipv4},
     };
 

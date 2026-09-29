@@ -2902,8 +2902,8 @@ name = "sarena-basic-test"
 version = "0.1.0"
 dependencies = [
  "ipnet",
+ "sarena-data-plane",
  "sarena-infra",
- "sarena-loader",
  "sarena-shared",
  "sarena-utils",
  "tokio",
@@ -2922,7 +2922,7 @@ dependencies = [
  "libc",
  "sarena-api-client",
  "sarena-api-types-v1",
- "sarena-loader",
+ "sarena-data-plane",
  "sarena-shared",
  "sarena-utils",
  "serde",
@@ -2959,8 +2959,8 @@ dependencies = [
  "rscni-plugin",
  "sarena-api-types-v1",
  "sarena-cni-plugin",
+ "sarena-data-plane",
  "sarena-infra",
- "sarena-loader",
  "sarena-shared",
  "sarena-utils",
  "serde",
@@ -2985,8 +2985,8 @@ name = "sarena-control-plane"
 version = "0.1.0"
 dependencies = [
  "ipnet",
+ "sarena-data-plane",
  "sarena-infra",
- "sarena-loader",
  "sarena-services-daemon",
  "sarena-services-endpoint",
  "sarena-services-ipam",
@@ -3018,12 +3018,19 @@ name = "sarena-data-plane"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "aya",
+ "aya-log",
  "ipnet",
+ "log",
  "network-types",
+ "nix 0.31.3",
+ "sarena-ebpf-objects",
  "sarena-infra",
+ "sarena-shared",
  "serde",
  "thiserror 2.0.21",
  "tokio",
+ "tracing",
  "uuid",
 ]
 
@@ -3130,22 +3137,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sarena-loader"
-version = "0.1.0"
-dependencies = [
- "aya",
- "aya-log",
- "log",
- "nix 0.31.3",
- "sarena-ebpf-objects",
- "sarena-infra",
- "sarena-shared",
- "thiserror 2.0.21",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "sarena-services-daemon"
 version = "0.1.0"
 dependencies = [
@@ -3161,8 +3152,8 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "sarena-api-types-v1",
+ "sarena-data-plane",
  "sarena-infra",
- "sarena-loader",
  "sarena-shared",
  "thiserror 2.0.21",
  "tracing",

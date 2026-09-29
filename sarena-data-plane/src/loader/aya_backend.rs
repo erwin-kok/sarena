@@ -22,9 +22,8 @@ use sarena_infra::{
 };
 
 use crate::{
-    backend::BpfBackend,
     error::{LoaderError, Res},
-    manifest::Hook,
+    loader::{backend::BpfBackend, manifest::Hook},
 };
 
 const LOG_DRAIN_POLL_TIMEOUT_MS: u16 = 250;

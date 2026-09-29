@@ -1,5 +1,5 @@
+use sarena_data_plane::LoaderError;
 use sarena_infra::InfraError;
-use sarena_loader::LoaderError;
 use thiserror::Error;
 
 mod config;

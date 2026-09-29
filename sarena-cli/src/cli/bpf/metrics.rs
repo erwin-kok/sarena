@@ -2,7 +2,7 @@ use std::io::{self, Write as _};
 
 use anyhow::{Context as _, Result};
 use clap::{Args, Subcommand};
-use sarena_loader::{PinRoot, maps::MetricsMap};
+use sarena_data_plane::{PinRoot, maps::MetricsMap};
 use sarena_shared::write_obs_point;
 use serde::Serialize;
 use tabwriter::TabWriter;

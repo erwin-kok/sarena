@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{error::Res, manifest::Hook};
+use crate::{error::Res, loader::manifest::Hook};
 
 pub trait BpfBackend {
     type Instance;

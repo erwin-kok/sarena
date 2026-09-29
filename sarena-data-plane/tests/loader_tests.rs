@@ -4,10 +4,10 @@ use std::{
 };
 
 use aya::programs::TcAttachType;
+use sarena_data_plane::loader::{AyaBackend, EndpointKind, Loader, LoaderHandle};
 use sarena_infra::{
     Link, NetlinkNetworkProvisioner, Netns, NetworkProvisioner, TcxAttach, VethSpec, test_support,
 };
-use sarena_loader::{AyaBackend, EndpointKind, Loader, LoaderHandle};
 
 const PIN_ROOT: &str = "/sys/fs/bpf/test";
 

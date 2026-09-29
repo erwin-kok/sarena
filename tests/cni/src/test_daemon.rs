@@ -13,11 +13,11 @@ use axum::{
     routing::{delete, get, put},
 };
 use sarena_api_types_v1::{daemon, endpoint, ipam};
+use sarena_data_plane::{
+    AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, LxcMap, PinRoot,
+};
 use sarena_infra::{
     InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, NetworkProvisioner,
-};
-use sarena_loader::{
-    AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, LxcMap, PinRoot,
 };
 use sarena_shared::{EndpointConfig, EndpointInfo};
 use serde::Deserialize;

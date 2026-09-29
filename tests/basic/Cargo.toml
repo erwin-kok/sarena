@@ -11,11 +11,11 @@ version.workspace = true
 workspace = true
 
 [features]
-test = []
+test-util = []
 
 [dependencies]
-sarena-infra = { path = "../../sarena-infra", features = ["test"] }
-sarena-loader = { path = "../../sarena-loader" }
+sarena-data-plane = { path = "../../sarena-data-plane" }
+sarena-infra = { path = "../../sarena-infra", features = ["test-util"] }
 sarena-shared = { path = "../../sarena-shared" }
 sarena-utils = { path = "../../sarena-utils" }
 

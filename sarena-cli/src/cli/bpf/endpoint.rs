@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use clap::{Args, Subcommand};
-use sarena_loader::{LxcMap, PinRoot};
+use sarena_data_plane::{PinRoot, maps::LxcMap};
 use tabwriter::TabWriter;
 use tracing::info;
 

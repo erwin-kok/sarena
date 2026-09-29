@@ -5,8 +5,8 @@ use sarena_shared::EndpointConfig;
 
 use crate::{
     error::{LoaderError, Res},
+    loader::PinRoot,
     maps::EndpointMap,
-    pin::PinRoot,
 };
 
 /// Per-endpoint singleton config array (`Array<EndpointConfig>`, index 0).

@@ -5,8 +5,8 @@ use sarena_shared::{EndpointInfo, Ipv4Key, Ipv4KeyExt as _};
 
 use crate::{
     error::{LoaderError, Res},
+    loader::PinRoot,
     maps::GlobalMap,
-    pin::PinRoot,
 };
 
 /// Global endpoint lookup table: `Ipv4Key -> EndpointInfo`.

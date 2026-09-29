@@ -1,5 +1,7 @@
 use async_trait::async_trait;
-use sarena_api_types_v1::daemon::DaemonConfigurationResponse;
+use sarena_api_types_v1::daemon::{
+    DaemonConfigurationResponse, DaemonDebugInfoResponse, SarenaVersion,
+};
 
 use crate::{DaemonService, Res};
 
@@ -17,5 +19,17 @@ impl DaemonService for MockDaemonService {
 
     async fn health(&self) -> Res<()> {
         Ok(())
+    }
+
+    async fn debuginfo(&self) -> Res<DaemonDebugInfoResponse> {
+        Ok(DaemonDebugInfoResponse {
+            version: SarenaVersion {
+                version: "1.0".to_string(),
+                git_hash: "1.0".to_string(),
+                build_date: "29/11/2026".to_string(),
+                os: "Linux".to_string(),
+                arch: "AMD64".to_string(),
+            },
+        })
     }
 }

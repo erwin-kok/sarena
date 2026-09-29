@@ -1,10 +1,12 @@
 use std::{net::IpAddr, sync::Arc};
 
+use sarena_data_plane::{
+    AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, PinRoot,
+};
 use sarena_infra::{
     InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, NetworkProvisioner as _,
     route::Route,
 };
-use sarena_loader::{AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, PinRoot};
 use sarena_shared::EndpointConfig;
 
 use crate::{

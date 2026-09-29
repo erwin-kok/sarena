@@ -39,7 +39,7 @@ clippy: build-ebpf
 # Run all tests except the eBPF test runner (requires root)
 test: build-ebpf
     cargo test --workspace \
-        --features test \
+        --features test-util \
         --exclude sarena-test-runner \
         --exclude sarena-ebpf-programs \
         --exclude sarena-ebpf-test-programs \
@@ -123,8 +123,8 @@ sarena-cli *ARGS: build-ebpf
 # Run all integration tests in the sarena-infra package (requires root)
 infra-test: (_root-test "sarena-infra")
 
-# Run all integration tests in the sarena-loader package (requires root)
-loader-test: (_root-test "sarena-loader")
+# Run all integration tests in the sarena-data-plane package (requires root)
+data-plane-test: (_root-test "sarena-data-plane")
 
 ebpf-test: build-ebpf
     #!/usr/bin/env bash
@@ -140,13 +140,13 @@ basic-test: (_root-test "sarena-basic-test")
 cni-test: (_root-test "sarena-cni-test")
 
 # Full workflow: build, test, and run all root-only test suites incl. the eBPF tests
-all: build test infra-test loader-test basic-test cni-test ebpf-test
+all: build test infra-test data-plane-test basic-test cni-test ebpf-test
 
 # Run all `#[ignore]`d integration tests (requiring root/CAP_NET_ADMIN) for `package`
 _root-test package: build-ebpf netns-clean
     #!/usr/bin/env bash
     set -euo pipefail
-    exes=$(cargo test -p {{package}} --features test --tests --no-run --message-format=json \
+    exes=$(cargo test -p {{package}} --features test-util --tests --no-run --message-format=json \
         | jq -r 'select(.profile.test == true) | .executable | select(. != null)')
     for exe in $exes; do
         just netns-clean

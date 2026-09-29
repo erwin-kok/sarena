@@ -2,7 +2,7 @@ use std::{collections::HashMap, net::IpAddr, sync::Arc};
 
 use ipnet::IpNet;
 
-use crate::{Dataplane, Endpoint, EndpointId, Node, NodeId, Route, Service};
+use crate::models::{Dataplane, Endpoint, EndpointId, Node, NodeId, Route, Service};
 
 #[derive(Clone, Default)]
 pub struct DesiredState {
