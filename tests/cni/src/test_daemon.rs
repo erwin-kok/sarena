@@ -33,7 +33,7 @@ static POD_IPS: LazyLock<HashMap<&'static str, Ipv4Addr>> = LazyLock::new(|| {
 
 const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(10, 0, 0, 5);
 
-const PIN_ROOT: &str = "/sys/fs/bpf/sarena";
+const PIN_ROOT: &str = "/sys/fs/bpf/sarena-test-daemon";
 
 #[derive(Debug)]
 pub struct PodSpec<'a> {

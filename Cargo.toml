@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "sarena-cli",
-    "sarena-control-plane",
     "sarena-data-plane",
     "sarena-ebpf-objects",
     "sarena-plugins/cni",
@@ -44,7 +43,6 @@ members = [
 
 default-members = [
     "sarena-cli",
-    "sarena-control-plane",
     "sarena-data-plane",
     "sarena-ebpf-objects",
     "sarena-plugins/cni",

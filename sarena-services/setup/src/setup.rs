@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use sarena_control_plane::{ControlPlaneConfig, PIN_ROOT};
-use sarena_data_plane::LoaderHandle;
+use sarena_data_plane::{ControlPlaneConfig, LoaderHandle, PIN_ROOT};
 use sarena_infra::NetlinkNetworkProvisioner;
 
 use crate::state::AppState;

@@ -2968,24 +2968,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "sarena-control-plane"
-version = "0.1.0"
-dependencies = [
- "ipnet",
- "sarena-data-plane",
- "sarena-infra",
- "sarena-shared",
- "thiserror 2.0.21",
-]
-
-[[package]]
 name = "sarena-daemon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "ipnet",
  "sarena-api-server",
- "sarena-control-plane",
+ "sarena-data-plane",
  "sarena-kubernetes",
  "sarena-services-setup",
  "sarena-utils",
@@ -3156,7 +3145,6 @@ dependencies = [
 name = "sarena-services-setup"
 version = "0.1.0"
 dependencies = [
- "sarena-control-plane",
  "sarena-data-plane",
  "sarena-infra",
  "sarena-services-daemon",

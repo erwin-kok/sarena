@@ -16,7 +16,7 @@ use sarena_shared::{EndpointConfig, EndpointInfo};
 use sarena_utils::{TracingConfig, logging};
 use tracing::info;
 
-const PIN_ROOT: &str = "/sys/fs/bpf/sarena";
+const PIN_ROOT: &str = "/sys/fs/bpf/sarena-two-peer-echo";
 const IPV4_DEFAULT_ROUTE: IpNet = IpNet::V4(Ipv4Net::new_assert(Ipv4Addr::UNSPECIFIED, 0));
 
 #[tokio::test(flavor = "current_thread")]

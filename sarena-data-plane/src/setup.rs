@@ -1,8 +1,5 @@
 use std::net::IpAddr;
 
-use sarena_data_plane::{
-    AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, PinRoot,
-};
 use sarena_infra::{
     InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, NetworkProvisioner as _,
     route::Route,
@@ -10,7 +7,7 @@ use sarena_infra::{
 use sarena_shared::EndpointConfig;
 
 use crate::{
-    Res,
+    AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, PinRoot, Res1,
     config::ControlPlaneConfig,
     netlink::{SARENA_HOST, setup_host_device},
 };
@@ -21,10 +18,11 @@ use crate::{
 /// hardcoding it -- keeps that crate from needing to know a specific
 /// bpffs layout.
 pub const PIN_ROOT: &str = "/sys/fs/bpf/sarena";
+pub const DEFAULT_PIN_ROOT: &str = "/sys/fs/bpf/sarena";
 
 pub async fn start_control_plane(
     config: &ControlPlaneConfig,
-) -> Res<(LoaderHandle, std::thread::JoinHandle<()>)> {
+) -> Res1<(LoaderHandle, std::thread::JoinHandle<()>)> {
     std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
 
     let backend = AyaBackend::new(format!("{PIN_ROOT}/globals"));

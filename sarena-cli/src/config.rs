@@ -1,12 +1,11 @@
 use std::{env::home_dir, path::PathBuf};
 
 use config::{Config as ConfigLoader, Environment, File};
+use sarena_data_plane::DEFAULT_PIN_ROOT;
 use sarena_utils::LogFormat;
 use serde::Deserialize;
 
 use crate::cli::Cli;
-
-const DEFAULT_PIN_ROOT: &str = "/sys/fs/bpf/sarena";
 
 /// Effective CLI configuration, merged from (lowest to highest precedence):
 /// the config file (`--config <path>`, or `~/.sarena` when it exists),
