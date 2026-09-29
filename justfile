@@ -126,21 +126,18 @@ infra-test: (_root-test "sarena-infra")
 # Run all integration tests in the sarena-data-plane package (requires root)
 data-plane-test: (_root-test "sarena-data-plane")
 
-ebpf-test: build-ebpf
+ebpf-test: build-ebpf 
     #!/usr/bin/env bash
     set -euo pipefail
     exe=$(cargo test --no-run -p sarena-test-runner --message-format=json \
         | jq -r 'select(.profile.test == true) | .executable')
-    sudo "$exe" --no-capture
-
-# Run the sarena-basic-test integration test (requires root)
-basic-test: (_root-test "sarena-basic-test")
+    sudo "$exe" --ignored --no-capture
 
 # Run the sarena-cni-test integration test (requires root)
 cni-test: (_root-test "sarena-cni-test")
 
 # Full workflow: build, test, and run all root-only test suites incl. the eBPF tests
-all: build test infra-test data-plane-test basic-test cni-test ebpf-test
+all: build test infra-test data-plane-test cni-test ebpf-test
 
 # Run all `#[ignore]`d integration tests (requiring root/CAP_NET_ADMIN) for `package`
 _root-test package: build-ebpf netns-clean

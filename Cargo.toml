@@ -35,7 +35,6 @@ members = [
     "sarena-ebpf-test-programs",
 
     # Integration tests
-    "tests/basic",
     "tests/cni",
 
     # Build tooling

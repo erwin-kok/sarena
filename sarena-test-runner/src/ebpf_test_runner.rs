@@ -34,6 +34,7 @@ struct ProgramSet {
 }
 
 #[test]
+#[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 fn ebpf_test_runner() -> Res<()> {
     println!("\n");
     println!("\x1b[36m===== RUNNING eBPF TESTS =====\x1b[0m");

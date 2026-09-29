@@ -18,6 +18,7 @@ default = []
 sarena-infra = { path = "../sarena-infra", features = ["test-util"] }
 sarena-ebpf-objects = { path = "../sarena-ebpf-objects" }
 sarena-shared = { path = "../sarena-shared" }
+sarena-utils = { path = "../sarena-utils" }
 
 async-trait = { workspace = true }
 aya = { workspace = true }

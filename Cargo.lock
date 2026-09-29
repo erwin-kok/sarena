@@ -2898,19 +2898,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sarena-basic-test"
-version = "0.1.0"
-dependencies = [
- "ipnet",
- "sarena-data-plane",
- "sarena-infra",
- "sarena-shared",
- "sarena-utils",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "sarena-cli"
 version = "0.1.0"
 dependencies = [
@@ -3027,6 +3014,7 @@ dependencies = [
  "sarena-ebpf-objects",
  "sarena-infra",
  "sarena-shared",
+ "sarena-utils",
  "serde",
  "thiserror 2.0.21",
  "tokio",
