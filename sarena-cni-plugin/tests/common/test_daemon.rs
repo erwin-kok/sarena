@@ -35,6 +35,7 @@ const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(10, 0, 0, 5);
 
 const PIN_ROOT: &str = "/sys/fs/bpf/sarena-test-daemon";
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct PodSpec<'a> {
     pub name: &'a str, // human label for logging only
@@ -47,6 +48,7 @@ pub struct PodSpec<'a> {
     pub k8s_uid: &'a str,
 }
 
+#[allow(dead_code)]
 impl<'a> PodSpec<'a> {
     pub fn cni_args_string(&self) -> String {
         format!(

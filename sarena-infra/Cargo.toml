@@ -11,6 +11,9 @@ version.workspace = true
 [lints]
 workspace = true
 
+[features]
+test-util = []
+
 [dependencies]
 aya = { workspace = true }
 futures = { workspace = true }
@@ -29,6 +32,3 @@ netlink-packet-route = "0.33"
 
 [dev-dependencies]
 sarena-ebpf-objects = { path = "../sarena-ebpf-objects" }
-
-[features]
-test-util = []
