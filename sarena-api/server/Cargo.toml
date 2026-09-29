@@ -12,7 +12,6 @@ workspace = true
 
 [dependencies]
 sarena-api-types-v1 = { path = "../../sarena-api/types/v1" }
-sarena-control-plane = { path = "../../sarena-control-plane" }
 sarena-services-daemon = { path = "../../sarena-services/daemon" }
 sarena-services-endpoint = { path = "../../sarena-services/endpoint" }
 sarena-services-ipam = { path = "../../sarena-services/ipam" }

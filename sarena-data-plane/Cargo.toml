@@ -27,8 +27,6 @@ ipnet = { workspace = true }
 log = { workspace = true }
 network-types = { workspace = true, default-features = false }
 nix = { workspace = true, features = ["poll"] }
-serde = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
 tracing = { workspace = true }
-uuid = { workspace = true }

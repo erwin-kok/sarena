@@ -17,11 +17,3 @@ sarena-infra = { path = "../../sarena-infra" }
 sarena-services-daemon = { path = "../../sarena-services/daemon" }
 sarena-services-endpoint = { path = "../../sarena-services/endpoint" }
 sarena-services-ipam = { path = "../../sarena-services/ipam" }
-sarena-shared = { path = "../../sarena-shared" }
-sarena-utils = { path = "../../sarena-utils" }
-
-anyhow = { workspace = true }
-ipnet = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal", "time"] }
-tokio-util = { workspace = true }
-tracing = { workspace = true }

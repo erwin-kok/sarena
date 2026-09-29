@@ -2877,7 +2877,6 @@ dependencies = [
  "hyper-util",
  "prometheus",
  "sarena-api-types-v1",
- "sarena-control-plane",
  "sarena-services-daemon",
  "sarena-services-endpoint",
  "sarena-services-ipam",
@@ -2975,15 +2974,8 @@ dependencies = [
  "ipnet",
  "sarena-data-plane",
  "sarena-infra",
- "sarena-services-daemon",
- "sarena-services-endpoint",
- "sarena-services-ipam",
  "sarena-shared",
- "serde",
  "thiserror 2.0.21",
- "tokio",
- "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -2994,14 +2986,8 @@ dependencies = [
  "ipnet",
  "sarena-api-server",
  "sarena-control-plane",
- "sarena-data-plane",
- "sarena-infra",
  "sarena-kubernetes",
- "sarena-services-daemon",
- "sarena-services-endpoint",
- "sarena-services-ipam",
  "sarena-services-setup",
- "sarena-shared",
  "sarena-utils",
  "tokio",
  "tokio-util",
@@ -3023,11 +3009,9 @@ dependencies = [
  "sarena-infra",
  "sarena-shared",
  "sarena-utils",
- "serde",
  "thiserror 2.0.21",
  "tokio",
  "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -3172,19 +3156,12 @@ dependencies = [
 name = "sarena-services-setup"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "ipnet",
  "sarena-control-plane",
  "sarena-data-plane",
  "sarena-infra",
  "sarena-services-daemon",
  "sarena-services-endpoint",
  "sarena-services-ipam",
- "sarena-shared",
- "sarena-utils",
- "tokio",
- "tokio-util",
- "tracing",
 ]
 
 [[package]]
