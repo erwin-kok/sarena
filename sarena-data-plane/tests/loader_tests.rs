@@ -4,7 +4,7 @@ use std::{
 };
 
 use aya::programs::TcAttachType;
-use sarena_data_plane::loader::{AyaBackend, EndpointKind, Loader, LoaderHandle};
+use sarena_data_plane::{AyaBackend, EndpointKind, Loader, LoaderHandle};
 use sarena_infra::{
     Link, NetlinkNetworkProvisioner, Netns, NetworkProvisioner, TcxAttach, VethSpec, test_support,
 };

@@ -1,7 +1,7 @@
 use std::{env::home_dir, path::PathBuf};
 
 use config::{Config as ConfigLoader, Environment, File};
-use sarena_data_plane::DEFAULT_PIN_ROOT;
+use sarena_data_plane::PIN_ROOT;
 use sarena_utils::LogFormat;
 use serde::Deserialize;
 
@@ -35,7 +35,7 @@ pub struct Config {
 }
 
 fn default_pin_root() -> PathBuf {
-    PathBuf::from(DEFAULT_PIN_ROOT)
+    PathBuf::from(PIN_ROOT)
 }
 
 pub fn load_config(cli: &Cli) -> anyhow::Result<Config> {

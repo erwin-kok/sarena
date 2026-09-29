@@ -4,10 +4,7 @@ use async_trait::async_trait;
 use sarena_api_types_v1::endpoint::{
     EndpointCreateRequest, EndpointCreateResponse, EndpointHealthResponse, EndpointHealthStatus,
 };
-use sarena_data_plane::{
-    EndpointConfigMap, LxcMap,
-    loader::{EndpointKind, LoaderHandle, PinRoot},
-};
+use sarena_data_plane::{EndpointConfigMap, EndpointKind, LoaderHandle, LxcMap, PinRoot};
 use sarena_infra::{
     InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, NetworkProvisioner as _,
     netlink_link::NetlinkLink,
