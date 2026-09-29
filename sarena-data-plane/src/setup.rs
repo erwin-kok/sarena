@@ -1,4 +1,4 @@
-use std::{net::IpAddr, sync::Arc};
+use std::{net::IpAddr, sync::Arc, thread::JoinHandle};
 
 use async_trait::async_trait;
 use sarena_infra::{
@@ -45,14 +45,16 @@ impl DefaultDataPlane {
 
 pub struct DefaultDataPlaneInner {
     loader_handle: LoaderHandle,
-    loader_thread: std::thread::JoinHandle<()>,
+    loader_thread: JoinHandle<()>,
 }
 
 async fn start_control_plane(config: &DataPlaneConfig) -> Res<DefaultDataPlaneInner> {
-    std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
+    let pin_root = PinRoot::new(PIN_ROOT);
 
-    let backend = AyaBackend::new(format!("{PIN_ROOT}/globals"));
-    let loader: Loader<AyaBackend> = Loader::new(backend, PIN_ROOT);
+    std::fs::create_dir_all(pin_root.globals_dir()).expect("creating globals dir");
+
+    let backend = AyaBackend::new(pin_root.clone());
+    let loader: Loader<AyaBackend> = Loader::new(backend, pin_root.clone());
 
     let (loader_handle, loader_thread) = LoaderHandle::spawn(loader, 16);
 

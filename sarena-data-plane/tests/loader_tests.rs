@@ -4,7 +4,7 @@ use std::{
 };
 
 use aya::programs::TcAttachType;
-use sarena_data_plane::{AyaBackend, EndpointKind, Loader, LoaderHandle};
+use sarena_data_plane::{AyaBackend, EndpointKind, Loader, LoaderHandle, PinRoot};
 use sarena_infra::{
     Link, NetlinkNetworkProvisioner, Netns, NetworkProvisioner, TcxAttach, VethSpec, test_support,
 };
@@ -20,10 +20,11 @@ async fn load_multiple_links() {
 
     let _ = fs::remove_dir_all(TEST_PIN_ROOT);
 
-    std::fs::create_dir_all(format!("{TEST_PIN_ROOT}/globals")).expect("creating globals dir");
+    let pin_root = PinRoot::new(TEST_PIN_ROOT);
+    std::fs::create_dir_all(pin_root.globals_dir()).expect("creating globals dir");
 
-    let backend = AyaBackend::new(format!("{TEST_PIN_ROOT}/globals"));
-    let loader = Loader::new(backend, TEST_PIN_ROOT);
+    let backend = AyaBackend::new(pin_root.clone());
+    let loader = Loader::new(backend, pin_root.clone());
     let (loader_handle, _loader_thread) = LoaderHandle::spawn(loader, 16);
 
     test_support::with_temp_netns("dpi-p1-", |peer1_ns| async move {

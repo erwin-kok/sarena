@@ -56,10 +56,6 @@ fn ebpf_test_runner() -> Res<()> {
     Ok(())
 }
 
-/// Every production classifier that the test programs may tail-call into
-/// via `entry_call_map`, and the slot each one belongs in. Keep this in
-/// sync with `sarena-ebpf-programs/src/main.rs`'s `#[classifier]` fns and
-/// `sarena-shared-test/src/constants.rs`'s slot constants.
 const ENTRY_CALL_PROGRAMS: &[(u32, &str)] = &[
     (FROM_CONTAINER, "from_container"),
     (TO_CONTAINER, "to_container"),
@@ -73,13 +69,6 @@ const ENTRY_CALL_PROGRAMS: &[(u32, &str)] = &[
     (TO_WIREGUARD, "to_wireguard"),
 ];
 
-/// Loads every production classifier `prod_bpf` provides and installs each
-/// one's fd into `test_bpf`'s `entry_call_map` at its slot, so the test
-/// programs' `bpf_tail_call`s reach the real production code under test.
-///
-/// Returns the `ProgramArray` -- the caller must keep it alive at least as
-/// long as any program that still needs to be loaded with a tail call into
-/// this map (see the comment at the call site).
 fn fill_entry_call_map(prod_bpf: &mut Ebpf, test_bpf: &mut Ebpf) -> Res<()> {
     let map_name = "entry_call_map";
     let map = test_bpf
@@ -387,9 +376,6 @@ fn test_error(ret: u32) -> bool {
     return ret == TestStatus::Fail as u32 || ret == TestStatus::FrameworkError as u32;
 }
 
-/// Removes any pins left over from a previous run and recreates the
-/// (empty) `prod`/`test` subdirectories `EbpfLoader::default_map_pin_directory`
-/// expects to already exist.
 fn reset_pin_dir(dir: &str) -> Res<()> {
     match std::fs::remove_dir_all(dir) {
         Ok(()) => {}

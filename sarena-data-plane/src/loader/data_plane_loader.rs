@@ -15,15 +15,15 @@ use crate::{
 
 pub struct Loader<B: BpfBackend> {
     backend: B,
-    pins: PinRoot,
+    pin_root: PinRoot,
     globals_holder: Option<B::Instance>,
 }
 
 impl<B: BpfBackend> Loader<B> {
-    pub fn new(backend: B, pin_root: impl Into<PathBuf>) -> Self {
+    pub fn new(backend: B, pin_root: PinRoot) -> Self {
         Self {
             backend,
-            pins: PinRoot::new(pin_root),
+            pin_root,
             globals_holder: None,
         }
     }
@@ -41,13 +41,13 @@ impl<B: BpfBackend> Loader<B> {
         for &map in kind.per_endpoint_map_names() {
             maps.insert(
                 map.wire_name().to_string(),
-                self.pins.per_endpoint_map_dir(map, link),
+                self.pin_root.per_endpoint_map_dir(map, link),
             );
         }
 
         let mut instance = self.backend.load_instance(link, &maps)?;
         let mut failures = Vec::new();
-        let link_dir = self.pins.endpoint_link_dir(kind, link);
+        let link_dir = self.pin_root.endpoint_link_dir(kind, link);
         for hook_spec in kind.hooks() {
             match self.backend.ensure_attached(
                 &mut instance,
@@ -84,10 +84,10 @@ impl<B: BpfBackend> Loader<B> {
         self.backend.stop_logging(link);
 
         self.backend
-            .remove_pin_dir(&self.pins.endpoint_link_dir(kind, link))?;
+            .remove_pin_dir(&self.pin_root.endpoint_link_dir(kind, link))?;
 
         for &map in kind.per_endpoint_map_names() {
-            let path = self.pins.per_endpoint_map_dir(map, link);
+            let path = self.pin_root.per_endpoint_map_dir(map, link);
             self.backend.unpin_map(&path)?;
         }
 
@@ -96,7 +96,7 @@ impl<B: BpfBackend> Loader<B> {
 
     pub fn list_active_endpoints(&self) -> Res<Vec<(EndpointKind, String)>> {
         let mut matched: HashMap<(EndpointKind, String), HashSet<&'static str>> = HashMap::new();
-        for rel in self.backend.list_pins(&self.pins.links_dir())? {
+        for rel in self.backend.list_pins(&self.pin_root.links_dir())? {
             let Some(parent) = rel.parent() else { continue };
             let Some((kind, link)) = PinRoot::parse_pin_subpath(parent) else {
                 continue;
@@ -149,8 +149,8 @@ impl<B: BpfBackend> Loader<B> {
 
     pub fn teardown_all(&mut self) -> Res<()> {
         self.backend.stop_all_logging();
-        self.backend.remove_pin_dir(&self.pins.links_dir())?;
-        self.backend.remove_pin_dir(&self.pins.globals_dir())?;
+        self.backend.remove_pin_dir(&self.pin_root.links_dir())?;
+        self.backend.remove_pin_dir(&self.pin_root.globals_dir())?;
         // The pins are gone; drop the instance that was holding the maps.
         self.globals_holder = None;
         Ok(())
@@ -159,7 +159,7 @@ impl<B: BpfBackend> Loader<B> {
     fn global_map_pins(&self) -> HashMap<String, PathBuf> {
         GLOBAL_MAPS
             .iter()
-            .map(|&m| (m.wire_name().to_string(), self.pins.global_map_dir(m)))
+            .map(|&m| (m.wire_name().to_string(), self.pin_root.global_map_dir(m)))
             .collect()
     }
 }
@@ -181,7 +181,8 @@ mod tests {
 
     #[test]
     fn add_then_remove_happy_path() {
-        let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let mut loader = Loader::new(MockBackend::new(), pin_root);
         let l = link(1);
 
         loader.add_endpoint(EndpointKind::Container, &l).unwrap();
@@ -207,7 +208,8 @@ mod tests {
 
     #[test]
     fn each_endpoint_gets_its_own_resolve_load_and_attach_calls() {
-        let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader
             .add_endpoint(EndpointKind::Container, &link(1))
             .unwrap();
@@ -259,7 +261,8 @@ mod tests {
 
     #[test]
     fn per_endpoint_map_path_differs_across_endpoints() {
-        let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader
             .add_endpoint(EndpointKind::Container, &link(1))
             .unwrap();
@@ -294,7 +297,8 @@ mod tests {
 
     #[test]
     fn per_endpoint_maps_pin_with_link_suffix_globals_with_bare_names() {
-        let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let mut loader = Loader::new(MockBackend::new(), pin_root);
         let l = link(1);
         loader.add_endpoint(EndpointKind::Container, &l).unwrap();
 
@@ -323,7 +327,8 @@ mod tests {
 
     #[test]
     fn load_global_maps_pins_every_global_map_once_up_front() {
-        let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader.load_global_maps().unwrap();
 
         let pinned: Vec<String> = loader
@@ -347,7 +352,8 @@ mod tests {
 
     #[test]
     fn add_endpoint_fails_hard_without_attempting_hooks_if_load_instance_fails() {
-        let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader.backend.fail_at = Some((loader.backend.next_call_index() + 1, "bad object".into()));
 
         let result = loader.add_endpoint(EndpointKind::Container, &link(1));
@@ -372,7 +378,8 @@ mod tests {
 
     #[test]
     fn add_endpoint_fails_hard_if_link_resolution_fails() {
-        let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader.backend.fail_at = Some((loader.backend.next_call_index(), "no such link".into()));
 
         let result = loader.add_endpoint(EndpointKind::Container, &link(1));
@@ -395,7 +402,8 @@ mod tests {
     #[test]
     fn add_endpoint_retries_only_the_hook_that_previously_failed() {
         let l = link(1);
-        let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let mut loader = Loader::new(MockBackend::new(), pin_root);
 
         let fail_index = loader.backend.next_call_index() + 2;
         loader.backend.fail_at = Some((fail_index, "simulated crash during ingress attach".into()));
@@ -416,7 +424,8 @@ mod tests {
 
     #[test]
     fn reconcile_removes_endpoints_missing_from_desired_state() {
-        let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader
             .add_endpoint(EndpointKind::Container, &link(1))
             .unwrap();
@@ -436,7 +445,8 @@ mod tests {
 
     #[test]
     fn reconcile_repairs_half_attached_endpoints_found_on_disk() {
-        let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader
             .add_endpoint(EndpointKind::Container, &link(1))
             .unwrap();
@@ -482,7 +492,8 @@ mod tests {
 
     #[test]
     fn remove_endpoint_cleans_up_only_its_own_per_endpoint_map() {
-        let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader
             .add_endpoint(EndpointKind::Container, &link(1))
             .unwrap();
@@ -496,7 +507,7 @@ mod tests {
 
         let remaining_map_pins: Vec<_> = loader
             .backend
-            .list_pins(&loader.pins.globals_dir())
+            .list_pins(&loader.pin_root.globals_dir())
             .unwrap();
         let remaining: HashSet<_> = remaining_map_pins
             .iter()
@@ -519,7 +530,8 @@ mod tests {
 
     #[test]
     fn teardown_all_removes_links_and_all_maps() {
-        let mut loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader
             .add_endpoint(EndpointKind::Container, &link(1))
             .unwrap();
@@ -530,14 +542,14 @@ mod tests {
         assert!(
             loader
                 .backend
-                .list_pins(&loader.pins.links_dir())
+                .list_pins(&loader.pin_root.links_dir())
                 .unwrap()
                 .is_empty()
         );
         assert!(
             loader
                 .backend
-                .list_pins(&loader.pins.globals_dir())
+                .list_pins(&loader.pin_root.globals_dir())
                 .unwrap()
                 .is_empty()
         );

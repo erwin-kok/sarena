@@ -78,15 +78,6 @@ impl LoaderHandle {
         (Self { tx }, thread)
     }
 
-    /// Tears down all loaded eBPF state and waits for the actor thread to
-    /// exit. `self` is the last clone the caller is holding onto for this
-    /// purpose; once it's dropped here the channel closes, which is what
-    /// lets the actor thread's `blocking_recv` loop end.
-    ///
-    /// Any other clones of this handle (e.g. ones handed to request
-    /// handlers) must already have been dropped before calling this, or
-    /// the thread will never see the channel close and `thread.join()`
-    /// will hang.
     pub async fn shutdown(self, thread: JoinHandle<()>) -> Res<()> {
         self.teardown_all().await?;
         drop(self);
@@ -171,11 +162,12 @@ fn dispatch<B: BpfBackend>(loader: &mut Loader<B>, cmd: Command) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::loader::mock_backend::MockBackend;
+    use crate::{PinRoot, loader::mock_backend::MockBackend};
 
     #[tokio::test]
     async fn actor_serializes_calls_and_reports_state_after_restart() {
-        let loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let loader = Loader::new(MockBackend::new(), pin_root);
         let (handle, _thread) = LoaderHandle::spawn(loader, 16);
 
         let kind = EndpointKind::Container;
@@ -191,7 +183,8 @@ mod tests {
 
     #[tokio::test]
     async fn dropping_a_cloned_handle_does_not_affect_other_handles() {
-        let loader = Loader::new(MockBackend::new(), "/sys/fs/bpf/test");
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let loader = Loader::new(MockBackend::new(), pin_root);
         let (handle, _thread) = LoaderHandle::spawn(loader, 16);
         drop(handle.clone());
 

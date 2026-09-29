@@ -31,10 +31,12 @@ async fn two_peer_udp_echo_through_loader() {
     info!("Application started");
 
     let _ = std::fs::remove_dir_all(TEST_PIN_ROOT);
-    std::fs::create_dir_all(format!("{TEST_PIN_ROOT}/globals")).expect("creating globals dir");
 
-    let backend = AyaBackend::new(format!("{TEST_PIN_ROOT}/globals"));
-    let loader = Loader::new(backend, TEST_PIN_ROOT);
+    let pin_root = PinRoot::new(TEST_PIN_ROOT);
+    std::fs::create_dir_all(pin_root.globals_dir()).expect("creating globals dir");
+
+    let backend = AyaBackend::new(pin_root.clone());
+    let loader = Loader::new(backend, pin_root.clone());
     let (loader_handle, _loader_thread) = LoaderHandle::spawn(loader, 16);
     loader_handle
         .load_global_maps()

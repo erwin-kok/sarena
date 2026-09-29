@@ -22,6 +22,7 @@ use sarena_infra::{
 };
 
 use crate::{
+    PinRoot,
     error::{DataPlaneError, Res},
     loader::{backend::BpfBackend, manifest::Hook},
 };
@@ -35,13 +36,13 @@ struct LoggerHandle {
 
 pub struct AyaBackend {
     object: EbpfObject,
-    globals_dir: PathBuf,
+    pin_root: PinRoot,
     provisioner: NetlinkNetworkProvisioner,
     loggers: HashMap<String, LoggerHandle>,
 }
 
 impl AyaBackend {
-    pub fn new(globals_dir: impl Into<PathBuf>) -> Self {
+    pub fn new(pin_root: PinRoot) -> Self {
         let object = sarena_ebpf_objects::PROGRAMS;
         tracing::info!(
             object = object.name,
@@ -51,7 +52,7 @@ impl AyaBackend {
         );
         Self {
             object,
-            globals_dir: globals_dir.into(),
+            pin_root,
             provisioner: NetlinkNetworkProvisioner,
             loggers: HashMap::new(),
         }
@@ -71,7 +72,7 @@ impl AyaBackend {
 
     fn load_with_pins(&self, maps: &HashMap<String, PathBuf>) -> Res<Ebpf> {
         let mut loader = EbpfLoader::new();
-        let mut loader = loader.default_map_pin_directory(&self.globals_dir);
+        let mut loader = loader.default_map_pin_directory(self.pin_root.globals_dir());
         for (name, path) in maps {
             loader = loader.map_pin_path(name.as_str(), path);
         }
