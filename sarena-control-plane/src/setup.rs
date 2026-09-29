@@ -1,4 +1,4 @@
-use std::{net::IpAddr, sync::Arc};
+use std::net::IpAddr;
 
 use sarena_data_plane::{
     AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, PinRoot,
@@ -10,7 +10,7 @@ use sarena_infra::{
 use sarena_shared::EndpointConfig;
 
 use crate::{
-    AppState, Res,
+    Res,
     config::ControlPlaneConfig,
     netlink::{SARENA_HOST, setup_host_device},
 };
@@ -20,86 +20,54 @@ use crate::{
 /// `LoaderEndpointService`, which is handed this same path rather than
 /// hardcoding it -- keeps that crate from needing to know a specific
 /// bpffs layout.
-const PIN_ROOT: &str = "/sys/fs/bpf/sarena";
+pub const PIN_ROOT: &str = "/sys/fs/bpf/sarena";
 
-pub struct ControlPlane {
-    pub config: ControlPlaneConfig,
-}
+pub async fn start_control_plane(
+    config: &ControlPlaneConfig,
+) -> Res<(LoaderHandle, std::thread::JoinHandle<()>)> {
+    std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
 
-pub struct ControlPlaneHandle {
-    pub state: AppState,
-    pub loader_handle: LoaderHandle,
-    pub loader_thread: std::thread::JoinHandle<()>,
-}
+    let backend = AyaBackend::new(format!("{PIN_ROOT}/globals"));
 
-impl ControlPlane {
-    pub fn new(config: ControlPlaneConfig) -> Self {
-        Self { config }
+    let loader: Loader<AyaBackend> = Loader::new(backend, PIN_ROOT);
+
+    let (loader_handle, loader_thread) = LoaderHandle::spawn(loader, 16);
+    let shutdown_loader_handle = loader_handle.clone();
+
+    loader_handle.load_global_maps().await?;
+
+    let mut provisioner = NetlinkNetworkProvisioner;
+
+    provisioner.set_rp_filter(0).await?;
+
+    let (mut host, _) = setup_host_device(
+        &mut provisioner,
+        1500,
+        InterfaceAddress {
+            ip: config.internal_ip,
+            prefix_len: 32,
+        },
+    )
+    .await?;
+
+    if let Some(prefix) = config.ipam_ipv4_subnet {
+        let route = Route {
+            nexthop: Some(config.internal_ip),
+            local: Some(config.internal_ip),
+            prefix,
+            mtu: Some(1500),
+            ..Default::default()
+        };
+        host.add_route(&route).await?;
     }
 
-    pub async fn start(&self) -> Res<ControlPlaneHandle> {
-        std::fs::create_dir_all(format!("{PIN_ROOT}/globals")).expect("creating globals dir");
-
-        let backend = AyaBackend::new(format!("{PIN_ROOT}/globals"));
-
-        let loader: Loader<AyaBackend> = Loader::new(backend, PIN_ROOT);
-
-        let (loader_handle, loader_thread) = LoaderHandle::spawn(loader, 16);
-        let shutdown_loader_handle = loader_handle.clone();
-
-        loader_handle.load_global_maps().await?;
-
-        let mut provisioner = NetlinkNetworkProvisioner;
-
-        provisioner.set_rp_filter(0).await?;
-
-        let (mut host, _) = setup_host_device(
-            &mut provisioner,
-            1500,
-            InterfaceAddress {
-                ip: self.config.internal_ip,
-                prefix_len: 32,
-            },
-        )
+    loader_handle
+        .add_endpoint(EndpointKind::Host, SARENA_HOST)
         .await?;
 
-        if let Some(prefix) = self.config.ipam_ipv4_subnet {
-            let route = Route {
-                nexthop: Some(self.config.internal_ip),
-                local: Some(self.config.internal_ip),
-                prefix,
-                mtu: Some(1500),
-                ..Default::default()
-            };
-            host.add_route(&route).await?;
-        }
+    set_endpoint_config(host.mac(), config.internal_ip);
 
-        loader_handle
-            .add_endpoint(EndpointKind::Host, SARENA_HOST)
-            .await?;
-
-        set_endpoint_config(host.mac(), self.config.internal_ip);
-
-        let ipam = Arc::new(sarena_services_ipam::DefaultIpamService::new(
-            self.config.gateway_ip,
-            self.config.ipam_ipv4_subnet,
-            self.config.ipam_ipv6_subnet,
-        ));
-        let endpoint = Arc::new(sarena_services_endpoint::DefaultEndpointService::new(
-            loader_handle,
-            provisioner,
-            PIN_ROOT,
-        ));
-        let daemon = Arc::new(sarena_services_daemon::DefaultDaemonService::new());
-
-        let state = AppState::new(ipam, endpoint, daemon);
-
-        Ok(ControlPlaneHandle {
-            state,
-            loader_handle: shutdown_loader_handle,
-            loader_thread,
-        })
-    }
+    Ok((shutdown_loader_handle, loader_thread))
 }
 
 fn set_endpoint_config(host_mac: MacAddress, addr: IpAddr) {

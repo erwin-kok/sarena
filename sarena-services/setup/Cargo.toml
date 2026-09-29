@@ -1,5 +1,5 @@
 [package]
-name = "sarena-api-server"
+name = "sarena-services-setup"
 
 edition.workspace = true
 license.workspace = true
@@ -11,23 +11,17 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-sarena-api-types-v1 = { path = "../../sarena-api/types/v1" }
+sarena-data-plane = { path = "../../sarena-data-plane" }
 sarena-control-plane = { path = "../../sarena-control-plane" }
+sarena-infra = { path = "../../sarena-infra" }
 sarena-services-daemon = { path = "../../sarena-services/daemon" }
 sarena-services-endpoint = { path = "../../sarena-services/endpoint" }
 sarena-services-ipam = { path = "../../sarena-services/ipam" }
-sarena-services-setup = { path = "../../sarena-services/setup" }
+sarena-shared = { path = "../../sarena-shared" }
+sarena-utils = { path = "../../sarena-utils" }
 
 anyhow = { workspace = true }
-axum = { workspace = true }
-http = { workspace = true }
-hyper = { workspace = true }
-hyper-util = { workspace = true }
-prometheus = { workspace = true }
-serde = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
+ipnet = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal", "time"] }
 tokio-util = { workspace = true }
-tower = { workspace = true }
-tower-http = { workspace = true }
 tracing = { workspace = true }
-uuid = { workspace = true }

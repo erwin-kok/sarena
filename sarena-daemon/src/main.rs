@@ -6,7 +6,8 @@ use std::{
 };
 
 use ipnet::{IpNet, Ipv4Net};
-use sarena_control_plane::{ControlPlane, ControlPlaneConfig, ControlPlaneHandle};
+use sarena_control_plane::{ControlPlaneConfig, start_control_plane};
+use sarena_services_setup::setup_services;
 use sarena_utils::{LogFormat, TracingConfig, logging, metrics::init_metrics};
 use tokio::{
     signal::unix::{SignalKind, signal},
@@ -41,12 +42,8 @@ async fn main() -> anyhow::Result<()> {
         ipam_ipv6_subnet: None,
     };
 
-    let control_plane = ControlPlane::new(config);
-    let ControlPlaneHandle {
-        state,
-        loader_handle,
-        loader_thread,
-    } = control_plane.start().await?;
+    let (loader_handle, loader_thread) = start_control_plane(&config).await?;
+    let state = setup_services(config, loader_handle.clone());
 
     let shutdown = CancellationToken::new();
     let mut tasks = JoinSet::new();

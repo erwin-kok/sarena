@@ -15,6 +15,7 @@ members = [
     "sarena-services/daemon",
     "sarena-services/endpoint",
     "sarena-services/ipam",
+    "sarena-services/setup",
     "sarena-utils",
 
     # Test infrastructure
@@ -57,6 +58,7 @@ default-members = [
     "sarena-services/daemon",
     "sarena-services/endpoint",
     "sarena-services/ipam",
+    "sarena-services/setup",
     "sarena-utils",
 
     # Test infrastructure

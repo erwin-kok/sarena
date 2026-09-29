@@ -5,11 +5,9 @@ use thiserror::Error;
 mod config;
 mod netlink;
 mod setup;
-mod state;
 
 pub use config::ControlPlaneConfig;
-pub use setup::{ControlPlane, ControlPlaneHandle};
-pub use state::AppState;
+pub use setup::{PIN_ROOT, start_control_plane};
 
 #[derive(Debug, Error)]
 pub enum ControlPlaneError {

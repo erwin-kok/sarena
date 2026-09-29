@@ -12,7 +12,14 @@ workspace = true
 
 [dependencies]
 sarena-api-server = { path = "../sarena-api/server" }
+sarena-data-plane = { path = "../sarena-data-plane" }
 sarena-control-plane = { path = "../sarena-control-plane" }
+sarena-infra = { path = "../sarena-infra" }
+sarena-services-daemon = { path = "../sarena-services/daemon" }
+sarena-services-endpoint = { path = "../sarena-services/endpoint" }
+sarena-services-ipam = { path = "../sarena-services/ipam" }
+sarena-services-setup = { path = "../sarena-services/setup" }
+sarena-shared = { path = "../sarena-shared" }
 sarena-kubernetes = { path = "../sarena-kubernetes" }
 sarena-utils = { path = "../sarena-utils" }
 

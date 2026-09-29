@@ -7,7 +7,7 @@ use axum::{
 };
 use http::HeaderMap;
 use sarena_api_types_v1::ipam;
-use sarena_control_plane::AppState;
+use sarena_services_setup::AppState;
 use serde::Deserialize;
 
 use crate::error::{ApiError, ApiResult, ApiStatus, Res};

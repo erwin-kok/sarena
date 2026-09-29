@@ -4,7 +4,7 @@ use axum::{
     routing::{delete, get, put},
 };
 use sarena_api_types_v1::endpoint;
-use sarena_control_plane::AppState;
+use sarena_services_setup::AppState;
 
 use crate::error::{ApiResult, ApiStatus, Res};
 
