@@ -14,7 +14,7 @@ use axum::{
 };
 use sarena_api_types_v1::{daemon, endpoint, ipam};
 use sarena_data_plane::{
-    AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, LxcMap, PinRoot,
+    AyaBackend, EndpointConfigMap, Loader, LoaderEndpointKind, LoaderHandle, LxcMap, PinRoot,
 };
 use sarena_infra::{
     InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, NetworkProvisioner,
@@ -202,7 +202,7 @@ pub async fn create_endpoint(
 
     state
         .loader_handle
-        .add_endpoint(EndpointKind::Container, &ep.host_iface_name)
+        .add_loader_endpoint(LoaderEndpointKind::Container, &ep.host_iface_name)
         .await
         .expect("add endpoint");
 

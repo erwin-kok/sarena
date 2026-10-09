@@ -13,7 +13,7 @@ use async_trait::async_trait;
 pub use config::DataPlaneConfig;
 pub use container::add_container;
 pub use error::{DataPlaneError, Res};
-pub use loader::{AyaBackend, EndpointKind, Loader, LoaderHandle, PinRoot};
+pub use loader::{AyaBackend, Loader, LoaderEndpointKind, LoaderHandle, PinRoot};
 pub use maps::{CallsMap, EndpointConfigMap, LxcMap, MetricsMap};
 pub use sarena_infra::{InterfaceAddress, MacAddress};
 pub use setup::DefaultDataPlane;

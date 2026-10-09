@@ -4,29 +4,29 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     error::{DataPlaneError, Res},
-    loader::{Loader, backend::BpfBackend, endpoint::EndpointKind},
+    loader::{Loader, backend::BpfBackend, loader_endpoint::LoaderEndpointKind},
 };
 
 enum Command {
     LoadGlobalMaps {
         reply: oneshot::Sender<Res<()>>,
     },
-    AddEndpoint {
-        kind: EndpointKind,
+    AddLoaderEndpoint {
+        kind: LoaderEndpointKind,
         link: String,
         reply: oneshot::Sender<Res<()>>,
     },
-    RemoveEndpoint {
-        kind: EndpointKind,
+    RemoveLoaderEndpoint {
+        kind: LoaderEndpointKind,
         link: String,
         reply: oneshot::Sender<Res<()>>,
     },
-    ListActiveEndpoints {
-        reply: oneshot::Sender<Res<Vec<(EndpointKind, String)>>>,
+    ListLoaderEndpoints {
+        reply: oneshot::Sender<Res<Vec<(LoaderEndpointKind, String)>>>,
     },
     Reconcile {
-        desired: Vec<(EndpointKind, String)>,
-        reply: oneshot::Sender<Res<Vec<(EndpointKind, String, DataPlaneError)>>>,
+        desired: Vec<(LoaderEndpointKind, String)>,
+        reply: oneshot::Sender<Res<Vec<(LoaderEndpointKind, String, DataPlaneError)>>>,
     },
     TeardownAll {
         reply: oneshot::Sender<Res<()>>,
@@ -94,27 +94,27 @@ impl LoaderHandle {
         self.call(|reply| Command::LoadGlobalMaps { reply }).await
     }
 
-    pub async fn add_endpoint(&self, kind: EndpointKind, link: &str) -> Res<()> {
+    pub async fn add_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
         let link = link.to_string();
-        self.call(|reply| Command::AddEndpoint { kind, link, reply })
+        self.call(|reply| Command::AddLoaderEndpoint { kind, link, reply })
             .await
     }
 
-    pub async fn remove_endpoint(&self, kind: EndpointKind, link: &str) -> Res<()> {
+    pub async fn remove_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
         let link = link.to_string();
-        self.call(|reply| Command::RemoveEndpoint { kind, link, reply })
+        self.call(|reply| Command::RemoveLoaderEndpoint { kind, link, reply })
             .await
     }
 
-    pub async fn list_active_endpoints(&self) -> Res<Vec<(EndpointKind, String)>> {
-        self.call(|reply| Command::ListActiveEndpoints { reply })
+    pub async fn list_loader_endpoints(&self) -> Res<Vec<(LoaderEndpointKind, String)>> {
+        self.call(|reply| Command::ListLoaderEndpoints { reply })
             .await
     }
 
     pub async fn reconcile(
         &self,
-        desired: Vec<(EndpointKind, String)>,
-    ) -> Res<Vec<(EndpointKind, String, DataPlaneError)>> {
+        desired: Vec<(LoaderEndpointKind, String)>,
+    ) -> Res<Vec<(LoaderEndpointKind, String, DataPlaneError)>> {
         self.call(|reply| Command::Reconcile { desired, reply })
             .await
     }
@@ -141,14 +141,14 @@ fn dispatch<B: BpfBackend>(loader: &mut Loader<B>, cmd: Command) {
         Command::LoadGlobalMaps { reply } => {
             let _ = reply.send(loader.load_global_maps());
         }
-        Command::AddEndpoint { kind, link, reply } => {
-            let _ = reply.send(loader.add_endpoint(kind, &link));
+        Command::AddLoaderEndpoint { kind, link, reply } => {
+            let _ = reply.send(loader.add_loader_endpoint(kind, &link));
         }
-        Command::RemoveEndpoint { kind, link, reply } => {
-            let _ = reply.send(loader.remove_endpoint(kind, &link));
+        Command::RemoveLoaderEndpoint { kind, link, reply } => {
+            let _ = reply.send(loader.remove_loader_endpoint(kind, &link));
         }
-        Command::ListActiveEndpoints { reply } => {
-            let _ = reply.send(loader.list_active_endpoints());
+        Command::ListLoaderEndpoints { reply } => {
+            let _ = reply.send(loader.list_loader_endpoints());
         }
         Command::Reconcile { desired, reply } => {
             let _ = reply.send(loader.reconcile(&desired));
@@ -170,15 +170,15 @@ mod tests {
         let loader = Loader::new(MockBackend::new(), pin_root);
         let (handle, _thread) = LoaderHandle::spawn(loader, 16);
 
-        let kind = EndpointKind::Container;
+        let kind = LoaderEndpointKind::Container;
         let link = "lxc00123";
-        handle.add_endpoint(kind, link).await.unwrap();
+        handle.add_loader_endpoint(kind, link).await.unwrap();
 
-        let active = handle.list_active_endpoints().await.unwrap();
+        let active = handle.list_loader_endpoints().await.unwrap();
         assert_eq!(active, vec![(kind, link.to_string())]);
 
-        handle.remove_endpoint(kind, link).await.unwrap();
-        assert!(handle.list_active_endpoints().await.unwrap().is_empty());
+        handle.remove_loader_endpoint(kind, link).await.unwrap();
+        assert!(handle.list_loader_endpoints().await.unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -188,7 +188,7 @@ mod tests {
         let (handle, _thread) = LoaderHandle::spawn(loader, 16);
         drop(handle.clone());
 
-        let active = handle.list_active_endpoints().await.unwrap();
+        let active = handle.list_loader_endpoints().await.unwrap();
         assert!(active.is_empty());
     }
 }

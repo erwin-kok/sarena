@@ -6,7 +6,7 @@ use sarena_infra::{
 };
 use sarena_shared::{EndpointConfig, EndpointInfo};
 
-use crate::{EndpointConfigMap, EndpointKind, LoaderHandle, LxcMap, PIN_ROOT, PinRoot};
+use crate::{EndpointConfigMap, LoaderEndpointKind, LoaderHandle, LxcMap, PIN_ROOT, PinRoot};
 
 pub async fn add_container(
     loader_handle: LoaderHandle,
@@ -23,7 +23,7 @@ pub async fn add_container(
     };
 
     loader_handle
-        .add_endpoint(EndpointKind::Container, iface_name)
+        .add_loader_endpoint(LoaderEndpointKind::Container, iface_name)
         .await
         .expect("add endpoint");
     let host = provisioner.get_link(iface_name).await.expect("get_link");

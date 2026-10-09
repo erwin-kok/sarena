@@ -6,7 +6,7 @@ use std::{
 
 use ipnet::{IpNet, Ipv4Net};
 use sarena_data_plane::{
-    AyaBackend, EndpointConfigMap, EndpointKind, Loader, LoaderHandle, LxcMap, PinRoot,
+    AyaBackend, EndpointConfigMap, Loader, LoaderEndpointKind, LoaderHandle, LxcMap, PinRoot,
 };
 use sarena_infra::{
     InfraError, InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, Netns,
@@ -182,7 +182,7 @@ async fn create_endpoint(
     );
 
     loader_handle
-        .add_endpoint(EndpointKind::Container, &lxc_ifname)
+        .add_loader_endpoint(LoaderEndpointKind::Container, &lxc_ifname)
         .await
         .expect("add_endpoint");
 

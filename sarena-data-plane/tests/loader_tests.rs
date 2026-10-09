@@ -4,7 +4,7 @@ use std::{
 };
 
 use aya::programs::TcAttachType;
-use sarena_data_plane::{AyaBackend, EndpointKind, Loader, LoaderHandle, PinRoot};
+use sarena_data_plane::{AyaBackend, Loader, LoaderEndpointKind, LoaderHandle, PinRoot};
 use sarena_infra::{
     Link, NetlinkNetworkProvisioner, Netns, NetworkProvisioner, TcxAttach, VethSpec, test_support,
 };
@@ -66,11 +66,11 @@ async fn load_multiple_links() {
             peer2.set_ns(&target2).await.expect("peer2 set_ns failed");
 
             loader_handle
-                .add_endpoint(EndpointKind::Host, &host1_name)
+                .add_loader_endpoint(LoaderEndpointKind::Host, &host1_name)
                 .await
                 .expect("add_endpoint (host1) failed");
             loader_handle
-                .add_endpoint(EndpointKind::Host, &host2_name)
+                .add_loader_endpoint(LoaderEndpointKind::Host, &host2_name)
                 .await
                 .expect("add_endpoint (host2) failed");
 

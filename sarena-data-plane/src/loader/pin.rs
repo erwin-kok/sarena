@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    loader::endpoint::EndpointKind,
+    loader::loader_endpoint::LoaderEndpointKind,
     maps::{EndpointMap, GlobalMap},
 };
 
@@ -39,7 +39,7 @@ impl PinRoot {
         self.0.join("globals")
     }
 
-    pub fn endpoint_link_dir(&self, kind: EndpointKind, link: &str) -> PathBuf {
+    pub fn endpoint_link_dir(&self, kind: LoaderEndpointKind, link: &str) -> PathBuf {
         self.links_dir().join(pin_subpath(kind, link))
     }
 
@@ -52,15 +52,15 @@ impl PinRoot {
         self.globals_dir().join(map.wire_name())
     }
 
-    pub fn parse_pin_subpath(path: &Path) -> Option<(EndpointKind, String)> {
+    pub fn parse_pin_subpath(path: &Path) -> Option<(LoaderEndpointKind, String)> {
         let mut components = path.components();
-        let kind = EndpointKind::from_kind_str(components.next()?.as_os_str().to_str()?)?;
+        let kind = LoaderEndpointKind::from_kind_str(components.next()?.as_os_str().to_str()?)?;
         let link = components.next()?.as_os_str().to_str()?.to_string();
         Some((kind, link))
     }
 }
 
-fn pin_subpath(kind: EndpointKind, link: &str) -> PathBuf {
+fn pin_subpath(kind: LoaderEndpointKind, link: &str) -> PathBuf {
     Path::new(kind.kind_str()).join(link)
 }
 
@@ -71,11 +71,11 @@ mod tests {
     #[test]
     fn pin_subpath_roundtrips_for_every_kind() {
         let kinds = [
-            EndpointKind::Container,
-            EndpointKind::Host,
-            EndpointKind::NetDev,
-            EndpointKind::Overlay,
-            EndpointKind::Wireguard,
+            LoaderEndpointKind::Container,
+            LoaderEndpointKind::Host,
+            LoaderEndpointKind::NetDev,
+            LoaderEndpointKind::Overlay,
+            LoaderEndpointKind::Wireguard,
         ];
         for kind in kinds {
             let sub = pin_subpath(kind, "eth0");
@@ -97,12 +97,12 @@ mod tests {
         let root = PinRoot::new("/sys/fs/bpf/test");
 
         assert_ne!(
-            root.endpoint_link_dir(EndpointKind::Container, "lxc00001"),
-            root.endpoint_link_dir(EndpointKind::Container, "lxc00002")
+            root.endpoint_link_dir(LoaderEndpointKind::Container, "lxc00001"),
+            root.endpoint_link_dir(LoaderEndpointKind::Container, "lxc00002")
         );
         assert_ne!(
-            root.endpoint_link_dir(EndpointKind::Container, "eth0"),
-            root.endpoint_link_dir(EndpointKind::Host, "eth0"),
+            root.endpoint_link_dir(LoaderEndpointKind::Container, "eth0"),
+            root.endpoint_link_dir(LoaderEndpointKind::Host, "eth0"),
             "the same link name under a different kind must not collide"
         );
     }

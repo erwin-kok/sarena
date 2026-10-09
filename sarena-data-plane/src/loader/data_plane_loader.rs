@@ -7,7 +7,7 @@ use crate::{
     error::{DataPlaneError, HookFailure, Res},
     loader::{
         backend::BpfBackend,
-        endpoint::EndpointKind,
+        loader_endpoint::LoaderEndpointKind,
         manifest::{GLOBAL_MAPS, HookSpec},
         pin::PinRoot,
     },
@@ -34,7 +34,7 @@ impl<B: BpfBackend> Loader<B> {
         Ok(())
     }
 
-    pub fn add_endpoint(&mut self, kind: EndpointKind, link: &str) -> Res<()> {
+    pub fn add_loader_endpoint(&mut self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
         let resolved = self.backend.resolve_link(link)?;
 
         let mut maps = self.global_map_pins();
@@ -80,7 +80,7 @@ impl<B: BpfBackend> Loader<B> {
         Ok(())
     }
 
-    pub fn remove_endpoint(&mut self, kind: EndpointKind, link: &str) -> Res<()> {
+    pub fn remove_loader_endpoint(&mut self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
         self.backend.stop_logging(link);
 
         self.backend
@@ -94,8 +94,9 @@ impl<B: BpfBackend> Loader<B> {
         Ok(())
     }
 
-    pub fn list_active_endpoints(&self) -> Res<Vec<(EndpointKind, String)>> {
-        let mut matched: HashMap<(EndpointKind, String), HashSet<&'static str>> = HashMap::new();
+    pub fn list_loader_endpoints(&self) -> Res<Vec<(LoaderEndpointKind, String)>> {
+        let mut matched: HashMap<(LoaderEndpointKind, String), HashSet<&'static str>> =
+            HashMap::new();
         for rel in self.backend.list_pins(&self.pin_root.links_dir())? {
             let Some(parent) = rel.parent() else { continue };
             let Some((kind, link)) = PinRoot::parse_pin_subpath(parent) else {
@@ -126,20 +127,20 @@ impl<B: BpfBackend> Loader<B> {
 
     pub fn reconcile(
         &mut self,
-        desired: &[(EndpointKind, String)],
-    ) -> Res<Vec<(EndpointKind, String, DataPlaneError)>> {
+        desired: &[(LoaderEndpointKind, String)],
+    ) -> Res<Vec<(LoaderEndpointKind, String, DataPlaneError)>> {
         let mut errors = Vec::new();
 
         for (kind, link) in desired {
-            if let Err(e) = self.add_endpoint(*kind, link) {
+            if let Err(e) = self.add_loader_endpoint(*kind, link) {
                 errors.push((*kind, link.clone(), e));
             }
         }
 
-        let existing: HashSet<_> = self.list_active_endpoints()?.into_iter().collect();
+        let existing: HashSet<_> = self.list_loader_endpoints()?.into_iter().collect();
         let wanted: HashSet<_> = desired.iter().cloned().collect();
         for (kind, link) in existing.difference(&wanted) {
-            if let Err(e) = self.remove_endpoint(*kind, link) {
+            if let Err(e) = self.remove_loader_endpoint(*kind, link) {
                 errors.push((*kind, link.clone(), e));
             }
         }
@@ -164,7 +165,7 @@ impl<B: BpfBackend> Loader<B> {
     }
 }
 
-fn match_pin(kind: EndpointKind, filename: &str) -> Option<&'static HookSpec> {
+fn match_pin(kind: LoaderEndpointKind, filename: &str) -> Option<&'static HookSpec> {
     kind.hooks()
         .iter()
         .find(|hook_spec| hook_spec.program_name == filename)
@@ -185,10 +186,12 @@ mod tests {
         let mut loader = Loader::new(MockBackend::new(), pin_root);
         let l = link(1);
 
-        loader.add_endpoint(EndpointKind::Container, &l).unwrap();
+        loader
+            .add_loader_endpoint(LoaderEndpointKind::Container, &l)
+            .unwrap();
         assert_eq!(
-            loader.list_active_endpoints().unwrap(),
-            vec![(EndpointKind::Container, l.clone())]
+            loader.list_loader_endpoints().unwrap(),
+            vec![(LoaderEndpointKind::Container, l.clone())]
         );
 
         let loaded_maps = loader
@@ -202,8 +205,10 @@ mod tests {
             .unwrap();
         assert_eq!(loaded_maps.len(), 5);
 
-        loader.remove_endpoint(EndpointKind::Container, &l).unwrap();
-        assert_eq!(loader.list_active_endpoints().unwrap(), vec![]);
+        loader
+            .remove_loader_endpoint(LoaderEndpointKind::Container, &l)
+            .unwrap();
+        assert_eq!(loader.list_loader_endpoints().unwrap(), vec![]);
     }
 
     #[test]
@@ -211,10 +216,10 @@ mod tests {
         let pin_root = PinRoot::new("/sys/fs/bpf/test");
         let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader
-            .add_endpoint(EndpointKind::Container, &link(1))
+            .add_loader_endpoint(LoaderEndpointKind::Container, &link(1))
             .unwrap();
         loader
-            .add_endpoint(EndpointKind::Container, &link(2))
+            .add_loader_endpoint(LoaderEndpointKind::Container, &link(2))
             .unwrap();
 
         let resolve_calls = loader
@@ -264,10 +269,10 @@ mod tests {
         let pin_root = PinRoot::new("/sys/fs/bpf/test");
         let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader
-            .add_endpoint(EndpointKind::Container, &link(1))
+            .add_loader_endpoint(LoaderEndpointKind::Container, &link(1))
             .unwrap();
         loader
-            .add_endpoint(EndpointKind::Container, &link(2))
+            .add_loader_endpoint(LoaderEndpointKind::Container, &link(2))
             .unwrap();
 
         let load_calls: Vec<_> = loader
@@ -300,7 +305,9 @@ mod tests {
         let pin_root = PinRoot::new("/sys/fs/bpf/test");
         let mut loader = Loader::new(MockBackend::new(), pin_root);
         let l = link(1);
-        loader.add_endpoint(EndpointKind::Container, &l).unwrap();
+        loader
+            .add_loader_endpoint(LoaderEndpointKind::Container, &l)
+            .unwrap();
 
         let loaded_maps: Vec<String> = loader
             .backend
@@ -356,7 +363,7 @@ mod tests {
         let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader.backend.fail_at = Some((loader.backend.next_call_index() + 1, "bad object".into()));
 
-        let result = loader.add_endpoint(EndpointKind::Container, &link(1));
+        let result = loader.add_loader_endpoint(LoaderEndpointKind::Container, &link(1));
         assert!(result.is_err());
         assert!(
             !matches!(result, Err(DataPlaneError::Partial(_))),
@@ -373,7 +380,7 @@ mod tests {
             attach_calls, 0,
             "no hook should be attempted if loading itself failed"
         );
-        assert_eq!(loader.list_active_endpoints().unwrap(), vec![]);
+        assert_eq!(loader.list_loader_endpoints().unwrap(), vec![]);
     }
 
     #[test]
@@ -382,7 +389,7 @@ mod tests {
         let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader.backend.fail_at = Some((loader.backend.next_call_index(), "no such link".into()));
 
-        let result = loader.add_endpoint(EndpointKind::Container, &link(1));
+        let result = loader.add_loader_endpoint(LoaderEndpointKind::Container, &link(1));
         assert!(result.is_err());
         assert!(!matches!(result, Err(DataPlaneError::Partial(_))));
 
@@ -396,7 +403,7 @@ mod tests {
             load_calls, 0,
             "no load should even be attempted if resolving the link failed"
         );
-        assert_eq!(loader.list_active_endpoints().unwrap(), vec![]);
+        assert_eq!(loader.list_loader_endpoints().unwrap(), vec![]);
     }
 
     #[test]
@@ -408,17 +415,19 @@ mod tests {
         let fail_index = loader.backend.next_call_index() + 2;
         loader.backend.fail_at = Some((fail_index, "simulated crash during ingress attach".into()));
 
-        let result = loader.add_endpoint(EndpointKind::Container, &l);
+        let result = loader.add_loader_endpoint(LoaderEndpointKind::Container, &l);
         assert!(result.is_err(), "ingress hook failed, so this must fail");
-        assert_eq!(loader.list_active_endpoints().unwrap(), vec![]);
+        assert_eq!(loader.list_loader_endpoints().unwrap(), vec![]);
 
         // "the daemon restarts" - clear the injected failure and call
         // add_endpoint again with the same kind/link.
         loader.backend.fail_at = None;
-        loader.add_endpoint(EndpointKind::Container, &l).unwrap();
+        loader
+            .add_loader_endpoint(LoaderEndpointKind::Container, &l)
+            .unwrap();
         assert_eq!(
-            loader.list_active_endpoints().unwrap(),
-            vec![(EndpointKind::Container, l)]
+            loader.list_loader_endpoints().unwrap(),
+            vec![(LoaderEndpointKind::Container, l)]
         );
     }
 
@@ -427,19 +436,19 @@ mod tests {
         let pin_root = PinRoot::new("/sys/fs/bpf/test");
         let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader
-            .add_endpoint(EndpointKind::Container, &link(1))
+            .add_loader_endpoint(LoaderEndpointKind::Container, &link(1))
             .unwrap();
         loader
-            .add_endpoint(EndpointKind::Container, &link(2))
+            .add_loader_endpoint(LoaderEndpointKind::Container, &link(2))
             .unwrap();
 
-        let desired = vec![(EndpointKind::Container, link(1))];
+        let desired = vec![(LoaderEndpointKind::Container, link(1))];
         let errors = loader.reconcile(&desired).unwrap();
         assert!(errors.is_empty());
 
         assert_eq!(
-            loader.list_active_endpoints().unwrap(),
-            vec![(EndpointKind::Container, link(1))]
+            loader.list_loader_endpoints().unwrap(),
+            vec![(LoaderEndpointKind::Container, link(1))]
         );
     }
 
@@ -448,7 +457,7 @@ mod tests {
         let pin_root = PinRoot::new("/sys/fs/bpf/test");
         let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader
-            .add_endpoint(EndpointKind::Container, &link(1))
+            .add_loader_endpoint(LoaderEndpointKind::Container, &link(1))
             .unwrap();
 
         // link(2): let resolve_link/load_instance succeed, then fail
@@ -456,17 +465,17 @@ mod tests {
         // endpoint.
         let fail_index = loader.backend.next_call_index() + 2;
         loader.backend.fail_at = Some((fail_index, "crash right after loading".into()));
-        let _ = loader.add_endpoint(EndpointKind::Container, &link(2));
+        let _ = loader.add_loader_endpoint(LoaderEndpointKind::Container, &link(2));
         loader.backend.fail_at = None;
 
         assert_eq!(
-            loader.list_active_endpoints().unwrap(),
-            vec![(EndpointKind::Container, link(1))]
+            loader.list_loader_endpoints().unwrap(),
+            vec![(LoaderEndpointKind::Container, link(1))]
         );
 
         let desired = vec![
-            (EndpointKind::Container, link(1)),
-            (EndpointKind::Container, link(2)),
+            (LoaderEndpointKind::Container, link(1)),
+            (LoaderEndpointKind::Container, link(2)),
         ];
         let errors = loader.reconcile(&desired).unwrap();
         assert!(
@@ -474,7 +483,7 @@ mod tests {
             "reconcile should finish attaching the second endpoint: {errors:?}"
         );
 
-        let mut active = loader.list_active_endpoints().unwrap();
+        let mut active = loader.list_loader_endpoints().unwrap();
         active.sort_by_key(|(_, l)| l.clone());
         assert_eq!(active.len(), 2);
     }
@@ -485,7 +494,10 @@ mod tests {
         // test documents the *mechanism* using a hand-built manifest
         // check rather than depending on a specific future XDP entry.
         assert!(
-            EndpointKind::Container.hooks().iter().all(|h| h.required),
+            LoaderEndpointKind::Container
+                .hooks()
+                .iter()
+                .all(|h| h.required),
             "no optional hooks defined yet - update this test when XDP lands"
         );
     }
@@ -495,14 +507,14 @@ mod tests {
         let pin_root = PinRoot::new("/sys/fs/bpf/test");
         let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader
-            .add_endpoint(EndpointKind::Container, &link(1))
+            .add_loader_endpoint(LoaderEndpointKind::Container, &link(1))
             .unwrap();
         loader
-            .add_endpoint(EndpointKind::Container, &link(2))
+            .add_loader_endpoint(LoaderEndpointKind::Container, &link(2))
             .unwrap();
 
         loader
-            .remove_endpoint(EndpointKind::Container, &link(1))
+            .remove_loader_endpoint(LoaderEndpointKind::Container, &link(1))
             .unwrap();
 
         let remaining_map_pins: Vec<_> = loader
@@ -533,9 +545,11 @@ mod tests {
         let pin_root = PinRoot::new("/sys/fs/bpf/test");
         let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader
-            .add_endpoint(EndpointKind::Container, &link(1))
+            .add_loader_endpoint(LoaderEndpointKind::Container, &link(1))
             .unwrap();
-        loader.add_endpoint(EndpointKind::Host, "the_host").unwrap();
+        loader
+            .add_loader_endpoint(LoaderEndpointKind::Host, "the_host")
+            .unwrap();
 
         loader.teardown_all().unwrap();
 

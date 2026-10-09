@@ -2,7 +2,7 @@ mod actor;
 mod aya_backend;
 mod backend;
 mod data_plane_loader;
-mod endpoint;
+mod loader_endpoint;
 mod manifest;
 mod pin;
 
@@ -12,5 +12,5 @@ mod mock_backend;
 pub use actor::LoaderHandle;
 pub use aya_backend::AyaBackend;
 pub use data_plane_loader::Loader;
-pub use endpoint::EndpointKind;
+pub use loader_endpoint::LoaderEndpointKind;
 pub use pin::PinRoot;
