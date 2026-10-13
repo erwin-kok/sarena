@@ -4,6 +4,7 @@ use anyhow::{Context as _, Result};
 use clap::{Args, Subcommand};
 use sarena_data_plane::{MetricsMap, PinRoot};
 use sarena_shared::write_obs_point;
+use sarena_utils::root::require_root_privilege;
 use serde::Serialize;
 use tabwriter::TabWriter;
 use tracing::info;
@@ -12,7 +13,6 @@ use crate::{
     app::App,
     cli::{OutputArgs, OutputFormat},
     output::print_output,
-    utils,
 };
 
 #[derive(Args, Debug)]
@@ -46,7 +46,7 @@ pub fn run(app: &App, command: &BpfMetricsCommand) -> Result<()> {
 }
 
 fn list_metrics(app: &App, format: Option<&OutputFormat>) -> Result<()> {
-    utils::require_root_privilege();
+    require_root_privilege("sarena bpf metrics list");
 
     let pins = PinRoot::new(app.config.pin_root.clone());
     let map = MetricsMap::open(&pins).context("opening metrics_map (is the datapath loaded?)")?;
@@ -72,7 +72,7 @@ fn list_metrics(app: &App, format: Option<&OutputFormat>) -> Result<()> {
 }
 
 fn flush_metrics(app: &App) -> Result<()> {
-    utils::require_root_privilege();
+    require_root_privilege("sarena bpf metrics flush");
 
     let pins = PinRoot::new(app.config.pin_root.clone());
     let mut map =

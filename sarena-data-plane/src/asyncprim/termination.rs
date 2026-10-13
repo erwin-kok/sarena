@@ -1,10 +1,14 @@
-use std::fmt;
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::{
+    fmt,
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
-use futures::FutureExt;
-use futures::future::{BoxFuture, join_all};
+use futures::{
+    FutureExt,
+    future::{BoxFuture, join_all},
+};
 use tokio_util::sync::CancellationToken;
 
 /// A future that resolves once one or more background tasks have fully

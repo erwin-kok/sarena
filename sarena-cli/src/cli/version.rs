@@ -36,16 +36,9 @@ pub async fn run(app: &App, format: Option<&OutputFormat>) -> Result<()> {
             f,
         )?;
     } else {
-        println!("client version: {}", version(&client_version));
-        println!("daemon version: {}", version(&debuginfo.version));
+        println!("client version: {}", client_version);
+        println!("daemon version: {}", debuginfo.version);
     }
 
     Ok(())
-}
-
-fn version(version: &SarenaVersion) -> String {
-    format!(
-        "{} ({}, built {}, {}/{})",
-        version.version, version.git_hash, version.build_date, version.os, version.arch
-    )
 }

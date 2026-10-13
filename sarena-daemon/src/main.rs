@@ -1,14 +1,27 @@
 use std::{
+    env::consts,
+    fs,
     future::Future,
+    io::IsTerminal as _,
     net::{IpAddr, Ipv4Addr},
     process,
     time::Duration,
 };
 
+use clap::{CommandFactory as _, Parser as _};
+use clap_markdown_generator::{
+    CommandHeadingStyle, MarkdownOptions, ParameterContentStyle, ParameterHeadingStyle,
+    generate_markdown_for_command_with_options,
+};
 use ipnet::{IpNet, Ipv4Net};
 use sarena_data_plane::{DataPlane as _, DataPlaneConfig, DefaultDataPlane};
 use sarena_services::setup_services;
-use sarena_utils::{LogFormat, TracingConfig, logging, metrics::init_metrics};
+use sarena_utils::{
+    TracingConfig, logging,
+    metrics::init_metrics,
+    root::require_root_privilege,
+    version::{self, SarenaVersion},
+};
 use tokio::{
     signal::unix::{SignalKind, signal},
     task::{JoinError, JoinSet},
@@ -16,17 +29,67 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
+use crate::cli::Cli;
+
+mod cli;
+mod config;
+
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 const TELEMETRY_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_SOCKET_PATH: &str = "/tmp/sarena.sock";
 const TCP_PORT: u16 = 3000;
 
+const BANNER: [&str; 5] = [
+    r#" ____    _    ____  _____ _   _    _    "#,
+    r#"/ ___|  / \  |  _ \| ____| \ | |  / \   "#,
+    r#"\___ \ / _ \ | |_) |  _| |  \| | / _ \  "#,
+    r#" ___) / ___ \|  _ <| |___| |\  |/ ___ \ "#,
+    r#"|____/_/   \_\_| \_\_____|_| \_|_/   \_\"#,
+];
+
+// 256-color codes, blue to purple
+const SHADES: [u8; 5] = [33, 69, 105, 141, 177];
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+    let command = Cli::command();
+    if let Some(cmd_ref) = cli.cmd_ref {
+        let markdown = generate_markdown_for_command_with_options(
+            command,
+            MarkdownOptions {
+                include_subcommands: true,
+                include_toc: true,
+                command_heading: CommandHeadingStyle::Display,
+                parameter_heading: ParameterHeadingStyle::Name,
+                parameter_content: ParameterContentStyle::Text,
+                ..MarkdownOptions::default()
+            },
+        );
+        fs::write(cmd_ref, markdown)?;
+        process::exit(0)
+    }
+
+    require_root_privilege(command.get_name());
+
+    init_daemon(cli).await?;
+
+    process::exit(0)
+}
+
+async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
+    let cli = Cli::parse();
+
+    let config = config::load_config(&cli)?;
+
     logging::init_tracing(&TracingConfig {
-        format: LogFormat::Text,
+        enable_debug: config.debug,
+        log_file: config.log_file.clone(),
+        format: config.log_format,
         ..Default::default()
     });
+
+    print_banner();
 
     let metrics_state = init_metrics()?;
 
@@ -126,7 +189,30 @@ async fn main() -> anyhow::Result<()> {
     )
     .await;
 
-    process::exit(0)
+    Ok(())
+}
+
+pub fn print_banner() {
+    let color = std::io::stderr().is_terminal();
+    for (line, shade) in BANNER.iter().zip(SHADES) {
+        if color {
+            eprintln!("\x1b[1;38;5;{shade}m{line}\x1b[0m");
+        } else {
+            eprintln!("{line}");
+        }
+    }
+    let version = SarenaVersion {
+        version: version::VERSION.to_owned(),
+        git_hash: version::GIT_HASH.to_owned(),
+        build_date: version::BUILD_DATE.to_owned(),
+        os: consts::OS.to_owned(),
+        arch: consts::ARCH.to_owned(),
+    };
+    if color {
+        eprintln!("\x1b[38;5;214mSarena {version}\x1b[0m");
+    } else {
+        eprintln!("Sarena {version}");
+    }
 }
 
 async fn shutdown_step(name: &str, timeout: Duration, fut: impl Future<Output = ()>) {

@@ -7,6 +7,7 @@ use std::{
 use anyhow::{Context as _, Result};
 use clap::{Args, Subcommand};
 use sarena_data_plane::{LxcMap, PinRoot};
+use sarena_utils::root::require_root_privilege;
 use tabwriter::TabWriter;
 use tracing::info;
 
@@ -14,7 +15,6 @@ use crate::{
     app::App,
     cli::{OutputArgs, OutputFormat},
     output::print_output,
-    utils,
 };
 
 #[derive(Args, Debug)]
@@ -47,7 +47,7 @@ pub fn run(app: &App, command: &BpfEndpointCommand) -> Result<()> {
 }
 
 fn list_endpoints(app: &App, format: Option<&OutputFormat>) -> Result<()> {
-    utils::require_root_privilege();
+    require_root_privilege("sarena bpf endpoint list");
 
     let pins = PinRoot::new(app.config.pin_root.clone());
     let map = LxcMap::open(&pins).context("opening lxc_map (is the datapath loaded?)")?;
@@ -65,7 +65,7 @@ fn list_endpoints(app: &App, format: Option<&OutputFormat>) -> Result<()> {
 }
 
 fn delete_endpoint(app: &App, ip: Ipv4Addr) -> Result<()> {
-    utils::require_root_privilege();
+    require_root_privilege("sarena bpf endpoint delete");
 
     let pins = PinRoot::new(app.config.pin_root.clone());
     let mut map = LxcMap::open(&pins).context("opening lxc_map (is the datapath loaded?)")?;

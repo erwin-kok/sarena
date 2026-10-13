@@ -1,5 +1,7 @@
 pub mod logging;
 pub mod metrics;
+pub mod root;
+pub mod spans;
 pub mod version;
 
 use serde::{Deserialize, Serialize};

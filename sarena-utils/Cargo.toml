@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 
 anyhow = { workspace = true }
+nix = { workspace = true, features = ["user"] }
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 opentelemetry-semantic-conventions = { workspace = true }

@@ -1,3 +1,5 @@
+use core::fmt;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -22,4 +24,14 @@ pub struct SarenaVersion {
     pub build_date: String,
     pub os: String,
     pub arch: String,
+}
+
+impl fmt::Display for SarenaVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} ({}, built {}, {}/{})",
+            self.version, self.git_hash, self.build_date, self.os, self.arch
+        )
+    }
 }

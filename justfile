@@ -109,12 +109,12 @@ kind-cni-logs:
     docker exec "${node_name}" sh -c "touch '${log_file}' && tail -f '${log_file}'"
 
 # Run the sarena-daemon (requires sudo: it manages netns/BPF attachments)
-run-daemon: build-ebpf
+run-daemon *ARGS: build-ebpf
     #!/usr/bin/env bash
     set -euo pipefail
     exe=$(cargo build -p sarena-daemon --message-format=json \
         | jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable')
-    sudo "$exe"
+    sudo "$exe" {{ARGS}}
 
 # Run the sarena-cli, forwarding all arguments to it (e.g. `just sarena-cli service list`)
 sarena-cli *ARGS: build-ebpf

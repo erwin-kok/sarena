@@ -18,7 +18,13 @@ sarena-kubernetes = { path = "../sarena-kubernetes" }
 sarena-utils = { path = "../sarena-utils" }
 
 anyhow = { workspace = true }
+clap = { workspace = true }
+clap-markdown-generator = { workspace = true }
+config = { workspace = true }
 ipnet = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal", "time"] }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
