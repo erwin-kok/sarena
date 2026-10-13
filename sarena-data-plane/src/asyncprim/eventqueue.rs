@@ -7,7 +7,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use futures::{FutureExt, future::BoxFuture};
+use futures::FutureExt;
 use tokio::{
     sync::{mpsc, oneshot},
     time::Instant,
@@ -16,10 +16,19 @@ use tokio_util::sync::{CancellationToken, DropGuard};
 
 use crate::asyncprim::{Stopped, Termination, util::panic_message};
 
-pub trait Event: Send + 'static {
+/// Owns the state an [`EventQueue`] protects and handles its events, one at a
+/// time. The queue's worker task owns the handler, so `handle` gets exclusive
+/// access to it without any locking.
+pub trait Handler: Send + 'static {
+    type Event: Send + 'static;
     type Output: Send + 'static;
 
-    fn handle(self) -> impl Future<Output = Self::Output> + Send;
+    fn handle(&mut self, event: Self::Event) -> impl Future<Output = Self::Output> + Send;
+
+    /// Names an event in the queue's tracing output.
+    fn event_name(_event: &Self::Event) -> &'static str {
+        std::any::type_name::<Self::Event>()
+    }
 }
 
 /// The queue stopped before the event ran, or the event's handler panicked.
@@ -66,45 +75,55 @@ impl<T> Future for Pending<T> {
     }
 }
 
-struct Job {
-    run: BoxFuture<'static, ()>,
+struct Job<H: Handler> {
+    event: H::Event,
+    reply: oneshot::Sender<H::Output>,
     queued_at: Instant,
-    kind: &'static str,
 }
 
-struct Inner {
+struct Inner<H: Handler> {
     name: Arc<str>,
-    tx: mpsc::Sender<Job>,
+    tx: mpsc::Sender<Job<H>>,
     stop: CancellationToken,
     done: CancellationToken,
 }
 
-impl Drop for Inner {
+impl<H: Handler> Drop for Inner<H> {
     fn drop(&mut self) {
         self.stop.cancel();
     }
 }
 
-/// Runs events one at a time, in the order they were enqueued.
+/// Hands events to a [`Handler`] one at a time, in the order they were
+/// enqueued.
 ///
 /// Cloning gives another handle to the same queue. When the last handle is
 /// dropped, the queue stops: the running event finishes and the rest are
-/// cancelled.
-#[derive(Clone)]
-pub struct EventQueue {
-    inner: Arc<Inner>,
+/// cancelled. If the handler panics, the queue stops too, since its state may
+/// be left half-updated. The handler is dropped once the queue has drained.
+pub struct EventQueue<H: Handler> {
+    inner: Arc<Inner<H>>,
 }
 
-impl EventQueue {
-    /// Creates a queue that buffers up to `capacity` events (at least 1).
-    pub fn new(name: impl Into<String>, capacity: usize) -> Self {
+impl<H: Handler> Clone for EventQueue<H> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl<H: Handler> EventQueue<H> {
+    /// Creates a queue that buffers up to `capacity` events (at least 1) and
+    /// moves `handler` into its worker task.
+    pub fn new(name: impl Into<String>, capacity: usize, handler: H) -> Self {
         let name: Arc<str> = name.into().into();
         let (tx, rx) = mpsc::channel(capacity.max(1));
         let stop = CancellationToken::new();
         let done = CancellationToken::new();
         let guard = done.clone().drop_guard();
 
-        tokio::spawn(worker(name.clone(), rx, stop.clone(), guard));
+        tokio::spawn(worker(name.clone(), handler, rx, stop.clone(), guard));
 
         Self {
             inner: Arc::new(Inner {
@@ -122,7 +141,7 @@ impl EventQueue {
 
     /// Adds an event to the queue, waiting while the queue is full. Returns
     /// once the event is queued; await the returned [`Pending`] for its result.
-    pub async fn enqueue<E: Event>(&self, event: E) -> Result<Pending<E::Output>, Stopped> {
+    pub async fn enqueue(&self, event: H::Event) -> Result<Pending<H::Output>, Stopped> {
         if self.inner.stop.is_cancelled() {
             return Err(Stopped);
         }
@@ -137,10 +156,10 @@ impl EventQueue {
     }
 
     /// Adds an event without waiting. On failure the event is handed back.
-    pub fn try_enqueue<E: Event>(
+    pub fn try_enqueue(
         &self,
-        event: E,
-    ) -> Result<Pending<E::Output>, TryEnqueueError<E>> {
+        event: H::Event,
+    ) -> Result<Pending<H::Output>, TryEnqueueError<H::Event>> {
         if self.inner.stop.is_cancelled() {
             return Err(TryEnqueueError::Stopped(event));
         }
@@ -153,16 +172,6 @@ impl EventQueue {
             Err(mpsc::error::TrySendError::Full(())) => Err(TryEnqueueError::Full(event)),
             Err(mpsc::error::TrySendError::Closed(())) => Err(TryEnqueueError::Stopped(event)),
         }
-    }
-
-    /// Enqueues an async closure as an event.
-    pub async fn run<F, Fut, T>(&self, f: F) -> Result<Pending<T>, Stopped>
-    where
-        F: FnOnce() -> Fut + Send + 'static,
-        Fut: Future<Output = T> + Send + 'static,
-        T: Send + 'static,
-    {
-        self.enqueue(FnEvent(f)).await
     }
 
     /// Stops the queue: the running event finishes, queued events are
@@ -178,7 +187,7 @@ impl EventQueue {
     }
 }
 
-impl fmt::Debug for EventQueue {
+impl<H: Handler> fmt::Debug for EventQueue<H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("EventQueue")
             .field("name", &self.inner.name)
@@ -187,38 +196,20 @@ impl fmt::Debug for EventQueue {
     }
 }
 
-struct FnEvent<F>(F);
-
-impl<F, Fut, T> Event for FnEvent<F>
-where
-    F: FnOnce() -> Fut + Send + 'static,
-    Fut: Future<Output = T> + Send + 'static,
-    T: Send + 'static,
-{
-    type Output = T;
-
-    fn handle(self) -> impl Future<Output = T> + Send {
-        (self.0)()
-    }
-}
-
-fn package<E: Event>(event: E) -> (Job, Pending<E::Output>) {
-    let (tx, rx) = oneshot::channel();
-    let run = Box::pin(async move {
-        let output = event.handle().await;
-        let _ = tx.send(output);
-    });
+fn package<H: Handler>(event: H::Event) -> (Job<H>, Pending<H::Output>) {
+    let (reply, rx) = oneshot::channel();
     let job = Job {
-        run,
+        event,
+        reply,
         queued_at: Instant::now(),
-        kind: std::any::type_name::<E>(),
     };
     (job, Pending(rx))
 }
 
-async fn worker(
+async fn worker<H: Handler>(
     name: Arc<str>,
-    mut rx: mpsc::Receiver<Job>,
+    mut handler: H,
+    mut rx: mpsc::Receiver<Job<H>>,
     stop: CancellationToken,
     _done: DropGuard,
 ) {
@@ -231,16 +222,29 @@ async fn worker(
                 None => break,
             },
         };
+        let kind = H::event_name(&job.event);
         let waited = job.queued_at.elapsed();
         let started = Instant::now();
         // The running event is awaited outside the select, so stopping the
         // queue never interrupts it.
-        if let Err(payload) = AssertUnwindSafe(job.run).catch_unwind().await {
-            tracing::error!(queue = %name, event = job.kind, "event handler {}", panic_message(payload));
+        match AssertUnwindSafe(handler.handle(job.event))
+            .catch_unwind()
+            .await
+        {
+            Ok(output) => {
+                let _ = job.reply.send(output);
+            }
+            Err(payload) => {
+                // The handler may have left its state half-updated; don't hand
+                // it any more events. Dropping the reply cancels this one.
+                tracing::error!(queue = %name, event = kind, "event handler {}, stopping queue", panic_message(payload));
+                stop.cancel();
+                break;
+            }
         }
-        tracing::debug!(queue = %name, event = job.kind, ?waited, took = ?started.elapsed(), "event processed");
+        tracing::debug!(queue = %name, event = kind, ?waited, took = ?started.elapsed(), "event processed");
     }
-    
+
     // Dropping the queued jobs drops their result senders, which resolves
     // every waiting Pending to Err(Cancelled).
     rx.close();

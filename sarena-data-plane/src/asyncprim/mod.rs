@@ -8,7 +8,7 @@ pub use controller::{
     Backoff, BoxError, ControllerObserver, ControllerStatus, Flow, JobFn, Spec, StopFn, job,
     stop_fn,
 };
-pub use eventqueue::{Cancelled, Event, EventQueue, Pending, TryEnqueueError};
+pub use eventqueue::{Cancelled, EventQueue, Handler, Pending, TryEnqueueError};
 pub use manager::{Manager, ManagerBuilder, Registry};
 pub use termination::Termination;
 

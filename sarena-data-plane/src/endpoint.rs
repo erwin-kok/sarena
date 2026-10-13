@@ -1,65 +1,126 @@
-use std::{fs::OpenOptions, io::Write, path::Path};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use tokio::sync::watch;
 
-use crate::{DataPlaneError, EventQueue, Res, id_allocator::EndpointId};
+use crate::{
+    EventQueue, Res,
+    endpoint_events::{EP_CONFIG_NAME, EndpointEvent, EndpointWorker},
+    id_allocator::EndpointId,
+};
 
-const EP_CONFIG_NAME: &str = "ep_config.json";
 const EVENT_QUEUE_CAPACITY: usize = 32;
 
-pub struct Endpoint {
-    id: Option<EndpointId>,
-
-    event_queue: EventQueue,
-}
-
-impl Endpoint {
-    pub fn id(&self) -> Option<EndpointId> {
-        self.id
-    }
-
-    pub fn parse_endpoint(ep_str: &str) -> Res<Self> {
-        let serializable: SerializableEndpoint = ep_str.parse()?;
-        let Some(id) = serializable.id else {
-            return Err(DataPlaneError::GeneralError(
-                "Endpoint did not have an id".to_string(),
-            ));
-        };
-        Ok(Self {
-            id: Some(id),
-            event_queue: EventQueue::new(format!("endpoint-{id}"), EVENT_QUEUE_CAPACITY),
-        })
-    }
-
-    pub fn write_endpoint(&self, prefix: &Path) -> Res<()> {
-        let path = prefix.join(EP_CONFIG_NAME);
-        let mut f = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path)?;
-        let serializable = SerializableEndpoint::from(self);
-        let json = serde_json::to_string(&serializable)?;
-        f.write_all(json.as_bytes())?;
-        Ok(())
-    }
-}
-
-impl From<&Endpoint> for SerializableEndpoint {
-    fn from(endpoint: &Endpoint) -> Self {
-        Self { id: endpoint.id }
-    }
-}
-
+/// The part of an endpoint that is persisted to disk.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub struct SerializableEndpoint {
-    id: Option<EndpointId>,
+pub struct EndpointState {
+    pub id: EndpointId,
 }
 
-impl std::str::FromStr for SerializableEndpoint {
+impl std::str::FromStr for EndpointState {
     type Err = serde_json::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_json::from_str(s)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum EndpointPhase {
+    #[default]
+    Created,
+    Regenerating,
+    Ready,
+    Failed(String),
+}
+
+/// Read-only snapshot of an endpoint, published by its worker after each
+/// change.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EndpointStatus {
+    pub state: EndpointState,
+    pub phase: EndpointPhase,
+    /// Number of successful regenerations.
+    pub generation: u64,
+}
+
+pub struct Endpoint {
+    id: EndpointId,
+    event_queue: EventQueue<EndpointWorker>,
+    status: watch::Receiver<EndpointStatus>,
+}
+
+impl Endpoint {
+    /// Creates an endpoint whose config is persisted under `state_dir`.
+    pub fn new(state: EndpointState, state_dir: impl Into<PathBuf>) -> Self {
+        let id = state.id;
+        let (worker, status) = EndpointWorker::new(state, state_dir.into());
+        Self {
+            id,
+            event_queue: EventQueue::new(format!("endpoint-{id}"), EVENT_QUEUE_CAPACITY, worker),
+            status,
+        }
+    }
+
+    /// Recreates an endpoint from the config persisted under `state_dir`.
+    pub fn restore(state_dir: impl Into<PathBuf>) -> Res<Self> {
+        let state_dir = state_dir.into();
+        let config = std::fs::read_to_string(state_dir.join(EP_CONFIG_NAME))?.parse()?;
+        Ok(Self::new(config, state_dir))
+    }
+
+    pub fn id(&self) -> EndpointId {
+        self.id
+    }
+
+    /// The latest published status. Immediate: reads the snapshot, no event.
+    pub fn status(&self) -> EndpointStatus {
+        self.status.borrow().clone()
+    }
+
+    /// A receiver to wait for status changes, e.g. `changed().await`.
+    pub fn watch_status(&self) -> watch::Receiver<EndpointStatus> {
+        self.status.clone()
+    }
+
+    /// Queues a regeneration and waits until it has run.
+    pub async fn regenerate(&self) -> Res<()> {
+        self.submit(EndpointEvent::Regenerate).await
+    }
+
+    async fn submit(&self, event: EndpointEvent) -> Res<()> {
+        self.event_queue.enqueue(event).await?.await?
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn regenerate_publishes_status_and_persists_config() {
+        let dir = std::env::temp_dir().join(format!("sarena-ep-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let state: EndpointState = r#"{"id":42}"#.parse().unwrap();
+        let ep = Endpoint::new(state.clone(), &dir);
+        assert_eq!(ep.status().phase, EndpointPhase::Created);
+
+        let mut status = ep.watch_status();
+        ep.regenerate().await.unwrap();
+        ep.regenerate().await.unwrap();
+
+        assert!(status.has_changed().unwrap());
+        let now = status.borrow_and_update().clone();
+        assert_eq!(now.phase, EndpointPhase::Ready);
+        assert_eq!(now.generation, 2);
+        assert_eq!(ep.status(), now);
+
+        let restored = Endpoint::restore(&dir).unwrap();
+        assert_eq!(restored.id(), ep.id());
+        assert_eq!(restored.status().state, state);
+        assert_eq!(restored.status().phase, EndpointPhase::Created);
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

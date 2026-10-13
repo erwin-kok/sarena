@@ -23,12 +23,6 @@ impl EndpointManager {
     }
 
     pub fn add_endpoint(endpoint: Endpoint) -> Res<()> {
-        if let Some(id) = endpoint.id() {
-            return Err(DataPlaneError::GeneralError(format!(
-                "Endpoint has already an id: {id}"
-            )));
-        }
-
         Ok(())
     }
 

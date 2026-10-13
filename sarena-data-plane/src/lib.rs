@@ -2,6 +2,7 @@ mod asyncprim;
 mod config;
 mod container;
 mod endpoint;
+mod endpoint_events;
 mod endpoint_manager;
 mod error;
 mod id_allocator;
