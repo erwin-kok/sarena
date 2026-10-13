@@ -23,10 +23,17 @@ sarena-utils = { path = "../sarena-utils" }
 async-trait = { workspace = true }
 aya = { workspace = true }
 aya-log = { workspace = true }
+futures = { workspace = true }
 ipnet = { workspace = true }
 log = { workspace = true }
 network-types = { workspace = true, default-features = false }
 nix = { workspace = true, features = ["poll"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "test-util", "time"] }

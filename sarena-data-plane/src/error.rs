@@ -66,6 +66,15 @@ pub enum DataPlaneError {
     #[error("cannot shut down data plane while other clones are still alive")]
     StillShared,
 
+    #[error("json error: {0}")]
+    JsonError(#[from] serde_json::Error),
+
+    #[error("json error: {0}")]
+    FileError(#[from] std::io::Error),
+
+    #[error("general error: {0}")]
+    GeneralError(String),
+
     #[cfg(any(test, feature = "test-util"))]
     #[error("injected failure: {0}")]
     Injected(String),

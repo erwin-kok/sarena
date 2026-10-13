@@ -1,6 +1,10 @@
+mod asyncprim;
 mod config;
 mod container;
+mod endpoint;
+mod endpoint_manager;
 mod error;
+mod id_allocator;
 mod loader;
 mod maps;
 mod models;
@@ -10,6 +14,7 @@ mod setup;
 mod soft_dataplane;
 
 use async_trait::async_trait;
+pub use asyncprim::*;
 pub use config::DataPlaneConfig;
 pub use container::add_container;
 pub use error::{DataPlaneError, Res};
