@@ -6,13 +6,11 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    DataPlaneError, Res,
-    endpoint_worker::{
-        EndpointCommand, EndpointPersist, EndpointPhase, EndpointState, EndpointWorker,
-    },
-    id_allocator::EndpointId,
+use super::{
+    EndpointId,
+    worker::{EndpointCommand, EndpointPersist, EndpointPhase, EndpointState, EndpointWorker},
 };
+use crate::{DataPlaneError, Res};
 
 const EVENT_QUEUE_CAPACITY: usize = 32;
 

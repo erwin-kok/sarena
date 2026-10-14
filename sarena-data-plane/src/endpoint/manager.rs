@@ -3,11 +3,8 @@ use std::{
     sync::{RwLock, RwLockReadGuard},
 };
 
-use crate::{
-    DataPlaneError, Res,
-    endpoint::Endpoint,
-    id_allocator::{EndpointId, IdAllocator},
-};
+use super::{Endpoint, EndpointId, id_allocator::IdAllocator};
+use crate::{DataPlaneError, Res};
 
 pub struct EndpointManager {
     endpoints: RwLock<HashMap<EndpointId, Endpoint>>,

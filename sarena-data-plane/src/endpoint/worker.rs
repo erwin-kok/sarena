@@ -12,7 +12,8 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
-use crate::{DataPlaneError, Res, id_allocator::EndpointId};
+use super::EndpointId;
+use crate::{DataPlaneError, Res};
 
 pub(crate) const EP_CONFIG_NAME: &str = "ep_config.json";
 
