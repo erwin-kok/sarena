@@ -203,7 +203,7 @@ mod tests {
                 _ => None,
             })
             .unwrap();
-        assert_eq!(loaded_maps.len(), 5);
+        assert_eq!(loaded_maps.len(), 4);
 
         loader
             .remove_loader_endpoint(LoaderEndpointKind::Container, &l)
@@ -351,8 +351,8 @@ mod tests {
             .map(|(name, _)| name.clone())
             .collect();
 
-        assert_eq!(pinned.len(), 3);
-        for name in ["lxc_map", "conntrack_map", "metrics_map"] {
+        assert_eq!(pinned.len(), 2);
+        for name in ["lxc_map", "metrics_map"] {
             assert!(pinned.iter().any(|n| n == name), "missing {name}");
         }
     }

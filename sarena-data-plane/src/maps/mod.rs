@@ -1,5 +1,4 @@
 mod calls_map;
-mod conntrack_map;
 mod endpoint_config_map;
 mod lxc_map;
 mod metrics_map;
@@ -14,7 +13,6 @@ pub use metrics_map::MetricsMap;
 pub enum GlobalMap {
     LxcMap,
     MetricsMap,
-    ConnTrackMap,
 }
 
 #[allow(clippy::enum_variant_names)]
@@ -29,7 +27,6 @@ impl GlobalMap {
         match self {
             GlobalMap::LxcMap => lxc_map::LXC_MAP_NAME,
             GlobalMap::MetricsMap => metrics_map::METRICS_MAP_NAME,
-            GlobalMap::ConnTrackMap => conntrack_map::CONNTRACK_MAP,
         }
     }
 }

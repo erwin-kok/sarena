@@ -129,7 +129,7 @@ impl LoaderHandle {
             .send(build(reply))
             .await
             .map_err(|_| DataPlaneError::ActorGone)?;
-        rx.await.map_err(|_| DataPlaneError::ActorGone)?
+        rx.await.map_err(|_| DataPlaneError::ActorCancelled)?
     }
 }
 

@@ -99,7 +99,7 @@ struct IdCache {
 impl IdCache {
     fn new(min_id: EndpointId, max_id: EndpointId) -> Self {
         Self {
-            ids: (MIN_ID.0..=MAX_ID.0).map(EndpointId).collect(),
+            ids: (min_id.0..=max_id.0).map(EndpointId).collect(),
             leased: HashSet::new(),
         }
     }

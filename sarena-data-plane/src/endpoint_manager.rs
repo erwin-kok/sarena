@@ -14,6 +14,12 @@ pub struct EndpointManager {
     id_allocator: IdAllocator,
 }
 
+impl Default for EndpointManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EndpointManager {
     pub fn new() -> Self {
         Self {
@@ -22,7 +28,7 @@ impl EndpointManager {
         }
     }
 
-    pub fn add_endpoint(endpoint: Endpoint) -> Res<()> {
+    pub fn add_endpoint(_endpoint: Endpoint) -> Res<()> {
         Ok(())
     }
 
@@ -48,7 +54,7 @@ impl EndpointManager {
         self.id_allocator.release(id)
     }
 
-    pub fn update_id(&self, ep: &Endpoint) {}
+    pub fn update_id(&self, _ep: &Endpoint) {}
 
     pub fn remove_id(&self, id: EndpointId) {
         self.endpoints.write().expect("RwLock poisoned").remove(&id);

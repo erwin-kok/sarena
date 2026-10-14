@@ -1,7 +1,8 @@
 use nix::unistd::getuid;
 
 pub fn require_root_privilege(cmd: &str) {
-    if !getuid().is_root() {
-        panic!("Please run {:?} command with root privileges.", cmd);
-    }
+    assert!(
+        getuid().is_root(),
+        "Please run {cmd:?} command with root privileges.",
+    );
 }

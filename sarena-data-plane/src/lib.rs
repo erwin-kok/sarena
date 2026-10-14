@@ -1,23 +1,21 @@
-mod asyncprim;
 mod config;
 mod container;
 mod endpoint;
-mod endpoint_events;
 mod endpoint_manager;
+mod endpoint_worker;
 mod error;
 mod id_allocator;
 mod loader;
 mod maps;
 mod models;
 mod netlink;
-mod reconciler;
 mod setup;
 mod soft_dataplane;
 
 use async_trait::async_trait;
-pub use asyncprim::*;
 pub use config::DataPlaneConfig;
 pub use container::add_container;
+pub use endpoint_manager::EndpointManager;
 pub use error::{DataPlaneError, Res};
 pub use loader::{AyaBackend, Loader, LoaderEndpointKind, LoaderHandle, PinRoot};
 pub use maps::{CallsMap, EndpointConfigMap, LxcMap, MetricsMap};

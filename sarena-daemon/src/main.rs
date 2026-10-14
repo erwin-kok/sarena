@@ -14,13 +14,11 @@ use clap_markdown_generator::{
     generate_markdown_for_command_with_options,
 };
 use ipnet::{IpNet, Ipv4Net};
-use sarena_data_plane::{DataPlane as _, DataPlaneConfig, DefaultDataPlane};
+use sarena_api_types_v1::daemon::SarenaVersion;
+use sarena_data_plane::{DataPlane as _, DataPlaneConfig, DefaultDataPlane, EndpointManager};
 use sarena_services::setup_services;
 use sarena_utils::{
-    TracingConfig, logging,
-    metrics::init_metrics,
-    root::require_root_privilege,
-    version::{self, SarenaVersion},
+    TracingConfig, logging, metrics::init_metrics, root::require_root_privilege, version,
 };
 use tokio::{
     signal::unix::{SignalKind, signal},
@@ -40,11 +38,11 @@ const DEFAULT_SOCKET_PATH: &str = "/tmp/sarena.sock";
 const TCP_PORT: u16 = 3000;
 
 const BANNER: [&str; 5] = [
-    r#" ____    _    ____  _____ _   _    _    "#,
-    r#"/ ___|  / \  |  _ \| ____| \ | |  / \   "#,
-    r#"\___ \ / _ \ | |_) |  _| |  \| | / _ \  "#,
-    r#" ___) / ___ \|  _ <| |___| |\  |/ ___ \ "#,
-    r#"|____/_/   \_\_| \_\_____|_| \_|_/   \_\"#,
+    r" ____    _    ____  _____ _   _    _    ",
+    r"/ ___|  / \  |  _ \| ____| \ | |  / \   ",
+    r"\___ \ / _ \ | |_) |  _| |  \| | / _ \  ",
+    r" ___) / ___ \|  _ <| |___| |\  |/ ___ \ ",
+    r"|____/_/   \_\_| \_\_____|_| \_|_/   \_\",
 ];
 
 // 256-color codes, blue to purple
@@ -77,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
     process::exit(0)
 }
 
-async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
+async fn init_daemon(_cli: Cli) -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     let config = config::load_config(&cli)?;
@@ -138,6 +136,8 @@ async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
                 .map_err(anyhow::Error::from)
         });
     }
+
+    let _endpoint_manager = EndpointManager::new();
 
     // Wait for either an OS shutdown signal or a task exiting unexpectedly
     // (e.g. panicking, or returning before we asked it to stop). Whichever

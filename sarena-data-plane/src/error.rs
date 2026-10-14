@@ -3,8 +3,6 @@ use std::path::PathBuf;
 use sarena_infra::InfraError;
 use thiserror::Error;
 
-use crate::{Cancelled, Stopped};
-
 #[derive(Debug)]
 pub struct HookFailure {
     pub hook_name: &'static str,
@@ -62,14 +60,11 @@ pub enum DataPlaneError {
     #[error("{} required hook(s) failed to attach", .0.len())]
     Partial(Vec<HookFailure>),
 
-    #[error("loader actor is no longer running")]
+    #[error("actor is no longer running")]
     ActorGone,
 
-    #[error("event queue is stopped")]
-    QueueStopped(#[from] Stopped),
-
-    #[error("event was cancelled before it completed")]
-    EventCancelled(#[from] Cancelled),
+    #[error("actor dropped the request before it completed")]
+    ActorCancelled,
 
     #[error("cannot shut down data plane while other clones are still alive")]
     StillShared,

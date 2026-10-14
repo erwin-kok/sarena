@@ -1,72 +1,56 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
-use serde::{Deserialize, Serialize};
-use tokio::sync::watch;
+use tokio::{
+    sync::{mpsc, oneshot, watch},
+    task::JoinHandle,
+};
+use tokio_util::sync::CancellationToken;
 
 use crate::{
-    EventQueue, Res,
-    endpoint_events::{EP_CONFIG_NAME, EndpointEvent, EndpointWorker},
+    DataPlaneError, Res,
+    endpoint_worker::{
+        EndpointCommand, EndpointPersist, EndpointPhase, EndpointState, EndpointWorker,
+    },
     id_allocator::EndpointId,
 };
 
 const EVENT_QUEUE_CAPACITY: usize = 32;
 
-/// The part of an endpoint that is persisted to disk.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub struct EndpointState {
-    pub id: EndpointId,
-}
-
-impl std::str::FromStr for EndpointState {
-    type Err = serde_json::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s)
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub enum EndpointPhase {
-    #[default]
-    Created,
-    Regenerating,
-    Ready,
-    Failed(String),
-}
-
-/// Read-only snapshot of an endpoint, published by its worker after each
-/// change.
-#[derive(Debug, Clone, PartialEq)]
-pub struct EndpointStatus {
-    pub state: EndpointState,
-    pub phase: EndpointPhase,
-    /// Number of successful regenerations.
-    pub generation: u64,
-}
-
 pub struct Endpoint {
     id: EndpointId,
-    event_queue: EventQueue<EndpointWorker>,
-    status: watch::Receiver<EndpointStatus>,
+    command_tx: mpsc::Sender<EndpointCommand>,
+    status_rx: watch::Receiver<EndpointState>,
+    stop: CancellationToken,
+    join_handle: JoinHandle<()>,
 }
 
 impl Endpoint {
-    /// Creates an endpoint whose config is persisted under `state_dir`.
-    pub fn new(state: EndpointState, state_dir: impl Into<PathBuf>) -> Self {
-        let id = state.id;
-        let (worker, status) = EndpointWorker::new(state, state_dir.into());
+    pub fn new(persist: EndpointPersist, state_dir: impl Into<PathBuf>) -> Self {
+        let state = EndpointState {
+            persist: persist.clone(),
+            phase: EndpointPhase::Created,
+            generation: 0,
+        };
+        let id = persist.id;
+        let (command_tx, command_rx) = mpsc::channel(EVENT_QUEUE_CAPACITY);
+        let (status_tx, status_rx) = watch::channel(state.clone());
+        let stop = CancellationToken::new();
+        let join_handle =
+            EndpointWorker::new(state, state_dir.into(), command_rx, status_tx, stop.clone())
+                .spawn();
         Self {
             id,
-            event_queue: EventQueue::new(format!("endpoint-{id}"), EVENT_QUEUE_CAPACITY, worker),
-            status,
+            command_tx,
+            status_rx,
+            stop,
+            join_handle,
         }
     }
 
-    /// Recreates an endpoint from the config persisted under `state_dir`.
     pub fn restore(state_dir: impl Into<PathBuf>) -> Res<Self> {
         let state_dir = state_dir.into();
-        let config = std::fs::read_to_string(state_dir.join(EP_CONFIG_NAME))?.parse()?;
-        Ok(Self::new(config, state_dir))
+        let state = EndpointPersist::read_state(&state_dir)?;
+        Ok(Self::new(state, state_dir))
     }
 
     pub fn id(&self) -> EndpointId {
@@ -74,22 +58,62 @@ impl Endpoint {
     }
 
     /// The latest published status. Immediate: reads the snapshot, no event.
-    pub fn status(&self) -> EndpointStatus {
-        self.status.borrow().clone()
+    pub fn status(&self) -> EndpointState {
+        self.status_rx.borrow().clone()
     }
 
     /// A receiver to wait for status changes, e.g. `changed().await`.
-    pub fn watch_status(&self) -> watch::Receiver<EndpointStatus> {
-        self.status.clone()
+    pub fn watch_status(&self) -> watch::Receiver<EndpointState> {
+        self.status_rx.clone()
+    }
+
+    /// Tells the worker to stop: new commands are refused, the ones already
+    /// queued still run. Returns immediately, so a caller can stop many
+    /// endpoints before waiting on any of them.
+    pub fn shutdown(&self) {
+        self.stop.cancel();
+    }
+
+    /// Waits for the worker to drain its queue and exit. Dropping the command
+    /// sender here means the worker exits even if [`shutdown`](Self::shutdown)
+    /// was never called. If that takes longer than `timeout`, the worker is
+    /// aborted: the running command is interrupted, the remaining ones are
+    /// cancelled, and this returns an error.
+    pub async fn wait_for_shutdown(self, timeout: Duration) -> Res<()> {
+        let Self {
+            id,
+            command_tx,
+            mut join_handle,
+            ..
+        } = self;
+        drop(command_tx);
+        if let Ok(joined) = tokio::time::timeout(timeout, &mut join_handle).await {
+            joined.map_err(|e| DataPlaneError::GeneralError(format!("endpoint worker failed: {e}")))
+        } else {
+            join_handle.abort();
+            Err(DataPlaneError::GeneralError(format!(
+                "endpoint {} did not drain within {timeout:?}, aborted",
+                u64::from(id)
+            )))
+        }
     }
 
     /// Queues a regeneration and waits until it has run.
     pub async fn regenerate(&self) -> Res<()> {
-        self.submit(EndpointEvent::Regenerate).await
+        self.call(|reply| EndpointCommand::Regenerate { reply })
+            .await
     }
 
-    async fn submit(&self, event: EndpointEvent) -> Res<()> {
-        self.event_queue.enqueue(event).await?.await?
+    async fn call<T>(
+        &self,
+        build: impl FnOnce(oneshot::Sender<Res<T>>) -> EndpointCommand,
+    ) -> Res<T> {
+        let (reply, rx) = oneshot::channel();
+        self.command_tx
+            .send(build(reply))
+            .await
+            .map_err(|_| DataPlaneError::ActorGone)?;
+        rx.await.map_err(|_| DataPlaneError::ActorCancelled)?
     }
 }
 
@@ -97,12 +121,19 @@ impl Endpoint {
 mod tests {
     use super::*;
 
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("sarena-ep-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
     #[tokio::test]
     async fn regenerate_publishes_status_and_persists_config() {
-        let dir = std::env::temp_dir().join(format!("sarena-ep-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = temp_dir("regen");
 
-        let state: EndpointState = r#"{"id":42}"#.parse().unwrap();
+        let state = EndpointPersist {
+            id: EndpointId::new(42),
+        };
         let ep = Endpoint::new(state.clone(), &dir);
         assert_eq!(ep.status().phase, EndpointPhase::Created);
 
@@ -118,9 +149,95 @@ mod tests {
 
         let restored = Endpoint::restore(&dir).unwrap();
         assert_eq!(restored.id(), ep.id());
-        assert_eq!(restored.status().state, state);
+        assert_eq!(restored.status().persist, state);
         assert_eq!(restored.status().phase, EndpointPhase::Created);
 
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn shutdown_runs_commands_queued_before_stop() {
+        let dir = temp_dir("drain");
+        let state = EndpointState {
+            persist: EndpointPersist {
+                id: EndpointId::new(7),
+            },
+            phase: EndpointPhase::Created,
+            generation: 0,
+        };
+        let (command_tx, command_rx) = mpsc::channel(EVENT_QUEUE_CAPACITY);
+        let (status_tx, status_rx) = watch::channel(state.clone());
+
+        let mut replies = Vec::new();
+        for _ in 0..3 {
+            let (reply, rx) = oneshot::channel();
+            command_tx
+                .try_send(EndpointCommand::Regenerate { reply })
+                .unwrap();
+            replies.push(rx);
+        }
+        // Stopped before the worker ever runs: everything queued must drain.
+        let stop = CancellationToken::new();
+        stop.cancel();
+        EndpointWorker::new(state, dir.clone(), command_rx, status_tx, stop)
+            .spawn()
+            .await
+            .unwrap();
+
+        for rx in replies {
+            rx.await.unwrap().unwrap();
+        }
+        assert_eq!(status_rx.borrow().generation, 3);
+        assert!(command_tx.is_closed());
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn wait_for_shutdown_without_shutdown_exits_once_sender_is_dropped() {
+        let dir = temp_dir("drop");
+        let ep = Endpoint::new(
+            EndpointPersist {
+                id: EndpointId::new(8),
+            },
+            &dir,
+        );
+        ep.regenerate().await.unwrap();
+        ep.wait_for_shutdown(Duration::from_secs(5)).await.unwrap();
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn wait_for_shutdown_times_out_aborts_and_cancels_queued_commands() {
+        let (command_tx, command_rx) = mpsc::channel(EVENT_QUEUE_CAPACITY);
+        let (_status_tx, status_rx) = watch::channel(EndpointState {
+            persist: EndpointPersist {
+                id: EndpointId::new(9),
+            },
+            phase: EndpointPhase::Created,
+            generation: 0,
+        });
+        // A worker stuck in a command: it holds the queue but never drains it.
+        let join_handle = tokio::spawn(async move {
+            let _command_rx = command_rx;
+            std::future::pending::<()>().await;
+        });
+        let ep = Endpoint {
+            id: EndpointId::new(9),
+            command_tx: command_tx.clone(),
+            status_rx,
+            stop: CancellationToken::new(),
+            join_handle,
+        };
+        let (reply, rx) = oneshot::channel();
+        command_tx
+            .try_send(EndpointCommand::Regenerate { reply })
+            .unwrap();
+
+        ep.shutdown();
+        assert!(ep.wait_for_shutdown(Duration::from_secs(1)).await.is_err());
+        // The abort dropped the queue, and with it the reply sender.
+        assert!(rx.await.is_err());
     }
 }

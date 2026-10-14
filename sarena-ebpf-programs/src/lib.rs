@@ -2,7 +2,6 @@
 #![no_builtins]
 
 mod arp;
-mod conntrack;
 mod constants;
 mod container;
 mod endpoint;

@@ -9,10 +9,6 @@ use sarena_shared::{Ipv4Key, Ipv4KeyExt as _, OBS_POINT_CONTAINER_FORWARD};
 
 use crate::{
     arp::process_arp,
-    conntrack::{
-        conntrack::{ConnTrackVerdict, ct_create, ct_lookup, ct_update},
-        tuple::ConnTrackTuple,
-    },
     endpoint::{get_endpoint_config, lookup_ipv4_endpoint},
     error::{Res, Verdict},
     ipv4::is_fragmented,
@@ -58,8 +54,6 @@ fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
         return Ok(Verdict::Drop);
     }
 
-    conntrack(ctx)?;
-
     {
         let eth: &EthHdr = unsafe { ref_at(ctx, 0)? };
         debug!(
@@ -79,25 +73,4 @@ fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
     };
 
     Ok(Verdict::Pass)
-}
-
-#[inline(always)]
-fn conntrack(ctx: &TcContext) -> Res<()> {
-    let now = 0; // unsafe { bpf_ktime_get_ns() };
-
-    let tuple = ConnTrackTuple::new(ctx)?;
-    tuple.print_key();
-
-    match ct_lookup(&tuple, now) {
-        Some((ConnTrackVerdict::Seen(dir), _)) => {
-            let _ = ct_update(&tuple, dir, now);
-        }
-        _ if tuple.is_related => {} /* ICMP error about a flow we don't track: pass through */
-        // untouched
-        _ => {
-            ct_create(&tuple, now, None, 0)?;
-        }
-    }
-
-    Ok(())
 }

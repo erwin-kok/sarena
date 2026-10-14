@@ -36,7 +36,7 @@ pub async fn run(app: &App, format: Option<&OutputFormat>) -> Result<()> {
             f,
         )?;
     } else {
-        println!("client version: {}", client_version);
+        println!("client version: {client_version}");
         println!("daemon version: {}", debuginfo.version);
     }
 
