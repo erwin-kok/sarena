@@ -1,3 +1,4 @@
+pub mod cli_output;
 pub mod logging;
 pub mod metrics;
 pub mod root;

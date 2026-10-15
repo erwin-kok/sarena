@@ -1,6 +1,7 @@
-use std::{path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Parser, Subcommand};
+use sarena_utils::cli_output::OutputArgs;
 
 pub mod bpf;
 pub mod completion;
@@ -44,41 +45,6 @@ pub struct Cli {
     pub command: Commands,
 }
 
-#[derive(Args, Debug)]
-pub struct OutputArgs {
-    /// Render the result as machine-readable output instead of a table:
-    /// `json`, `yaml`, or `jsonpath=<expression>`.
-    #[arg(short = 'o', long)]
-    pub output: Option<OutputFormat>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum OutputFormat {
-    Json,
-    Yaml,
-    JsonPath(String),
-}
-
-impl FromStr for OutputFormat {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "json" => Ok(Self::Json),
-            "yaml" => Ok(Self::Yaml),
-            value => {
-                if let Some(expression) = value.strip_prefix("jsonpath=") {
-                    Ok(Self::JsonPath(expression.to_string()))
-                } else {
-                    Err(format!(
-                        "invalid output format: {value}; expected json, yaml, or jsonpath=<expression>"
-                    ))
-                }
-            }
-        }
-    }
-}
-
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Direct access to local BPF maps
@@ -92,4 +58,7 @@ pub enum Commands {
 
     /// Print version, git commit, and build date/time
     Version(OutputArgs),
+
+    /// Path to cmdref output directory.
+    CmdRef { path: PathBuf },
 }

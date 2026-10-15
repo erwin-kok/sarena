@@ -21,7 +21,7 @@ sarena-utils = { path = "../sarena-utils" }
 anyhow = { workspace = true }
 clap = { workspace = true }
 clap-markdown-generator = { workspace = true }
-config = { workspace = true }
+config = { workspace = true, features = ["toml", "json", "yaml"] }
 ipnet = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

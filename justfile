@@ -117,7 +117,7 @@ run-daemon *ARGS: build-ebpf
     sudo "$exe" {{ARGS}}
 
 # Run the sarena-cli, forwarding all arguments to it (e.g. `just sarena-cli service list`)
-sarena-cli *ARGS: build-ebpf
+run-cli *ARGS: build-ebpf
     cargo run --bin sarena-cli -- {{ARGS}}
 
 # Run all integration tests in the sarena-infra package (requires root)

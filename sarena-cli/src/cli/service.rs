@@ -1,7 +1,6 @@
 use clap::{Args, Subcommand};
+use sarena_utils::cli_output::OutputArgs;
 use tracing::info;
-
-use crate::cli::OutputArgs;
 
 #[derive(Args, Debug)]
 pub struct ServiceCommand {

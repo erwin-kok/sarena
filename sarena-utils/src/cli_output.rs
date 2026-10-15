@@ -1,8 +1,44 @@
+use std::str::FromStr;
+
 use anyhow::Result;
+use clap::Args;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::cli::OutputFormat;
+#[derive(Args, Debug)]
+pub struct OutputArgs {
+    /// Render the result as machine-readable output instead of a table:
+    /// `json`, `yaml`, or `jsonpath=<expression>`.
+    #[arg(short = 'o', long)]
+    pub output: Option<OutputFormat>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OutputFormat {
+    Json,
+    Yaml,
+    JsonPath(String),
+}
+
+impl FromStr for OutputFormat {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "json" => Ok(Self::Json),
+            "yaml" => Ok(Self::Yaml),
+            value => {
+                if let Some(expression) = value.strip_prefix("jsonpath=") {
+                    Ok(Self::JsonPath(expression.to_string()))
+                } else {
+                    Err(format!(
+                        "invalid output format: {value}; expected json, yaml, or jsonpath=<expression>"
+                    ))
+                }
+            }
+        }
+    }
+}
 
 pub fn print_output<T>(data: &T, output: &OutputFormat) -> Result<()>
 where

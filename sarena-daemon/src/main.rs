@@ -18,7 +18,12 @@ use sarena_api_types_v1::daemon::SarenaVersion;
 use sarena_data_plane::{DataPlane as _, DataPlaneConfig, DefaultDataPlane, EndpointManager};
 use sarena_services::setup_services;
 use sarena_utils::{
-    TracingConfig, logging, metrics::init_metrics, root::require_root_privilege, version,
+    TracingConfig,
+    cli_output::{self, OutputFormat},
+    logging,
+    metrics::init_metrics,
+    root::require_root_privilege,
+    version,
 };
 use tokio::{
     signal::unix::{SignalKind, signal},
@@ -27,7 +32,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
-use crate::cli::Cli;
+use crate::cli::{Cli, Commands};
 
 mod cli;
 mod config;
@@ -50,34 +55,50 @@ const SHADES: [u8; 5] = [33, 69, 105, 141, 177];
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
-    let command = Cli::command();
-    if let Some(cmd_ref) = cli.cmd_ref {
-        let markdown = generate_markdown_for_command_with_options(
-            command,
-            MarkdownOptions {
-                include_subcommands: true,
-                include_toc: true,
-                command_heading: CommandHeadingStyle::Display,
-                parameter_heading: ParameterHeadingStyle::Name,
-                parameter_content: ParameterContentStyle::Text,
-                ..MarkdownOptions::default()
-            },
-        );
-        fs::write(cmd_ref, markdown)?;
-        process::exit(0)
+    let mut cli = Cli::parse();
+    let command = cli.command.take().unwrap_or(Commands::Start);
+    match command {
+        Commands::Start => {
+            let command = Cli::command();
+            require_root_privilege(command.get_name());
+            init_daemon(cli).await?;
+        }
+        Commands::Version(args) => version(args.output.as_ref()),
+        Commands::CmdRef { path } => {
+            let command = Cli::command();
+            let markdown = generate_markdown_for_command_with_options(
+                command,
+                MarkdownOptions {
+                    include_subcommands: true,
+                    include_toc: true,
+                    command_heading: CommandHeadingStyle::Display,
+                    parameter_heading: ParameterHeadingStyle::Name,
+                    parameter_content: ParameterContentStyle::Text,
+                    ..MarkdownOptions::default()
+                },
+            );
+            fs::write(path, markdown)?;
+        }
     }
-
-    require_root_privilege(command.get_name());
-
-    init_daemon(cli).await?;
-
     process::exit(0)
 }
 
-async fn init_daemon(_cli: Cli) -> anyhow::Result<()> {
-    let cli = Cli::parse();
+fn version(format: Option<&OutputFormat>) {
+    let client_version = SarenaVersion {
+        version: version::VERSION.to_owned(),
+        git_hash: version::GIT_HASH.to_owned(),
+        build_date: version::BUILD_DATE.to_owned(),
+        os: consts::OS.to_owned(),
+        arch: consts::ARCH.to_owned(),
+    };
+    if let Some(f) = format {
+        let _ = cli_output::print_output(&client_version, f);
+    } else {
+        println!("client version: {client_version}");
+    }
+}
 
+async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
     let config = config::load_config(&cli)?;
 
     logging::init_tracing(&TracingConfig {

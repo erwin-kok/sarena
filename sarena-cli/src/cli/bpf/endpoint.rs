@@ -7,15 +7,14 @@ use std::{
 use anyhow::{Context as _, Result};
 use clap::{Args, Subcommand};
 use sarena_data_plane::{LxcMap, PinRoot};
-use sarena_utils::root::require_root_privilege;
+use sarena_utils::{
+    cli_output::{self, OutputFormat},
+    root::require_root_privilege,
+};
 use tabwriter::TabWriter;
 use tracing::info;
 
-use crate::{
-    app::App,
-    cli::{OutputArgs, OutputFormat},
-    output::print_output,
-};
+use crate::{app::App, cli::OutputArgs};
 
 #[derive(Args, Debug)]
 pub struct BpfEndpointCommand {
@@ -58,7 +57,7 @@ fn list_endpoints(app: &App, format: Option<&OutputFormat>) -> Result<()> {
         .collect();
 
     if let Some(f) = format {
-        print_output(&endpoints, f)
+        cli_output::print_output(&endpoints, f)
     } else {
         print_table(&endpoints)
     }

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
+use sarena_utils::cli_output::OutputArgs;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -29,7 +30,18 @@ pub struct Cli {
     #[arg(short = 'F', long, global = true, value_parser = ["text", "json"])]
     pub log_format: Option<String>,
 
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Commands {
+    /// Start daemon
+    Start,
+
+    /// Print version, git commit, and build date/time
+    Version(OutputArgs),
+
     /// Path to cmdref output directory.
-    #[arg(long, global = true)]
-    pub cmd_ref: Option<PathBuf>,
+    CmdRef { path: PathBuf },
 }

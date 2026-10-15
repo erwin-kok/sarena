@@ -8,7 +8,6 @@ use crate::{app::App, cli::Cli};
 mod app;
 mod cli;
 mod config;
-mod output;
 
 #[tokio::main]
 async fn main() -> Result<()> {

@@ -4,16 +4,15 @@ use anyhow::{Context as _, Result};
 use clap::{Args, Subcommand};
 use sarena_data_plane::{MetricsMap, PinRoot};
 use sarena_shared::write_obs_point;
-use sarena_utils::root::require_root_privilege;
+use sarena_utils::{
+    cli_output::{self, OutputArgs, OutputFormat},
+    root::require_root_privilege,
+};
 use serde::Serialize;
 use tabwriter::TabWriter;
 use tracing::info;
 
-use crate::{
-    app::App,
-    cli::{OutputArgs, OutputFormat},
-    output::print_output,
-};
+use crate::app::App;
 
 #[derive(Args, Debug)]
 pub struct BpfMetricsCommand {
@@ -65,7 +64,7 @@ fn list_metrics(app: &App, format: Option<&OutputFormat>) -> Result<()> {
     rows.sort_unstable_by_key(|r| r.obs_point);
 
     if let Some(f) = format {
-        print_output(&rows, f)
+        cli_output::print_output(&rows, f)
     } else {
         print_table(&rows)
     }

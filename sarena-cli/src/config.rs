@@ -41,11 +41,17 @@ fn default_pin_root() -> PathBuf {
 pub fn load_config(cli: &Cli) -> anyhow::Result<Config> {
     let mut builder = ConfigLoader::builder();
 
-    if let Some(path) = &cli.config {
+   if let Some(path) = &cli.config {
         builder = builder.add_source(File::from(path.clone()));
     } else if let Some(home) = home_dir() {
-        let path = home.join(".sarena");
-        builder = builder.add_source(File::from(path).required(false));
+        let path = ["toml", "json", "yaml", "yml"]
+            .iter()
+            .map(|ext| home.join(".sarena").join(format!("sarena-cli.{ext}")))
+            .find(|path| path.is_file());
+
+        if let Some(path) = path {
+            builder = builder.add_source(File::from(path));
+        }
     }
 
     builder = builder.add_source(Environment::with_prefix("SARENA").separator("_"));
