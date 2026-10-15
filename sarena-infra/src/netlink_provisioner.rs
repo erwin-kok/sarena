@@ -36,21 +36,13 @@ impl NetworkProvisioner for NetlinkNetworkProvisioner {
     }
 
     async fn create_veth(&mut self, spec: VethSpec) -> Res<VethPair<Self::LinkType>> {
-        let (mut host, mut peer) = create_veth_pair(&spec.host_ifname, &spec.peer_ifname).await?;
-
-        if let Some(mac) = spec.host_mac {
-            host.set_mac(mac).await?;
-        }
-        if let Some(mac) = spec.peer_mac {
-            peer.set_mac(mac).await?;
-        }
-
-        // Re-fetch both ends: a MAC change invalidates the `Link`
-        // snapshots above (`.mac` is now stale), and the final MACs are
-        // needed either way -- the ones just set, or kernel-random ones if
-        // the caller didn't ask for specific values.
-        let host = self.get_link(&spec.host_ifname).await?;
-        let peer = self.get_link(&spec.peer_ifname).await?;
+        let (host, peer) = create_veth_pair(
+            &spec.host_ifname,
+            &spec.peer_ifname,
+            spec.host_mac,
+            spec.peer_mac,
+        )
+        .await?;
 
         Ok(VethPair { host, peer })
     }

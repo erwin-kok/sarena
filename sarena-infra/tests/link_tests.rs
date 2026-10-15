@@ -106,11 +106,16 @@ async fn veth_pair_create_and_configure() {
         let peer_netns = Netns::open_path(&peer_ns).expect("open temp netns");
         let name = test_support::unique_name("dpid0-");
         let peer_name = test_support::unique_name("dpid1-");
+        // The host end lives in the root netns, where udev's
+        // `MACAddressPolicy=persistent` rewrites kernel-random MACs
+        // asynchronously after creation -- racing with the `set_mac` below.
+        // Creating it with an explicit MAC opts it out of that policy.
+        let initial_mac = MacAddress::parse("02:00:00:00:00:01").expect("valid MAC literal");
         let pair = provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
-                host_mac: None,
+                host_mac: Some(initial_mac),
                 peer_mac: None,
             })
             .await
@@ -128,6 +133,7 @@ async fn veth_pair_create_and_configure() {
         assert_eq!(host_snapshot.kind, LinkKind::Veth);
         assert_eq!(peer_snapshot.kind, LinkKind::Veth);
         assert!(!host_snapshot.is_up(), "veth ends should start down");
+        assert_eq!(host_snapshot.mac, Some(initial_mac));
 
         host.set_up().await.expect("link_set_up failed");
         let refreshed = provisioner.get_link(&name).await.unwrap();

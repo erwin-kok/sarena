@@ -425,16 +425,31 @@ impl TcxAttach for NetlinkLink {
 pub(crate) async fn create_veth_pair(
     name: &str,
     peer_name: &str,
+    mac: Option<MacAddress>,
+    peer_mac: Option<MacAddress>,
 ) -> Res<(NetlinkLink, NetlinkLink)> {
     let handle = default_handle()?;
 
+    // MACs go in the create request itself rather than a follow-up
+    // `set_mac`: a link created with an explicit address gets
+    // `addr_assign_type = set`, which udev's `MACAddressPolicy=persistent`
+    // leaves alone. Setting it afterwards races with udev processing the
+    // `add` uevent, which can overwrite the MAC we just set.
     let mut peer_msg = LinkMessage::default();
     peer_msg
         .attributes
         .push(LinkAttribute::IfName(peer_name.to_owned()));
+    if let Some(mac) = peer_mac {
+        peer_msg
+            .attributes
+            .push(LinkAttribute::Address(mac.0.to_vec()));
+    }
 
     let mut msg = LinkMessage::default();
     msg.attributes.push(LinkAttribute::IfName(name.to_owned()));
+    if let Some(mac) = mac {
+        msg.attributes.push(LinkAttribute::Address(mac.0.to_vec()));
+    }
     msg.attributes.push(LinkAttribute::LinkInfo(vec![
         LinkInfo::Kind(InfoKind::Veth),
         LinkInfo::Data(InfoData::Veth(InfoVeth::Peer(peer_msg))),
