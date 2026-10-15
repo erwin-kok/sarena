@@ -16,6 +16,7 @@ const EVENT_QUEUE_CAPACITY: usize = 32;
 
 pub struct Endpoint {
     id: EndpointId,
+    is_host: bool,
     command_tx: mpsc::Sender<EndpointCommand>,
     status_rx: watch::Receiver<EndpointState>,
     stop: CancellationToken,
@@ -23,36 +24,34 @@ pub struct Endpoint {
 }
 
 impl Endpoint {
-    pub fn new(persist: EndpointPersist, state_dir: impl Into<PathBuf>) -> Self {
+    pub fn new(persist: &EndpointPersist, state_dir: impl Into<PathBuf>) -> Res<Self> {
         let state = EndpointState {
             persist: persist.clone(),
             phase: EndpointPhase::Created,
             generation: 0,
         };
-        let id = persist.id;
         let (command_tx, command_rx) = mpsc::channel(EVENT_QUEUE_CAPACITY);
         let (status_tx, status_rx) = watch::channel(state.clone());
         let stop = CancellationToken::new();
         let join_handle =
             EndpointWorker::new(state, state_dir.into(), command_rx, status_tx, stop.clone())
                 .spawn();
-        Self {
-            id,
+        Ok(Self {
+            id: persist.id,
+            is_host: false,
             command_tx,
             status_rx,
             stop,
             join_handle,
-        }
-    }
-
-    pub fn restore(state_dir: impl Into<PathBuf>) -> Res<Self> {
-        let state_dir = state_dir.into();
-        let state = EndpointPersist::read_state(&state_dir)?;
-        Ok(Self::new(state, state_dir))
+        })
     }
 
     pub fn id(&self) -> EndpointId {
         self.id
+    }
+
+    pub fn is_host(&self) -> bool {
+        self.is_host
     }
 
     /// The latest published status. Immediate: reads the snapshot, no event.
@@ -132,7 +131,7 @@ mod tests {
         let state = EndpointPersist {
             id: EndpointId::new(42),
         };
-        let ep = Endpoint::new(state.clone(), &dir);
+        let ep = Endpoint::new(&state, &dir).expect("endpoint create");
         assert_eq!(ep.status().phase, EndpointPhase::Created);
 
         let mut status = ep.watch_status();
@@ -145,7 +144,7 @@ mod tests {
         assert_eq!(now.generation, 2);
         assert_eq!(ep.status(), now);
 
-        let restored = Endpoint::restore(&dir).unwrap();
+        let restored = Endpoint::new(&EndpointPersist::read_state(&dir).unwrap(), &dir).unwrap();
         assert_eq!(restored.id(), ep.id());
         assert_eq!(restored.status().persist, state);
         assert_eq!(restored.status().phase, EndpointPhase::Created);
@@ -195,11 +194,12 @@ mod tests {
     async fn wait_for_shutdown_without_shutdown_exits_once_sender_is_dropped() {
         let dir = temp_dir("drop");
         let ep = Endpoint::new(
-            EndpointPersist {
+            &EndpointPersist {
                 id: EndpointId::new(8),
             },
             &dir,
-        );
+        )
+        .expect("endpoint create");
         ep.regenerate().await.unwrap();
         ep.wait_for_shutdown(Duration::from_secs(5)).await.unwrap();
 
@@ -223,6 +223,7 @@ mod tests {
         });
         let ep = Endpoint {
             id: EndpointId::new(9),
+            is_host: false,
             command_tx: command_tx.clone(),
             status_rx,
             stop: CancellationToken::new(),

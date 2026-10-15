@@ -1,6 +1,7 @@
 use core::fmt;
 use std::{
     collections::HashSet,
+    str::FromStr,
     sync::{Mutex, MutexGuard, PoisonError},
 };
 
@@ -33,6 +34,14 @@ impl From<u64> for EndpointId {
 impl From<EndpointId> for u64 {
     fn from(id: EndpointId) -> Self {
         id.0
+    }
+}
+
+impl FromStr for EndpointId {
+    type Err = std::num::ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<u64>().map(Self)
     }
 }
 

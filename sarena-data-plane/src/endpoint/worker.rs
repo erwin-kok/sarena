@@ -19,6 +19,7 @@ pub(crate) const EP_CONFIG_NAME: &str = "ep_config.json";
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct EndpointPersist {
+    #[serde(rename = "id")]
     pub id: EndpointId,
 }
 
@@ -110,7 +111,7 @@ impl EndpointWorker {
         loop {
             let command = tokio::select! {
                 biased;
-                
+
                 () = self.stop.cancelled() => break,
 
                 command = self.command_rx.recv() => match command {
