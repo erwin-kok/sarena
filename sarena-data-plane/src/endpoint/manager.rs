@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::PathBuf,
     sync::{PoisonError, RwLock, RwLockReadGuard},
     time::Duration,
@@ -12,14 +13,24 @@ use crate::{DataPlaneError, Res, endpoint::id::EndpointIdentification};
 
 struct EndpointManagerInner {
     endpoints: HashMap<EndpointId, Endpoint>,
-    endpoints_container: HashMap<EndpointIdentification, EndpointId>,
+    container_name: HashMap<String, EndpointId>,
+    container_id: HashMap<String, EndpointId>,
+    docker_endpoint: HashMap<String, EndpointId>,
+    ipv4: HashMap<Ipv4Addr, EndpointId>,
+    ipv6: HashMap<Ipv6Addr, EndpointId>,
+    pod_name: HashMap<String, EndpointId>,
 }
 
 impl EndpointManagerInner {
     pub fn new() -> Self {
         Self {
             endpoints: HashMap::new(),
-            endpoints_container: HashMap::new(),
+            container_name: HashMap::new(),
+            container_id: HashMap::new(),
+            docker_endpoint: HashMap::new(),
+            ipv4: HashMap::new(),
+            ipv6: HashMap::new(),
+            pod_name: HashMap::new(),
         }
     }
 
@@ -33,21 +44,69 @@ impl EndpointManagerInner {
 
     pub fn remove_all(&mut self) {
         self.endpoints.clear();
-        self.endpoints_container.clear();
+        self.container_name.clear();
     }
 
-    pub fn update_references(&mut self, _id: EndpointId, _endpoint: &EndpointPersist) {
-        // TODO
+    pub fn update_references(&mut self, id: EndpointId, endpoint: &EndpointPersist) {
+        self.container_name.retain(|_, aux_id| *aux_id != id);
+        if let Some(container_name) = &endpoint.container_name {
+            self.container_name.insert(container_name.clone(), id);
+        }
+        if let Some(container_id) = &endpoint.container_id {
+            self.container_id.insert(container_id.clone(), id);
+        }
+        if let Some(docker_endpoint) = &endpoint.container_id {
+            self.docker_endpoint.insert(docker_endpoint.clone(), id);
+        }
+        if let Some(ipv4) = &endpoint.ipv4 {
+            self.ipv4.insert(*ipv4, id);
+        }
+        if let Some(ipv6) = &endpoint.ipv6 {
+            self.ipv6.insert(*ipv6, id);
+        }
+        if let Some(name) = endpoint.k8s_ns_and_pod_name() {
+            self.pod_name.insert(name, id);
+        }
     }
 
     pub fn remove_references(&mut self, id: EndpointId) {
-        self.endpoints_container.retain(|_, aux_id| *aux_id != id);
+        self.container_name.retain(|_, aux_id| *aux_id != id);
+    }
+
+    pub fn lookup_container_name(&self, name: &str) -> Option<EndpointId> {
+        self.container_name.get(name).copied()
+    }
+
+    pub fn lookup_container_id(&self, id: &str) -> Option<EndpointId> {
+        self.container_id.get(id).copied()
+    }
+
+    pub fn lookup_docker_endpoint(&self, id: &str) -> Option<EndpointId> {
+        self.docker_endpoint.get(id).copied()
+    }
+
+    pub fn lookup_ipv4(&self, ipv4: Ipv4Addr) -> Option<EndpointId> {
+        self.ipv4.get(&ipv4).copied()
+    }
+
+    pub fn lookup_ipv6(&self, ipv6: Ipv6Addr) -> Option<EndpointId> {
+        self.ipv6.get(&ipv6).copied()
+    }
+
+    pub fn lookup_pod_name(&self, name: &str) -> Option<EndpointId> {
+        self.pod_name.get(name).copied()
     }
 }
 
 pub struct EndpointManager {
     inner: RwLock<EndpointManagerInner>,
     id_allocator: IdAllocator,
+}
+
+impl Default for EndpointManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EndpointManager {
@@ -66,19 +125,22 @@ impl EndpointManager {
         persist: &EndpointPersist,
         state_dir: impl Into<PathBuf>,
     ) -> Res<()> {
-        let id = self.allocate_id(id)?;
         let mut inner = self.inner.write().map_err(|_| {
             DataPlaneError::GeneralError("endpoint manager lock poisoned".to_string())
         })?;
-        if inner.endpoints.contains_key(&persist.id) {
+        let id = self.allocate_id(id)?;
+        let persist = EndpointPersist {
+            id,
+            ..persist.clone()
+        };
+        if inner.endpoints.contains_key(&id) {
             return Err(DataPlaneError::GeneralError(format!(
-                "endpoint {:?} already exists",
-                persist.id
+                "endpoint {id} already exists"
             )));
         }
-        let endpoint = Endpoint::new(persist, state_dir)?;
+        let endpoint = Endpoint::new(&persist, state_dir);
         inner.add_endpoint(endpoint);
-        inner.update_references(id, persist);
+        inner.update_references(id, &persist);
 
         info!("New Endpoint created: {}", id);
         Ok(())
@@ -89,20 +151,27 @@ impl EndpointManager {
     }
 
     pub async fn remove_endpoint(&self, id: EndpointId, timeout: Option<Duration>) -> Res<()> {
-        let mut inner = self.inner.write().map_err(|_| {
-            DataPlaneError::GeneralError("endpoint manager lock poisoned".to_string())
-        })?;
-        if let Some(ep) = inner.remove_id(id) {
-            ep.shutdown();
-            if let Some(d) = timeout {
-                ep.wait_for_shutdown(d).await?;
+        let ep = {
+            let mut inner = self.inner.write().map_err(|_| {
+                DataPlaneError::GeneralError("endpoint manager lock poisoned".to_string())
+            })?;
+            inner.remove_references(id);
+            inner.remove_id(id)
+        };
+        let shutdown_result = match ep {
+            Some(ep) => {
+                ep.shutdown();
+                match timeout {
+                    Some(d) => ep.wait_for_shutdown(d).await,
+                    None => Ok(()),
+                }
             }
-        }
+            None => Ok(()),
+        };
         if self.release_id(id).is_err() {
             info!("could not release EndpointId: {id}");
         }
-        inner.remove_references(id);
-        Ok(())
+        shutdown_result
     }
 
     pub fn endpoints(&self) -> EndpointsGuard<'_> {
@@ -126,10 +195,18 @@ impl EndpointManager {
     }
 
     pub fn host_endpoint_exists(&self) -> bool {
+        self.host_endpoint_id().is_some()
+    }
+
+    pub fn host_endpoint_id(&self) -> Option<EndpointId> {
         let Ok(inner) = self.inner.read() else {
-            return false;
+            return None;
         };
-        inner.endpoints.values().any(Endpoint::is_host)
+        inner
+            .endpoints
+            .values()
+            .find(|endpoint| endpoint.is_host())
+            .map(Endpoint::id)
     }
 
     pub fn update_references(&self, id: EndpointId, endpoint: &EndpointPersist) {
@@ -140,6 +217,74 @@ impl EndpointManager {
     pub fn remove_references(&self, id: EndpointId) {
         let mut inner = self.inner.write().unwrap_or_else(PoisonError::into_inner);
         inner.remove_references(id)
+    }
+
+    pub fn lookup(&self, id: EndpointIdentification) -> Option<EndpointId> {
+        match id {
+            EndpointIdentification::ContainerId(id) => {
+                let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+                inner.lookup_container_id(&id)
+            }
+            EndpointIdentification::ContainerName(name) => {
+                let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+                inner.lookup_container_name(&name)
+            }
+            EndpointIdentification::DockerEndpoint(endpoint) => {
+                let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+                inner.lookup_docker_endpoint(&endpoint)
+            }
+            EndpointIdentification::Ipv4(ipv4) => {
+                let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+                inner.lookup_ipv4(ipv4)
+            }
+            EndpointIdentification::Ipv6(ipv6) => {
+                let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+                inner.lookup_ipv6(ipv6)
+            }
+            EndpointIdentification::Local(endpoint_id) => Some(endpoint_id),
+            EndpointIdentification::PodName(name) => {
+                let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+                inner.lookup_pod_name(&name)
+            }
+        }
+    }
+
+    pub fn lookup_container_id(&self, id: &str) -> Option<EndpointId> {
+        let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+        inner.lookup_container_id(id)
+    }
+
+    pub fn lookup_container_name(&self, name: &str) -> Option<EndpointId> {
+        let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+        inner.lookup_container_name(name)
+    }
+
+    pub fn lookup_docker_endpoint(&self, name: &str) -> Option<EndpointId> {
+        let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+        inner.lookup_docker_endpoint(name)
+    }
+
+    pub fn lookup_ip(&self, ip: IpAddr) -> Option<EndpointId> {
+        let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+        match ip {
+            IpAddr::V4(ipv4) => inner.lookup_ipv4(ipv4),
+            IpAddr::V6(ipv6) => inner.lookup_ipv6(ipv6),
+        }
+    }
+
+    pub fn lookup_ipv4(&self, ipv4: Ipv4Addr) -> Option<EndpointId> {
+        let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+        inner.lookup_ipv4(ipv4)
+    }
+
+    pub fn lookup_ipv6(&self, ipv6: Ipv6Addr) -> Option<EndpointId> {
+        let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+        inner.lookup_ipv6(ipv6)
+    }
+
+    pub fn lookup_pod_name(&self, name: &str) -> Option<EndpointId> {
+        let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+        inner.lookup_pod_name(name)
     }
 
     fn allocate_id(&self, current_id: Option<EndpointId>) -> Res<EndpointId> {

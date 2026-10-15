@@ -24,7 +24,7 @@ pub struct Endpoint {
 }
 
 impl Endpoint {
-    pub fn new(persist: &EndpointPersist, state_dir: impl Into<PathBuf>) -> Res<Self> {
+    pub fn new(persist: &EndpointPersist, state_dir: impl Into<PathBuf>) -> Self {
         let state = EndpointState {
             persist: persist.clone(),
             phase: EndpointPhase::Created,
@@ -36,14 +36,14 @@ impl Endpoint {
         let join_handle =
             EndpointWorker::new(state, state_dir.into(), command_rx, status_tx, stop.clone())
                 .spawn();
-        Ok(Self {
+        Self {
             id: persist.id,
             is_host: false,
             command_tx,
             status_rx,
             stop,
             join_handle,
-        })
+        }
     }
 
     pub fn id(&self) -> EndpointId {
@@ -130,8 +130,15 @@ mod tests {
 
         let state = EndpointPersist {
             id: EndpointId::new(42),
+            container_name: None,
+            container_id: None,
+            docker_endpoint: None,
+            ipv4: None,
+            ipv6: None,
+            k8s_ns: None,
+            k8s_pod_name: None,
         };
-        let ep = Endpoint::new(&state, &dir).expect("endpoint create");
+        let ep = Endpoint::new(&state, &dir);
         assert_eq!(ep.status().phase, EndpointPhase::Created);
 
         let mut status = ep.watch_status();
@@ -144,7 +151,7 @@ mod tests {
         assert_eq!(now.generation, 2);
         assert_eq!(ep.status(), now);
 
-        let restored = Endpoint::new(&EndpointPersist::read_state(&dir).unwrap(), &dir).unwrap();
+        let restored = Endpoint::new(&EndpointPersist::read_state(&dir).unwrap(), &dir);
         assert_eq!(restored.id(), ep.id());
         assert_eq!(restored.status().persist, state);
         assert_eq!(restored.status().phase, EndpointPhase::Created);
@@ -158,6 +165,13 @@ mod tests {
         let state = EndpointState {
             persist: EndpointPersist {
                 id: EndpointId::new(7),
+                container_name: None,
+                container_id: None,
+                docker_endpoint: None,
+                ipv4: None,
+                ipv6: None,
+                k8s_ns: None,
+                k8s_pod_name: None,
             },
             phase: EndpointPhase::Created,
             generation: 0,
@@ -196,10 +210,16 @@ mod tests {
         let ep = Endpoint::new(
             &EndpointPersist {
                 id: EndpointId::new(8),
+                container_name: None,
+                container_id: None,
+                docker_endpoint: None,
+                ipv4: None,
+                ipv6: None,
+                k8s_ns: None,
+                k8s_pod_name: None,
             },
             &dir,
-        )
-        .expect("endpoint create");
+        );
         ep.regenerate().await.unwrap();
         ep.wait_for_shutdown(Duration::from_secs(5)).await.unwrap();
 
@@ -212,6 +232,13 @@ mod tests {
         let (_status_tx, status_rx) = watch::channel(EndpointState {
             persist: EndpointPersist {
                 id: EndpointId::new(9),
+                container_name: None,
+                container_id: None,
+                docker_endpoint: None,
+                ipv4: None,
+                ipv6: None,
+                k8s_ns: None,
+                k8s_pod_name: None,
             },
             phase: EndpointPhase::Created,
             generation: 0,

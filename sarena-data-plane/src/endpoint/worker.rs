@@ -1,6 +1,7 @@
 use std::{
     fs::{self, File},
     io::Write,
+    net::{Ipv4Addr, Ipv6Addr},
     path::{Path, PathBuf},
 };
 
@@ -21,6 +22,27 @@ pub(crate) const EP_CONFIG_NAME: &str = "ep_config.json";
 pub struct EndpointPersist {
     #[serde(rename = "id")]
     pub id: EndpointId,
+
+    #[serde(rename = "container_name", skip_serializing_if = "Option::is_none")]
+    pub container_name: Option<String>,
+
+    #[serde(rename = "container_id", skip_serializing_if = "Option::is_none")]
+    pub container_id: Option<String>,
+
+    #[serde(rename = "docker_endpoint", skip_serializing_if = "Option::is_none")]
+    pub docker_endpoint: Option<String>,
+
+    #[serde(rename = "ipv4", skip_serializing_if = "Option::is_none")]
+    pub ipv4: Option<Ipv4Addr>,
+
+    #[serde(rename = "ipv6", skip_serializing_if = "Option::is_none")]
+    pub ipv6: Option<Ipv6Addr>,
+
+    #[serde(rename = "k8s_ns", skip_serializing_if = "Option::is_none")]
+    pub k8s_ns: Option<String>,
+
+    #[serde(rename = "k8s_pod_name", skip_serializing_if = "Option::is_none")]
+    pub k8s_pod_name: Option<String>,
 }
 
 impl EndpointPersist {
@@ -43,6 +65,14 @@ impl EndpointPersist {
         // a crash.
         File::open(state_dir)?.sync_all()?;
         Ok(())
+    }
+
+    pub fn k8s_ns_and_pod_name(&self) -> Option<String> {
+        Some(format!(
+            "{}/{}",
+            self.k8s_ns.as_deref()?,
+            self.k8s_pod_name.as_deref()?
+        ))
     }
 }
 
