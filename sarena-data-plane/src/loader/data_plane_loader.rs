@@ -150,9 +150,6 @@ impl<B: BpfBackend> Loader<B> {
 
     pub fn teardown_all(&mut self) -> Res<()> {
         self.backend.stop_all_logging();
-        self.backend.remove_pin_dir(&self.pin_root.links_dir())?;
-        self.backend.remove_pin_dir(&self.pin_root.globals_dir())?;
-        // The pins are gone; drop the instance that was holding the maps.
         self.globals_holder = None;
         Ok(())
     }
@@ -537,35 +534,6 @@ mod tests {
                 .iter()
                 .any(|p| p.contains(&format!("calls_map_{}", link(2)))),
             "the second endpoint's per-endpoint map must be untouched: {remaining:?}"
-        );
-    }
-
-    #[test]
-    fn teardown_all_removes_links_and_all_maps() {
-        let pin_root = PinRoot::new("/sys/fs/bpf/test");
-        let mut loader = Loader::new(MockBackend::new(), pin_root);
-        loader
-            .add_loader_endpoint(LoaderEndpointKind::Container, &link(1))
-            .unwrap();
-        loader
-            .add_loader_endpoint(LoaderEndpointKind::Host, "the_host")
-            .unwrap();
-
-        loader.teardown_all().unwrap();
-
-        assert!(
-            loader
-                .backend
-                .list_pins(&loader.pin_root.links_dir())
-                .unwrap()
-                .is_empty()
-        );
-        assert!(
-            loader
-                .backend
-                .list_pins(&loader.pin_root.globals_dir())
-                .unwrap()
-                .is_empty()
         );
     }
 }

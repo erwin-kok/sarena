@@ -4,18 +4,18 @@ use async_trait::async_trait;
 use sarena_api_types_v1::endpoint::{
     EndpointCreateRequest, EndpointCreateResponse, EndpointHealthResponse, EndpointHealthStatus,
 };
-use sarena_data_plane::{InterfaceAddress, LoaderHandle, MacAddress, add_container};
+use sarena_data_plane::{EndpointManager, InterfaceAddress, MacAddress};
 use tracing::info;
 
 use crate::endpoint::{EndpointService, Res};
 
 pub struct DefaultEndpointService {
-    loader_handle: LoaderHandle,
+    endpoint_manager: EndpointManager,
 }
 
 impl DefaultEndpointService {
-    pub fn new(loader_handle: LoaderHandle) -> Self {
-        Self { loader_handle }
+    pub fn new(endpoint_manager: EndpointManager) -> Self {
+        Self { endpoint_manager }
     }
 }
 
@@ -34,14 +34,14 @@ impl EndpointService for DefaultEndpointService {
             let container_mac =
                 MacAddress::parse(&request.container_mac).expect("parse container mac");
 
-            add_container(
-                self.loader_handle.clone(),
-                &request.host_iface_name,
-                host_mac,
-                container_ip,
-                container_mac,
-            )
-            .await;
+            self.endpoint_manager
+                .add_container(
+                    &request.host_iface_name,
+                    host_mac,
+                    container_ip,
+                    container_mac,
+                )
+                .await;
         }
 
         Ok(EndpointCreateResponse {})

@@ -9,7 +9,7 @@ use std::{
 use tracing::info;
 
 use super::{Endpoint, EndpointId, id_allocator::IdAllocator, worker::EndpointPersist};
-use crate::{DataPlaneError, Res, endpoint::id::EndpointIdentification};
+use crate::{DataPlaneError, LoaderHandle, Res, endpoint::id::EndpointIdentification};
 
 struct EndpointManagerInner {
     endpoints: HashMap<EndpointId, Endpoint>,
@@ -100,20 +100,16 @@ impl EndpointManagerInner {
 
 pub struct EndpointManager {
     inner: RwLock<EndpointManagerInner>,
-    id_allocator: IdAllocator,
-}
-
-impl Default for EndpointManager {
-    fn default() -> Self {
-        Self::new()
-    }
+    pub(crate) id_allocator: IdAllocator,
+    pub(crate) loader_handle: LoaderHandle,
 }
 
 impl EndpointManager {
-    pub fn new() -> Self {
+    pub fn new(loader_handle: LoaderHandle) -> Self {
         Self {
             inner: RwLock::new(EndpointManagerInner::new()),
             id_allocator: IdAllocator::new(),
+            loader_handle,
         }
     }
 

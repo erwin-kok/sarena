@@ -29,6 +29,9 @@ pub struct EndpointPersist {
     #[serde(rename = "container_id", skip_serializing_if = "Option::is_none")]
     pub container_id: Option<String>,
 
+    #[serde(rename = "docker_network_id", skip_serializing_if = "Option::is_none")]
+    pub docker_network_id: Option<String>,
+
     #[serde(rename = "docker_endpoint", skip_serializing_if = "Option::is_none")]
     pub docker_endpoint: Option<String>,
 

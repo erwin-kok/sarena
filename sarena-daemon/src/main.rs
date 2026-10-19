@@ -1,34 +1,20 @@
-use std::{
-    env::consts,
-    fs,
-    future::Future,
-    io::IsTerminal as _,
-    net::{IpAddr, Ipv4Addr},
-    process,
-    time::Duration,
-};
+use std::{env::consts, fs, io::IsTerminal as _, process};
 
+use anyhow::Context as _;
 use clap::{CommandFactory as _, Parser as _};
 use clap_markdown_generator::{
     CommandHeadingStyle, MarkdownOptions, ParameterContentStyle, ParameterHeadingStyle,
     generate_markdown_for_command_with_options,
 };
-use ipnet::{IpNet, Ipv4Net};
 use sarena_api_types_v1::daemon::SarenaVersion;
-use sarena_data_plane::{DataPlane as _, DataPlaneConfig, DefaultDataPlane, EndpointManager};
-use sarena_services::setup_services;
 use sarena_utils::{
     TracingConfig,
     cli_output::{self, OutputFormat},
     logging,
-    metrics::init_metrics,
     root::require_root_privilege,
     version,
 };
-use tokio::{
-    signal::unix::{SignalKind, signal},
-    task::{JoinError, JoinSet},
-};
+use tokio::signal::unix::{SignalKind, signal};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
@@ -36,11 +22,7 @@ use crate::cli::{Cli, Commands};
 
 mod cli;
 mod config;
-
-const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
-const TELEMETRY_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
-const DEFAULT_SOCKET_PATH: &str = "/tmp/sarena.sock";
-const TCP_PORT: u16 = 3000;
+mod init;
 
 const BANNER: [&str; 5] = [
     r" ____    _    ____  _____ _   _    _    ",
@@ -61,7 +43,11 @@ async fn main() -> anyhow::Result<()> {
         Commands::Start => {
             let command = Cli::command();
             require_root_privilege(command.get_name());
-            init_daemon(cli).await?;
+            if let Err(err) = init_daemon(cli).await {
+                // Tracing may already be shut down at this point, so print directly.
+                eprintln!("Error: {err:?}");
+                process::exit(1);
+            }
         }
         Commands::Version(args) => version(args.output.as_ref()),
         Commands::CmdRef { path } => {
@@ -80,6 +66,7 @@ async fn main() -> anyhow::Result<()> {
             fs::write(path, markdown)?;
         }
     }
+
     process::exit(0)
 }
 
@@ -110,107 +97,10 @@ async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
 
     print_banner();
 
-    let metrics_state = init_metrics()?;
-
-    let socket_path =
-        std::env::var("SARENA_SOCKET").unwrap_or_else(|_| DEFAULT_SOCKET_PATH.to_string());
-
-    info!("starting sarena-daemon, socket = {socket_path}");
-
-    let config = DataPlaneConfig {
-        gateway_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5)),
-        internal_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 7)),
-        ipam_ipv4_subnet: Some(IpNet::V4(Ipv4Net::new(Ipv4Addr::new(10, 0, 10, 0), 24)?)),
-        ipam_ipv6_subnet: None,
-    };
-
-    let data_plane = DefaultDataPlane::new(&config).await?;
-    let state = setup_services(config, data_plane.loader_handle());
-
     let shutdown = CancellationToken::new();
-    let mut tasks = JoinSet::new();
+    spawn_signal_handler(shutdown.clone())?;
 
-    {
-        // API SERVER
-        let server_shutdown = shutdown.child_token();
-        let metrics_registry = metrics_state.registry.clone();
-        tasks.spawn(async move {
-            sarena_api_server::ApiServer::new()
-                .start(
-                    &socket_path,
-                    TCP_PORT,
-                    state,
-                    metrics_registry,
-                    server_shutdown,
-                )
-                .await
-        });
-    }
-
-    {
-        // Kubernetes controllers
-        let token = shutdown.child_token();
-        let metrics_registry = metrics_state.registry.clone();
-        tasks.spawn(async move {
-            sarena_kubernetes::server::start(metrics_registry, token)
-                .await
-                .map_err(anyhow::Error::from)
-        });
-    }
-
-    let _endpoint_manager = EndpointManager::new();
-
-    // Wait for either an OS shutdown signal or a task exiting unexpectedly
-    // (e.g. panicking, or returning before we asked it to stop). Whichever
-    // happens first triggers the same graceful shutdown path below, instead
-    // of a crashed task leaving us stuck waiting for a signal that may never
-    // come.
-    tokio::select! {
-        () = wait_for_signal() => {
-            info!("shutdown signal received");
-        }
-
-        Some(result) = tasks.join_next() => {
-            error!("daemon task exited before shutdown was requested");
-            log_task_result(result);
-        }
-    }
-
-    shutdown.cancel();
-
-    shutdown_step("daemon tasks", SHUTDOWN_TIMEOUT, async {
-        while let Some(result) = tasks.join_next().await {
-            log_task_result(result);
-        }
-    })
-    .await;
-
-    shutdown_step("data plane", SHUTDOWN_TIMEOUT, async {
-        if let Err(err) = data_plane.shutdown().await {
-            error!(?err, "failed to shutdown data plane");
-        }
-    })
-    .await;
-
-    shutdown_step(
-        "OTel meter provider",
-        TELEMETRY_SHUTDOWN_TIMEOUT,
-        shutdown_blocking("OTel meter provider", move || {
-            if let Err(err) = metrics_state.provider.shutdown() {
-                error!(?err, "failed to shut down OTel meter provider");
-            }
-        }),
-    )
-    .await;
-
-    shutdown_step(
-        "OTel tracer provider",
-        TELEMETRY_SHUTDOWN_TIMEOUT,
-        shutdown_blocking("OTel tracer provider", logging::shutdown_tracing),
-    )
-    .await;
-
-    Ok(())
+    init::run_daemon(&config, &shutdown).await
 }
 
 pub fn print_banner() {
@@ -236,31 +126,25 @@ pub fn print_banner() {
     }
 }
 
-async fn shutdown_step(name: &str, timeout: Duration, fut: impl Future<Output = ()>) {
-    if tokio::time::timeout(timeout, fut).await.is_err() {
-        error!("timed out shutting down {name}");
-    }
-}
+fn spawn_signal_handler(shutdown: CancellationToken) -> anyhow::Result<()> {
+    let mut sigint = signal(SignalKind::interrupt()).context("failed to install SIGINT handler")?;
+    let mut sigterm =
+        signal(SignalKind::terminate()).context("failed to install SIGTERM handler")?;
 
-async fn shutdown_blocking(name: &str, f: impl FnOnce() + Send + 'static) {
-    if tokio::task::spawn_blocking(f).await.is_err() {
-        error!("{name} shutdown task panicked");
-    }
-}
+    tokio::spawn(async move {
+        tokio::select! {
+            _ = sigint.recv() => info!("received SIGINT, shutting down"),
+            _ = sigterm.recv() => info!("received SIGTERM, shutting down"),
+        }
+        shutdown.cancel();
 
-fn log_task_result(result: Result<anyhow::Result<()>, JoinError>) {
-    match result {
-        Ok(Ok(())) => info!("daemon task exited"),
-        Ok(Err(err)) => error!(?err, "daemon task failed"),
-        Err(err) => error!(?err, "daemon task panicked"),
-    }
-}
+        let kind = tokio::select! {
+            _ = sigint.recv() => SignalKind::interrupt(),
+            _ = sigterm.recv() => SignalKind::terminate(),
+        };
+        error!("received second signal, forcing exit");
+        process::exit(128 + kind.as_raw_value());
+    });
 
-async fn wait_for_signal() {
-    let mut sigterm = signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
-
-    tokio::select! {
-        _ = tokio::signal::ctrl_c() => info!("received SIGINT"),
-        _ = sigterm.recv() => info!("received SIGTERM"),
-    }
+    Ok(())
 }

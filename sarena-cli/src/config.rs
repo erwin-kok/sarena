@@ -41,7 +41,7 @@ fn default_pin_root() -> PathBuf {
 pub fn load_config(cli: &Cli) -> anyhow::Result<Config> {
     let mut builder = ConfigLoader::builder();
 
-   if let Some(path) = &cli.config {
+    if let Some(path) = &cli.config {
         builder = builder.add_source(File::from(path.clone()));
     } else if let Some(home) = home_dir() {
         let path = ["toml", "json", "yaml", "yml"]
