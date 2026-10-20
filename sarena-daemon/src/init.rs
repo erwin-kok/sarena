@@ -1,32 +1,70 @@
 use std::{
     collections::HashMap,
+    env::consts,
     future::Future,
+    io::IsTerminal as _,
     net::{IpAddr, Ipv4Addr},
+    process,
     sync::Arc,
     time::Duration,
 };
 
+use anyhow::Context as _;
 use ipnet::{IpNet, Ipv4Net};
+use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
+use sarena_api_types_v1::daemon::SarenaVersion;
 use sarena_data_plane::{DataPlane as _, DataPlaneConfig, DefaultDataPlane, EndpointManager};
 use sarena_services::{AppState, DefaultDaemonService, DefaultEndpointService, DefaultIpamService};
-use sarena_utils::{logging, metrics::init_metrics};
+use sarena_utils::{TracingConfig, logging, version};
 use tokio::{
+    signal::unix::{SignalKind, signal},
     task::{Id, JoinError, JoinSet},
-    time::Instant,
+    time::{Instant, MissedTickBehavior},
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
-use crate::config::Config;
+use crate::{cli::Cli, config::load_config, metrics::BootstrapStatistics};
 
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 const TELEMETRY_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const SHUTDOWN_BUDGET: Duration = Duration::from_secs(25);
 const DEFAULT_SOCKET_PATH: &str = "/tmp/sarena.sock";
 const TCP_PORT: u16 = 3000;
+/// Same interval `PrometheusBuilder::install` would use for its own upkeep task.
+const METRICS_UPKEEP_INTERVAL: Duration = Duration::from_secs(5);
 
-pub async fn run_daemon(_config: &Config, shutdown: &CancellationToken) -> anyhow::Result<()> {
-    let metrics_state = init_metrics()?;
+const BANNER: [&str; 5] = [
+    r" ____    _    ____  _____ _   _    _    ",
+    r"/ ___|  / \  |  _ \| ____| \ | |  / \   ",
+    r"\___ \ / _ \ | |_) |  _| |  \| | / _ \  ",
+    r" ___) / ___ \|  _ <| |___| |\  |/ ___ \ ",
+    r"|____/_/   \_\_| \_\_____|_| \_|_/   \_\",
+];
+
+// 256-color codes, blue to purple
+const SHADES: [u8; 5] = [33, 69, 105, 141, 177];
+
+pub async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
+    let config = load_config(&cli)?;
+
+    logging::init_tracing(&TracingConfig {
+        enable_debug: config.debug,
+        log_file: config.log_file.clone(),
+        format: config.log_format,
+    });
+
+    print_banner();
+
+    let prometheus_handle = PrometheusBuilder::new()
+        .with_recommended_naming(true)
+        .install_recorder()?;
+
+    let bootstrap_statistics = BootstrapStatistics::new();
+    bootstrap_statistics.overall.start();
+
+    let shutdown = CancellationToken::new();
+    spawn_signal_handler(shutdown.clone())?;
 
     let socket_path =
         std::env::var("SARENA_SOCKET").unwrap_or_else(|_| DEFAULT_SOCKET_PATH.to_string());
@@ -51,16 +89,26 @@ pub async fn run_daemon(_config: &Config, shutdown: &CancellationToken) -> anyho
     let mut task_names = HashMap::new();
 
     {
+        // Metrics upkeep: `install_recorder` (unlike `install`) does not spawn this itself.
+        let token = shutdown.child_token();
+        let prometheus_handle = prometheus_handle.clone();
+        let handle = tasks.spawn(async move {
+            run_metrics_upkeep(prometheus_handle, token).await;
+            Ok(())
+        });
+        task_names.insert(handle.id(), "metrics upkeep");
+    }
+
+    {
         // API SERVER
         let server_shutdown = shutdown.child_token();
-        let metrics_registry = metrics_state.registry.clone();
         let handle = tasks.spawn(async move {
             sarena_api_server::ApiServer::new()
                 .start(
                     &socket_path,
                     TCP_PORT,
                     state,
-                    metrics_registry,
+                    prometheus_handle,
                     server_shutdown,
                 )
                 .await
@@ -71,14 +119,16 @@ pub async fn run_daemon(_config: &Config, shutdown: &CancellationToken) -> anyho
     {
         // Kubernetes controllers
         let token = shutdown.child_token();
-        let metrics_registry = metrics_state.registry.clone();
         let handle = tasks.spawn(async move {
-            sarena_kubernetes::server::start(metrics_registry, token)
+            sarena_kubernetes::server::start(token)
                 .await
                 .map_err(anyhow::Error::from)
         });
         task_names.insert(handle.id(), "Kubernetes controllers");
     }
+
+    bootstrap_statistics.overall.end(true);
+    bootstrap_statistics.update_metrics();
 
     // Wait for either an OS shutdown signal or a task exiting unexpectedly
     // (e.g. panicking, or returning before we asked it to stop). Whichever
@@ -130,18 +180,6 @@ pub async fn run_daemon(_config: &Config, shutdown: &CancellationToken) -> anyho
     .await;
 
     shutdown_step(
-        "OTel meter provider",
-        TELEMETRY_SHUTDOWN_TIMEOUT,
-        deadline,
-        shutdown_blocking("OTel meter provider", move || {
-            if let Err(err) = metrics_state.provider.shutdown() {
-                error!(?err, "failed to shut down OTel meter provider");
-            }
-        }),
-    )
-    .await;
-
-    shutdown_step(
         "OTel tracer provider",
         TELEMETRY_SHUTDOWN_TIMEOUT,
         deadline,
@@ -156,6 +194,17 @@ pub async fn run_daemon(_config: &Config, shutdown: &CancellationToken) -> anyho
     Ok(())
 }
 
+async fn run_metrics_upkeep(prometheus_handle: PrometheusHandle, shutdown: CancellationToken) {
+    let mut interval = tokio::time::interval(METRICS_UPKEEP_INTERVAL);
+    interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    loop {
+        tokio::select! {
+            () = shutdown.cancelled() => break,
+            _ = interval.tick() => prometheus_handle.run_upkeep(),
+        }
+    }
+}
+
 fn setup_services(config: DataPlaneConfig, endpoint_manager: EndpointManager) -> AppState {
     let ipam = Arc::new(DefaultIpamService::new(
         config.gateway_ip,
@@ -167,6 +216,29 @@ fn setup_services(config: DataPlaneConfig, endpoint_manager: EndpointManager) ->
     let daemon = Arc::new(DefaultDaemonService::new());
 
     AppState::new(ipam, endpoint, daemon)
+}
+
+fn spawn_signal_handler(shutdown: CancellationToken) -> anyhow::Result<()> {
+    let mut sigint = signal(SignalKind::interrupt()).context("failed to install SIGINT handler")?;
+    let mut sigterm =
+        signal(SignalKind::terminate()).context("failed to install SIGTERM handler")?;
+
+    tokio::spawn(async move {
+        tokio::select! {
+            _ = sigint.recv() => info!("received SIGINT, shutting down"),
+            _ = sigterm.recv() => info!("received SIGTERM, shutting down"),
+        }
+        shutdown.cancel();
+
+        let kind = tokio::select! {
+            _ = sigint.recv() => SignalKind::interrupt(),
+            _ = sigterm.recv() => SignalKind::terminate(),
+        };
+        error!("received second signal, forcing exit");
+        process::exit(128 + kind.as_raw_value());
+    });
+
+    Ok(())
 }
 
 /// Runs one shutdown step, bounded by its own `timeout` and by the overall
@@ -204,5 +276,28 @@ fn log_task_result(
         Ok((_, Ok(()))) => info!(task, "daemon task exited"),
         Ok((_, Err(err))) => error!(task, ?err, "daemon task failed"),
         Err(err) => error!(task, ?err, "daemon task panicked"),
+    }
+}
+
+pub fn print_banner() {
+    let color = std::io::stderr().is_terminal();
+    for (line, shade) in BANNER.iter().zip(SHADES) {
+        if color {
+            eprintln!("\x1b[1;38;5;{shade}m{line}\x1b[0m");
+        } else {
+            eprintln!("{line}");
+        }
+    }
+    let version = SarenaVersion {
+        version: version::VERSION.to_owned(),
+        git_hash: version::GIT_HASH.to_owned(),
+        build_date: version::BUILD_DATE.to_owned(),
+        os: consts::OS.to_owned(),
+        arch: consts::ARCH.to_owned(),
+    };
+    if color {
+        eprintln!("\x1b[38;5;214mSarena {version}\x1b[0m");
+    } else {
+        eprintln!("Sarena {version}");
     }
 }

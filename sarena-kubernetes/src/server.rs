@@ -1,32 +1,29 @@
-use std::sync::Arc;
-
 use kube::Client;
-use prometheus::Registry;
-use tokio::{sync::Mutex, task::JoinSet};
+use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
     controllers::{address_pool, service},
     error::{KubernetesError, Res},
-    metrics::Metrics,
     webhook,
 };
 
-pub async fn start(metrics_registry: Registry, shutdown: CancellationToken) -> Res<()> {
+pub async fn start(shutdown: CancellationToken) -> Res<()> {
     let client = Client::try_default().await?;
     let mut tasks = JoinSet::new();
 
     tracing::info!("starting Kubernetes reconcilers");
 
-    let _metrics = Arc::new(Mutex::new(
-        Metrics::default().register(&metrics_registry).unwrap(),
-    ));
-
     tasks.spawn(address_pool::run(client.clone(), shutdown.child_token()));
     tasks.spawn(service::run(client.clone(), shutdown.child_token()));
     tasks.spawn(webhook::run(client.clone(), shutdown.child_token()));
 
+    // `biased` so shutdown wins when both branches are ready: the controllers
+    // hold child tokens and return as soon as `shutdown` is cancelled, so a
+    // random pick could misreport that as an unexpected exit.
     tokio::select! {
+        biased;
+
         () = shutdown.cancelled() => {
             tracing::info!("controllers shutting down");
         }
@@ -45,6 +42,14 @@ pub async fn start(metrics_registry: Registry, shutdown: CancellationToken) -> R
                     return Err(KubernetesError::AllControllersExited);
                 }
             }
+        }
+    }
+
+    // Let the controllers (and the webhook's graceful shutdown) finish instead
+    // of aborting them by dropping the JoinSet. The caller bounds this wait.
+    while let Some(result) = tasks.join_next().await {
+        if let Err(err) = result {
+            tracing::error!(?err, "controller task panicked during shutdown");
         }
     }
 

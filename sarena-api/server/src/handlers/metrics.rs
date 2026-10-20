@@ -1,23 +1,20 @@
-use axum::{
-    Router, extract::State, http::header::CONTENT_TYPE, response::IntoResponse, routing::get,
-};
-use prometheus::{Encoder, Registry, TextEncoder};
+use axum::{Router, body::Body, extract::State, response::Response, routing::get};
+use http::{StatusCode, header};
+use metrics_exporter_prometheus::PrometheusHandle;
 
-use crate::error::{ApiError, ResultExt};
-
-pub fn routes(registry: Registry) -> Router {
+pub fn routes(prometheus_handle: PrometheusHandle) -> Router {
     Router::new()
         .route("/metrics", get(get_metrics))
-        .with_state(registry)
+        .with_state(prometheus_handle)
 }
 
-async fn get_metrics(State(registry): State<Registry>) -> Result<impl IntoResponse, ApiError> {
-    let encoder = TextEncoder::new();
-    let content_type = encoder.format_type().to_owned();
-    let metric_families = registry.gather();
-
-    let mut buf = Vec::new();
-    encoder.encode(&metric_families, &mut buf).internal()?;
-
-    Ok(([(CONTENT_TYPE, content_type)], buf))
+async fn get_metrics(State(prometheus_handle): State<PrometheusHandle>) -> Response<Body> {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(
+            header::CONTENT_TYPE,
+            "text/plain; version=0.0.4; charset=utf-8",
+        )
+        .body(Body::from(prometheus_handle.render()))
+        .expect("valid metrics response")
 }

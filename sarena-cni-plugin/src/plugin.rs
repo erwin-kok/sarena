@@ -83,7 +83,6 @@ fn init_logging(net_conf: &NetConf) {
         enable_debug,
         log_file,
         format: LogFormat::Json,
-        otel_endpoint: None,
     });
 }
 

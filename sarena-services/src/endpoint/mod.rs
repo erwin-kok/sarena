@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use sarena_api_types_v1::endpoint::{
     EndpointCreateRequest, EndpointCreateResponse, EndpointHealthResponse,
 };
+use sarena_data_plane::DataPlaneError;
 use thiserror::Error;
 
 mod service;
@@ -9,7 +10,13 @@ mod service;
 pub use service::DefaultEndpointService;
 
 #[derive(Debug, Error)]
-pub enum EndpointError {}
+pub enum EndpointError {
+    #[error("general error: {0}")]
+    GenericError(String),
+
+    #[error("DataPlane error: {0}")]
+    DataPlaneError(#[from] DataPlaneError),
+}
 
 pub type Res<T> = Result<T, EndpointError>;
 

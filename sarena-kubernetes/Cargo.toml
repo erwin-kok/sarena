@@ -17,7 +17,6 @@ futures = { workspace = true }
 ipnet = { workspace = true }
 kube = { workspace = true, features = ["admission"] }
 k8s-openapi = { workspace = true }
-prometheus = { workspace = true }
 rcgen = { workspace = true }
 rustls = { workspace = true }
 schemars = { workspace = true }

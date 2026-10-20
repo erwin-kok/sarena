@@ -23,6 +23,8 @@ clap = { workspace = true }
 clap-markdown-generator = { workspace = true }
 config = { workspace = true, features = ["toml", "json", "yaml"] }
 ipnet = { workspace = true }
+metrics = { workspace = true }
+metrics-exporter-prometheus = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }

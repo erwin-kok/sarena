@@ -4,9 +4,10 @@ use std::fmt::Display;
 
 use axum::{
     Json,
+    body::Body,
     response::{IntoResponse, Response},
 };
-use http::StatusCode;
+use http::{StatusCode, header};
 use sarena_services::{DaemonError, EndpointError, IpamError};
 use serde::Serialize;
 
@@ -92,7 +93,15 @@ impl IntoResponse for ApiError {
             tracing::warn!(%message, "not implemented");
         }
 
-        (status, Json(ErrorResponse { code, message })).into_response()
+        // Serializing a fieldless enum and a `String` cannot fail.
+        let body =
+            serde_json::to_vec(&ErrorResponse { code, message }).expect("serialize error response");
+
+        Response::builder()
+            .status(status)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .expect("valid error response")
     }
 }
 
@@ -124,7 +133,12 @@ impl From<DaemonError> for ApiError {
 
 impl From<EndpointError> for ApiError {
     fn from(err: EndpointError) -> Self {
-        match err {}
+        let message = err.to_string();
+        match err {
+            EndpointError::GenericError(_) | EndpointError::DataPlaneError(_) => {
+                ApiError::internal(message)
+            }
+        }
     }
 }
 
@@ -156,11 +170,15 @@ pub enum ApiStatus {
 
 impl IntoResponse for ApiStatus {
     fn into_response(self) -> Response {
-        match self {
+        let status = match self {
             ApiStatus::Ok => StatusCode::OK,
             ApiStatus::NoContent => StatusCode::NO_CONTENT,
-        }
-        .into_response()
+        };
+
+        Response::builder()
+            .status(status)
+            .body(Body::empty())
+            .expect("valid status response")
     }
 }
 

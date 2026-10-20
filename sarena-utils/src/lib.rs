@@ -1,6 +1,5 @@
 pub mod cli_output;
 pub mod logging;
-pub mod metrics;
 pub mod root;
 pub mod spans;
 pub mod version;
@@ -34,7 +33,6 @@ pub struct TracingConfig {
     pub enable_debug: bool,
     pub log_file: Option<String>,
     pub format: LogFormat,
-    pub otel_endpoint: Option<String>,
 }
 
 pub use logging::{init_tracing, shutdown_tracing};

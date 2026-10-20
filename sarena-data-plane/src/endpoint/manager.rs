@@ -8,8 +8,13 @@ use std::{
 
 use tracing::info;
 
-use super::{Endpoint, EndpointId, id_allocator::IdAllocator, worker::EndpointPersist};
-use crate::{DataPlaneError, LoaderHandle, Res, endpoint::id::EndpointIdentification};
+use super::{
+    Endpoint, EndpointId,
+    id_allocator::{IdAllocator, IdLease},
+};
+use crate::{
+    DataPlaneError, EndpointPersist, LoaderHandle, Res, endpoint::id::EndpointIdentification,
+};
 
 struct EndpointManagerInner {
     endpoints: HashMap<EndpointId, Endpoint>,
@@ -117,27 +122,21 @@ impl EndpointManager {
 
     pub fn add_endpoint(
         &self,
-        id: Option<EndpointId>,
         persist: &EndpointPersist,
         state_dir: impl Into<PathBuf>,
     ) -> Res<()> {
+        let id = persist.id;
         let mut inner = self.inner.write().map_err(|_| {
             DataPlaneError::GeneralError("endpoint manager lock poisoned".to_string())
         })?;
-        let id = self.allocate_id(id)?;
-        let persist = EndpointPersist {
-            id,
-            ..persist.clone()
-        };
         if inner.endpoints.contains_key(&id) {
             return Err(DataPlaneError::GeneralError(format!(
                 "endpoint {id} already exists"
             )));
         }
-        let endpoint = Endpoint::new(&persist, state_dir);
+        let endpoint = Endpoint::new(persist, state_dir);
         inner.add_endpoint(endpoint);
-        inner.update_references(id, &persist);
-
+        inner.update_references(id, persist);
         info!("New Endpoint created: {}", id);
         Ok(())
     }
@@ -283,17 +282,22 @@ impl EndpointManager {
         inner.lookup_pod_name(name)
     }
 
-    fn allocate_id(&self, current_id: Option<EndpointId>) -> Res<EndpointId> {
+    pub(crate) fn allocate_new_id(&self) -> Res<IdLease<'_>> {
+        let id = self.id_allocator.allocate().ok_or_else(|| {
+            DataPlaneError::GeneralError("no more EndpointId's available".to_string())
+        })?;
+        Ok(IdLease::new(&self.id_allocator, id))
+    }
+
+    pub(crate) fn allocate_id(&self, current_id: Option<EndpointId>) -> Res<IdLease<'_>> {
         match current_id {
             Some(id) => {
                 self.id_allocator.reuse(id).map_err(|e| {
                     DataPlaneError::GeneralError(format!("unable to reuse EndpointId: {e}"))
                 })?;
-                Ok(id)
+                Ok(IdLease::new(&self.id_allocator, id))
             }
-            None => self.id_allocator.allocate().ok_or_else(|| {
-                DataPlaneError::GeneralError("no more EndpointId's available".to_string())
-            }),
+            None => self.allocate_new_id(),
         }
     }
 

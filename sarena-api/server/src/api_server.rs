@@ -10,7 +10,7 @@ use axum::{
 use http::{HeaderName, HeaderValue};
 use hyper::{body::Incoming, server::conn::http1};
 use hyper_util::rt::TokioIo;
-use prometheus::Registry;
+use metrics_exporter_prometheus::PrometheusHandle;
 use sarena_services::AppState;
 use tokio::net::{TcpListener, UnixListener};
 use tokio_util::sync::CancellationToken;
@@ -41,47 +41,17 @@ impl ApiServer {
         driver_sock: &str,
         tcp_port: u16,
         state: AppState,
-        metrics_registry: Registry,
+        prometheus_handle: PrometheusHandle,
         shutdown: CancellationToken,
     ) -> anyhow::Result<()> {
-        let router = build_router(state, metrics_registry);
+        let router = build_router(state, prometheus_handle);
 
-        let unix_router = router.clone();
-        let unix_shutdown = shutdown.child_token();
-        let unix_driver_sock = driver_sock.to_owned();
+        tokio::try_join!(
+            unix_listener(driver_sock, router.clone(), shutdown.child_token()),
+            tcp_listener(tcp_port, router, shutdown.child_token()),
+        )?;
 
-        let tcp_router = router;
-        let tcp_shutdown = shutdown.child_token();
-
-        let mut unix = tokio::spawn(async move {
-            unix_listener(&unix_driver_sock, unix_router, unix_shutdown).await
-        });
-
-        let mut tcp =
-            tokio::spawn(async move { tcp_listener(tcp_port, tcp_router, tcp_shutdown).await });
-
-        tokio::select! {
-            biased;
-
-            () = shutdown.cancelled() => {
-                info!("API server shutting down");
-            }
-
-            result = &mut unix => {
-                result??;
-                anyhow::bail!("Unix API server exited unexpectedly");
-            }
-
-            result = &mut tcp => {
-                result??;
-                anyhow::bail!("TCP API server exited unexpectedly");
-            }
-        }
-
-        // Wait for both listener tasks to finish draining in-flight connections.
-        unix.await??;
-        tcp.await??;
-
+        info!("API server shut down");
         Ok(())
     }
 }
@@ -109,15 +79,10 @@ async fn unix_listener(
 
             result = listener.accept() => {
                 let (stream, _peer_addr) = result?;
-                let router = router.clone();
+                let io = TokioIo::new(UnixStreamCompat(stream));
+                let conn = serve_connection(io, router.clone(), shutdown.clone());
                 connections.spawn(async move {
-                    let io = TokioIo::new(UnixStreamCompat(stream));
-                    let service =
-                        hyper::service::service_fn(move |req: hyper::Request<Incoming>| {
-                            router.clone().oneshot(req)
-                        });
-
-                    if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
+                    if let Err(err) = conn.await {
                         tracing::error!(
                             ?err,
                             "Unix connection closed with error"
@@ -168,15 +133,10 @@ async fn tcp_listener(
 
             result = listener.accept() => {
                 let (stream, peer) = result?;
-                let router = router.clone();
-                connections.spawn(async move {
                 let io = TokioIo::new(stream);
-                    let service =
-                        hyper::service::service_fn(move |req: hyper::Request<Incoming>| {
-                            router.clone().oneshot(req)
-                        });
-
-                    if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
+                let conn = serve_connection(io, router.clone(), shutdown.clone());
+                connections.spawn(async move {
+                    if let Err(err) = conn.await {
                         tracing::error!(
                             %peer,
                             ?err,
@@ -207,7 +167,30 @@ async fn tcp_listener(
     Ok(())
 }
 
-fn build_router(state: AppState, metrics_registry: Registry) -> Router {
+async fn serve_connection<I>(
+    io: I,
+    router: Router,
+    shutdown: CancellationToken,
+) -> hyper::Result<()>
+where
+    I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
+{
+    let service = hyper::service::service_fn(move |req: hyper::Request<Incoming>| {
+        router.clone().oneshot(req)
+    });
+    let conn = http1::Builder::new().serve_connection(io, service);
+    tokio::pin!(conn);
+
+    tokio::select! {
+        result = conn.as_mut() => result,
+        () = shutdown.cancelled() => {
+            conn.as_mut().graceful_shutdown();
+            conn.await
+        }
+    }
+}
+
+fn build_router(state: AppState, prometheus_handle: PrometheusHandle) -> Router {
     Router::new()
         .nest(
             sarena_api_types_v1::DEFAULT_BASE_PATH,
@@ -219,7 +202,7 @@ fn build_router(state: AppState, metrics_registry: Registry) -> Router {
         .layer(TraceLayer::new_for_http().make_span_with(HttpRequestSpan))
         .layer(middleware::from_fn(request_id_middleware))
         .with_state(state)
-        .merge(handlers::metrics::routes(metrics_registry))
+        .merge(handlers::metrics::routes(prometheus_handle))
 }
 
 #[derive(Clone, Debug)]

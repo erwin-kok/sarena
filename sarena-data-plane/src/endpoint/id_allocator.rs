@@ -6,6 +6,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use crate::{DataPlaneError, Res};
 
@@ -94,6 +95,39 @@ impl IdAllocator {
 
     fn cache(&self) -> MutexGuard<'_, IdCache> {
         self.cache.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+#[must_use = "dropping an IdLease releases the EndpointId"]
+pub(crate) struct IdLease<'a> {
+    allocator: &'a IdAllocator,
+    id: Option<EndpointId>,
+}
+
+impl<'a> IdLease<'a> {
+    pub(crate) fn new(allocator: &'a IdAllocator, id: EndpointId) -> Self {
+        Self {
+            allocator,
+            id: Some(id),
+        }
+    }
+
+    pub fn id(&self) -> EndpointId {
+        self.id.expect("IdLease already committed")
+    }
+
+    pub(crate) fn commit(mut self) -> EndpointId {
+        self.id.take().expect("IdLease already committed")
+    }
+}
+
+impl Drop for IdLease<'_> {
+    fn drop(&mut self) {
+        if let Some(id) = self.id.take()
+            && let Err(e) = self.allocator.release(id)
+        {
+            warn!("could not release EndpointId {id}: {e}");
+        }
     }
 }
 
@@ -325,5 +359,25 @@ mod tests {
         });
 
         assert_eq!(allocate_all(&allocator).len(), ids.len());
+    }
+
+    #[test]
+    fn dropped_lease_releases_id() {
+        let allocator = IdAllocator::new();
+        let id = allocator.allocate().expect("allocate should succeed");
+
+        drop(IdLease::new(&allocator, id));
+
+        assert!(allocator.reuse(id).is_ok(), "id {id} was not released");
+    }
+
+    #[test]
+    fn committed_lease_keeps_id() {
+        let allocator = IdAllocator::new();
+        let id = allocator.allocate().expect("allocate should succeed");
+
+        assert_eq!(IdLease::new(&allocator, id).commit(), id);
+
+        assert!(allocator.reuse(id).is_err(), "id {id} was released");
     }
 }

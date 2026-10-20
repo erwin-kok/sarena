@@ -8,9 +8,9 @@ use tokio_util::sync::CancellationToken;
 
 use super::{
     EndpointId,
-    worker::{EndpointCommand, EndpointPersist, EndpointPhase, EndpointState, EndpointWorker},
+    worker::{EndpointCommand, EndpointPhase, EndpointState, EndpointWorker},
 };
-use crate::{DataPlaneError, Res};
+use crate::{DataPlaneError, EndpointPersist, Res};
 
 const EVENT_QUEUE_CAPACITY: usize = 32;
 
@@ -117,6 +117,7 @@ impl Endpoint {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::EndpointSpec;
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("sarena-ep-{name}-{}", std::process::id()));
@@ -130,14 +131,7 @@ mod tests {
 
         let state = EndpointPersist {
             id: EndpointId::new(42),
-            container_name: None,
-            container_id: None,
-            docker_network_id: None,
-            docker_endpoint: None,
-            ipv4: None,
-            ipv6: None,
-            k8s_ns: None,
-            k8s_pod_name: None,
+            spec: EndpointSpec::default(),
         };
         let ep = Endpoint::new(&state, &dir);
         assert_eq!(ep.status().phase, EndpointPhase::Created);
@@ -166,14 +160,7 @@ mod tests {
         let state = EndpointState {
             persist: EndpointPersist {
                 id: EndpointId::new(7),
-                container_name: None,
-                container_id: None,
-                docker_network_id: None,
-                docker_endpoint: None,
-                ipv4: None,
-                ipv6: None,
-                k8s_ns: None,
-                k8s_pod_name: None,
+                spec: EndpointSpec::default(),
             },
             phase: EndpointPhase::Created,
             generation: 0,
@@ -212,14 +199,7 @@ mod tests {
         let ep = Endpoint::new(
             &EndpointPersist {
                 id: EndpointId::new(8),
-                container_name: None,
-                container_id: None,
-                docker_network_id: None,
-                docker_endpoint: None,
-                ipv4: None,
-                ipv6: None,
-                k8s_ns: None,
-                k8s_pod_name: None,
+                spec: EndpointSpec::default(),
             },
             &dir,
         );
@@ -235,14 +215,7 @@ mod tests {
         let (_status_tx, status_rx) = watch::channel(EndpointState {
             persist: EndpointPersist {
                 id: EndpointId::new(9),
-                container_name: None,
-                container_id: None,
-                docker_network_id: None,
-                docker_endpoint: None,
-                ipv4: None,
-                ipv6: None,
-                k8s_ns: None,
-                k8s_pod_name: None,
+                spec: EndpointSpec::default(),
             },
             phase: EndpointPhase::Created,
             generation: 0,
