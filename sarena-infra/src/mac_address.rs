@@ -1,6 +1,7 @@
 use std::fmt;
 
 use rand::RngExt as _;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::InfraError;
 
@@ -62,5 +63,49 @@ impl fmt::Display for MacAddress {
 impl fmt::Debug for MacAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
+    }
+}
+
+impl Serialize for MacAddress {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = self
+            .0
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<Vec<_>>()
+            .join(":");
+
+        serializer.serialize_str(&s)
+    }
+}
+
+impl<'de> Deserialize<'de> for MacAddress {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+
+        let bytes: Result<Vec<u8>, _> = s
+            .split(':')
+            .map(|part| {
+                if part.len() != 2 {
+                    return Err("each MAC address segment must contain 2 hex digits");
+                }
+
+                u8::from_str_radix(part, 16).map_err(|_| "invalid hexadecimal byte")
+            })
+            .collect();
+
+        let bytes = bytes.map_err(serde::de::Error::custom)?;
+
+        let bytes: [u8; 6] = bytes.try_into().map_err(|v: Vec<u8>| {
+            serde::de::Error::custom(format!("expected 6 MAC address bytes, got {}", v.len()))
+        })?;
+
+        Ok(MacAddress(bytes))
     }
 }

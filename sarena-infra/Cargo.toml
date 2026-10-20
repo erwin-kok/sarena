@@ -20,6 +20,7 @@ futures = { workspace = true }
 ipnet = { workspace = true }
 nix = { workspace = true, features = ["sched", "mount", "fs"] }
 rand = { workspace = true, features = ["thread_rng"] }
+serde = { workspace = true, features = ["derive", "std"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync", "macros"] }
 tracing = { workspace = true }

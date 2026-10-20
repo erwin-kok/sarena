@@ -1,5 +1,4 @@
 mod config;
-mod container;
 mod endpoint;
 mod error;
 mod loader;
@@ -11,8 +10,7 @@ mod soft_dataplane;
 
 use async_trait::async_trait;
 pub use config::DataPlaneConfig;
-pub use container::add_container;
-pub use endpoint::EndpointManager;
+pub use endpoint::{EndpointId, EndpointManager, EndpointPersist, EndpointSpec};
 pub use error::{DataPlaneError, Res};
 pub use loader::{AyaBackend, Loader, LoaderEndpointKind, LoaderHandle, PinRoot};
 pub use maps::{CallsMap, EndpointConfigMap, LxcMap, MetricsMap};
