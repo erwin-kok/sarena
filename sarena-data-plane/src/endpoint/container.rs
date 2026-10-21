@@ -18,7 +18,6 @@ impl EndpointManager {
             id: lease.id(),
             spec,
         };
-        let provisioner = NetlinkNetworkProvisioner;
 
         let Some(container_ip) = endpoint.ipv4 else {
             return Err(DataPlaneError::GeneralError(
@@ -26,7 +25,11 @@ impl EndpointManager {
             ));
         };
 
-        self.loader_handle
+        let ep = self.add_endpoint(&endpoint)?;
+        ep.regenerate().await?;
+
+        let provisioner = NetlinkNetworkProvisioner;
+        self.loader
             .add_loader_endpoint(LoaderEndpointKind::Container, &endpoint.host_iface_name)
             .await?;
         let host = provisioner.get_link(&endpoint.host_iface_name).await?;

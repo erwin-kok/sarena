@@ -1,6 +1,5 @@
 use std::{
     fs::{self, File},
-    io::Write,
     net::{Ipv4Addr, Ipv6Addr},
     ops::Deref,
     path::{Path, PathBuf},
@@ -91,10 +90,9 @@ impl EndpointPersist {
     pub fn write_state(&self, state_dir: &Path) -> Res<()> {
         let path = state_dir.join(EP_CONFIG_NAME);
         let tmp = state_dir.join(format!("{EP_CONFIG_NAME}.tmp"));
-        let json = serde_json::to_string(self)?;
-        let mut f = File::create(&tmp)?;
-        f.write_all(json.as_bytes())?;
-        f.sync_all()?;
+        let file = File::create(&tmp)?;
+        serde_json::to_writer_pretty(&file, self)?;
+        file.sync_all()?;
         fs::rename(&tmp, &path)?;
         // The rename lives in the directory entry; sync it too, so it survives
         // a crash.

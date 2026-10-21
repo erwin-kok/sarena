@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::PathBuf,
-    sync::{Arc, PoisonError, RwLock, RwLockReadGuard},
+    sync::{Arc, PoisonError, RwLock},
     time::Duration,
 };
 
@@ -106,25 +106,23 @@ impl EndpointManagerInner {
 pub struct EndpointManager {
     inner: RwLock<EndpointManagerInner>,
     pub(crate) id_allocator: IdAllocator,
-    pub(crate) loader_handle: Arc<dyn DataplaneLoader>,
+    pub(crate) loader: Arc<dyn DataplaneLoader>,
+    pub(crate) state_dir: PathBuf,
 }
 
 impl EndpointManager {
-    pub fn new(loader_handle: Arc<dyn DataplaneLoader>) -> Self {
+    pub fn new(loader: Arc<dyn DataplaneLoader>, state_dir: impl Into<PathBuf>) -> Self {
         Self {
             inner: RwLock::new(EndpointManagerInner::new()),
             id_allocator: IdAllocator::new(),
-            loader_handle,
+            loader,
+            state_dir: state_dir.into(),
         }
     }
 
     pub fn init_metrics(&self) {}
 
-    pub fn add_endpoint(
-        &self,
-        persist: &EndpointPersist,
-        state_dir: impl Into<PathBuf>,
-    ) -> Res<()> {
+    pub fn add_endpoint(&self, persist: &EndpointPersist) -> Res<Endpoint> {
         let id = persist.id;
         let mut inner = self.inner.write().map_err(|_| {
             DataPlaneError::GeneralError("endpoint manager lock poisoned".to_string())
@@ -134,18 +132,18 @@ impl EndpointManager {
                 "endpoint {id} already exists"
             )));
         }
-        let endpoint = Endpoint::new(persist, state_dir);
-        inner.add_endpoint(endpoint);
+        let endpoint = Endpoint::new(self.loader.clone(), self.state_dir.clone(), persist);
+        inner.add_endpoint(endpoint.clone());
         inner.update_references(id, persist);
         info!("New Endpoint created: {}", id);
-        Ok(())
+        Ok(endpoint)
     }
 
     pub fn add_host_endpoint(&self, _endpoint: &EndpointPersist) -> Res<()> {
         Ok(())
     }
 
-    pub async fn remove_endpoint(&self, id: EndpointId, timeout: Option<Duration>) -> Res<()> {
+    pub async fn delete_endpoint(&self, id: EndpointId, timeout: Option<Duration>) -> Res<()> {
         let ep = {
             let mut inner = self.inner.write().map_err(|_| {
                 DataPlaneError::GeneralError("endpoint manager lock poisoned".to_string())
@@ -169,17 +167,26 @@ impl EndpointManager {
         shutdown_result
     }
 
-    pub fn endpoints(&self) -> EndpointsGuard<'_> {
-        EndpointsGuard {
-            guard: self.inner.read().expect("RwLock poisoned"),
-        }
+    /// Handles to all endpoints, usable after the manager's lock is released.
+    pub fn endpoints(&self) -> Vec<Endpoint> {
+        let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+        inner.endpoints.values().cloned().collect()
     }
 
     pub fn remove_all(&self) {
-        self.inner
-            .write()
-            .unwrap_or_else(PoisonError::into_inner)
-            .remove_all();
+        let mut inner = self.inner.write().unwrap_or_else(PoisonError::into_inner);
+        // Handed-out clones would otherwise keep the workers alive.
+        for ep in inner.endpoints.values() {
+            ep.shutdown();
+        }
+        inner.remove_all();
+    }
+
+    /// A handle to the endpoint, usable after the manager's lock is released,
+    /// e.g. to `regenerate().await` it.
+    pub fn endpoint(&self, id: EndpointId) -> Option<Endpoint> {
+        let inner = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+        inner.endpoints.get(&id).cloned()
     }
 
     pub fn endpoint_exists(&self, id: EndpointId) -> bool {
@@ -303,19 +310,5 @@ impl EndpointManager {
 
     fn release_id(&self, id: EndpointId) -> Res<()> {
         self.id_allocator.release(id)
-    }
-}
-
-pub struct EndpointsGuard<'a> {
-    guard: RwLockReadGuard<'a, EndpointManagerInner>,
-}
-
-impl EndpointsGuard<'_> {
-    pub fn iter(&self) -> impl Iterator<Item = (&EndpointId, &Endpoint)> + '_ {
-        self.guard.endpoints.iter()
-    }
-
-    pub fn values(&self) -> impl Iterator<Item = &Endpoint> + '_ {
-        self.guard.endpoints.values()
     }
 }

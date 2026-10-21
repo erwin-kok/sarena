@@ -4,6 +4,7 @@ use std::{
     future::Future,
     io::IsTerminal as _,
     net::{IpAddr, Ipv4Addr},
+    path::PathBuf,
     process,
     sync::Arc,
     time::Duration,
@@ -80,7 +81,12 @@ pub async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
 
     let data_plane = DefaultDataPlane::new(&config).await?;
 
-    let endpoint_manager = EndpointManager::new(data_plane.loader());
+    let runtime_path = PathBuf::from("/var/run/sarena");
+    let state_dir = runtime_path.join("state");
+
+    std::fs::create_dir_all(&state_dir)?;
+
+    let endpoint_manager = EndpointManager::new(data_plane.loader(), &state_dir);
     endpoint_manager.init_metrics();
 
     let state = setup_services(config, endpoint_manager);

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use tokio::{
     sync::{mpsc, oneshot, watch},
@@ -7,7 +7,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
-use crate::{DataPlaneError, EndpointPersist, Res};
+use crate::{DataplaneLoader, EndpointId, EndpointPersist, Res};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum EndpointPhase {
@@ -29,8 +29,13 @@ pub(crate) enum EndpointCommand {
 pub struct EndpointState {
     pub persist: EndpointPersist,
     pub phase: EndpointPhase,
-    /// Number of successful regenerations.
     pub generation: u64,
+}
+
+impl EndpointState {
+    pub fn id(&self) -> EndpointId {
+        self.persist.id
+    }
 }
 
 /// Owns the endpoint's mutable state and handles its commands one at a time,
@@ -38,8 +43,9 @@ pub struct EndpointState {
 /// `&mut self` without locking; [`Endpoint`](crate::endpoint::Endpoint) is
 /// the handle to it.
 pub(crate) struct EndpointWorker {
-    state: EndpointState,
-    state_dir: PathBuf,
+    pub(crate) loader: Arc<dyn DataplaneLoader>,
+    pub(crate) state: EndpointState,
+    pub(crate) state_dir: PathBuf,
     command_rx: mpsc::Receiver<EndpointCommand>,
     status_tx: watch::Sender<EndpointState>,
     stop: CancellationToken,
@@ -47,6 +53,7 @@ pub(crate) struct EndpointWorker {
 
 impl EndpointWorker {
     pub(crate) fn new(
+        loader: Arc<dyn DataplaneLoader>,
         state: EndpointState,
         state_dir: PathBuf,
         command_rx: mpsc::Receiver<EndpointCommand>,
@@ -54,6 +61,7 @@ impl EndpointWorker {
         stop: CancellationToken,
     ) -> Self {
         Self {
+            loader,
             state,
             state_dir,
             command_rx,
@@ -101,39 +109,8 @@ impl EndpointWorker {
         }
     }
 
-    fn publish(&self) {
+    pub(crate) fn publish(&self) {
         let snapshot = self.state.clone();
         self.status_tx.send_replace(snapshot);
-    }
-
-    async fn regenerate(&mut self) -> Res<()> {
-        self.state.phase = EndpointPhase::Regenerating;
-        self.publish();
-
-        // TODO: the actual regeneration work for `self.state.persist.id`.
-        let result = self.persist().await;
-
-        match &result {
-            Ok(()) => {
-                self.state.phase = EndpointPhase::Ready;
-                self.state.generation += 1;
-            }
-            Err(e) => {
-                tracing::warn!("regeneration failed: {e}");
-                self.state.phase = EndpointPhase::Failed(e.to_string());
-            }
-        }
-        self.publish();
-        result
-    }
-
-    /// Writes the config to disk. Only the worker calls this, so writes never
-    /// race and the file always matches the worker's state.
-    async fn persist(&self) -> Res<()> {
-        let persist = self.state.persist.clone();
-        let state_dir = self.state_dir.clone();
-        tokio::task::spawn_blocking(move || persist.write_state(&state_dir))
-            .await
-            .map_err(|e| DataPlaneError::GeneralError(format!("persist task failed: {e}")))?
     }
 }

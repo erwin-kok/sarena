@@ -52,22 +52,22 @@ impl fmt::Display for EndpointId {
     }
 }
 
-pub struct IdAllocator {
+pub(crate) struct IdAllocator {
     cache: Mutex<IdCache>,
 }
 
 impl IdAllocator {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             cache: Mutex::new(IdCache::new(MIN_ID, MAX_ID)),
         }
     }
 
-    pub fn allocate(&self) -> Option<EndpointId> {
+    pub(crate) fn allocate(&self) -> Option<EndpointId> {
         self.cache().allocate_id()
     }
 
-    pub fn reuse(&self, id: EndpointId) -> Res<()> {
+    pub(crate) fn reuse(&self, id: EndpointId) -> Res<()> {
         if id < MIN_ID {
             return Err(DataPlaneError::GeneralError(format!(
                 "unable to reuse EndpointId: {id} < {MIN_ID}"
@@ -84,7 +84,7 @@ impl IdAllocator {
         Ok(())
     }
 
-    pub fn release(&self, id: EndpointId) -> Res<()> {
+    pub(crate) fn release(&self, id: EndpointId) -> Res<()> {
         if !self.cache().insert(id) {
             return Err(DataPlaneError::GeneralError(format!(
                 "unable to release EndpointId {id}"

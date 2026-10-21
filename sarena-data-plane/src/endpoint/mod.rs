@@ -1,9 +1,11 @@
 mod container;
+mod directory;
 mod handle;
 mod id;
 mod id_allocator;
 mod manager;
 mod persist;
+mod regenerate;
 mod worker;
 
 pub use handle::Endpoint;
