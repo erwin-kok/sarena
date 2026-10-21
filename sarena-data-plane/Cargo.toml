@@ -23,10 +23,12 @@ sarena-utils = { path = "../sarena-utils" }
 async-trait = { workspace = true }
 aya = { workspace = true }
 aya-log = { workspace = true }
+futures = { workspace = true }
 ipnet = { workspace = true }
 log = { workspace = true }
 network-types = { workspace = true, default-features = false }
 nix = { workspace = true, features = ["poll"] }
+rand = { workspace = true, features = ["thread_rng"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

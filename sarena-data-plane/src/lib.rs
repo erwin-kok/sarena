@@ -1,4 +1,5 @@
 mod config;
+mod controller;
 mod endpoint;
 mod error;
 mod loader;
@@ -10,6 +11,10 @@ mod soft_dataplane;
 
 use async_trait::async_trait;
 pub use config::DataPlaneConfig;
+pub use controller::{
+    Backoff, BoxError, ControllerObserver, ControllerStatus, Flow, JobFn, Manager, ManagerBuilder,
+    Registry, Spec, StopFn, Termination, job, stop_fn,
+};
 pub use endpoint::{EndpointId, EndpointManager, EndpointPersist, EndpointSpec};
 pub use error::{DataPlaneError, Res};
 pub use loader::{AyaBackend, Loader, LoaderEndpointKind, LoaderHandle, PinRoot};
