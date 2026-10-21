@@ -1,4 +1,4 @@
-use std::{net::IpAddr, sync::Arc, thread::JoinHandle};
+use std::{net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
 use sarena_infra::{
@@ -8,8 +8,8 @@ use sarena_infra::{
 use sarena_shared::EndpointConfig;
 
 use crate::{
-    AyaBackend, DataPlane, DataPlaneError, EndpointConfigMap, Loader, LoaderEndpointKind,
-    LoaderHandle, PIN_ROOT, PinRoot,
+    AyaBackend, DataPlane, DataPlaneError, DataplaneLoader, DefaultDataplaneLoader,
+    EndpointConfigMap, Loader, LoaderEndpointKind, PIN_ROOT, PinRoot,
     config::DataPlaneConfig,
     error::Res,
     netlink::{SARENA_HOST, setup_host_device},
@@ -26,11 +26,11 @@ impl DataPlane for DefaultDataPlane {
 
     async fn shutdown(self) -> Res<()> {
         let inner = Arc::into_inner(self.inner).ok_or(DataPlaneError::StillShared)?;
-        inner.loader_handle.shutdown(inner.loader_thread).await
+        inner.dataplane_loader.shutdown().await
     }
 
-    fn loader_handle(&self) -> LoaderHandle {
-        self.inner.loader_handle.clone()
+    fn loader(&self) -> Arc<dyn DataplaneLoader> {
+        self.inner.dataplane_loader.clone()
     }
 }
 
@@ -44,8 +44,7 @@ impl DefaultDataPlane {
 }
 
 pub struct DefaultDataPlaneInner {
-    loader_handle: LoaderHandle,
-    loader_thread: JoinHandle<()>,
+    dataplane_loader: Arc<dyn DataplaneLoader>,
 }
 
 async fn start_control_plane(config: &DataPlaneConfig) -> Res<DefaultDataPlaneInner> {
@@ -56,7 +55,8 @@ async fn start_control_plane(config: &DataPlaneConfig) -> Res<DefaultDataPlaneIn
     let backend = AyaBackend::new(pin_root.clone());
     let loader: Loader<AyaBackend> = Loader::new(backend, pin_root.clone());
 
-    let (loader_handle, loader_thread) = LoaderHandle::spawn(loader, 16);
+    let loader_handle: Arc<dyn DataplaneLoader> =
+        Arc::new(DefaultDataplaneLoader::spawn(loader, 16));
 
     loader_handle.load_global_maps().await?;
 
@@ -92,8 +92,7 @@ async fn start_control_plane(config: &DataPlaneConfig) -> Res<DefaultDataPlaneIn
     set_endpoint_config(host.mac(), config.internal_ip);
 
     Ok(DefaultDataPlaneInner {
-        loader_handle,
-        loader_thread,
+        dataplane_loader: loader_handle,
     })
 }
 

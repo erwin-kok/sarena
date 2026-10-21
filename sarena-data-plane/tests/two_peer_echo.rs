@@ -6,7 +6,8 @@ use std::{
 
 use ipnet::{IpNet, Ipv4Net};
 use sarena_data_plane::{
-    AyaBackend, EndpointConfigMap, Loader, LoaderEndpointKind, LoaderHandle, LxcMap, PinRoot,
+    AyaBackend, DataplaneLoader as _, DefaultDataplaneLoader, EndpointConfigMap, Loader,
+    LoaderEndpointKind, LxcMap, PinRoot,
 };
 use sarena_infra::{
     InfraError, InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, Netns,
@@ -37,7 +38,7 @@ async fn two_peer_udp_echo_through_loader() {
 
     let backend = AyaBackend::new(pin_root.clone());
     let loader = Loader::new(backend, pin_root.clone());
-    let (loader_handle, _loader_thread) = LoaderHandle::spawn(loader, 16);
+    let loader_handle = DefaultDataplaneLoader::spawn(loader, 16);
     loader_handle
         .load_global_maps()
         .await
@@ -124,7 +125,7 @@ async fn two_peer_udp_echo_through_loader() {
 
 async fn create_endpoint(
     provisioner: &mut NetlinkNetworkProvisioner,
-    loader_handle: &LoaderHandle,
+    loader_handle: &DefaultDataplaneLoader,
     container_id: &str,
     if_name: &str,
     peer_netns_path: PathBuf,

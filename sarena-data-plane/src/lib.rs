@@ -9,6 +9,8 @@ mod netlink;
 mod setup;
 mod soft_dataplane;
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 pub use config::DataPlaneConfig;
 pub use controller::{
@@ -17,7 +19,11 @@ pub use controller::{
 };
 pub use endpoint::{EndpointId, EndpointManager, EndpointPersist, EndpointSpec};
 pub use error::{DataPlaneError, Res};
-pub use loader::{AyaBackend, Loader, LoaderEndpointKind, LoaderHandle, PinRoot};
+pub use loader::{
+    AyaBackend, DataplaneLoader, DefaultDataplaneLoader, Loader, LoaderEndpointKind, PinRoot,
+};
+#[cfg(any(test, feature = "test-util"))]
+pub use loader::{LoaderCall, MockDataplaneLoader};
 pub use maps::{CallsMap, EndpointConfigMap, LxcMap, MetricsMap};
 pub use sarena_infra::{InterfaceAddress, MacAddress};
 pub use setup::DefaultDataPlane;
@@ -31,5 +37,5 @@ pub trait DataPlane: Send + Sync {
 
     async fn shutdown(self) -> Res<()>;
 
-    fn loader_handle(&self) -> LoaderHandle;
+    fn loader(&self) -> Arc<dyn DataplaneLoader>;
 }

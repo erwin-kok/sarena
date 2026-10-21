@@ -14,7 +14,8 @@ use axum::{
 };
 use sarena_api_types_v1::{daemon, endpoint, ipam};
 use sarena_data_plane::{
-    AyaBackend, EndpointConfigMap, Loader, LoaderEndpointKind, LoaderHandle, LxcMap, PinRoot,
+    AyaBackend, DataplaneLoader as _, DefaultDataplaneLoader, EndpointConfigMap, Loader,
+    LoaderEndpointKind, LxcMap, PinRoot,
 };
 use sarena_infra::{
     InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, NetworkProvisioner,
@@ -60,13 +61,13 @@ impl<'a> PodSpec<'a> {
 
 #[derive(Clone)]
 pub struct AppState {
-    pub loader_handle: LoaderHandle,
+    pub loader_handle: DefaultDataplaneLoader,
     pub netlink_provisioner: NetlinkNetworkProvisioner,
 }
 
 impl AppState {
     pub fn new(
-        loader_handle: LoaderHandle,
+        loader_handle: DefaultDataplaneLoader,
         netlink_provisioner: NetlinkNetworkProvisioner,
     ) -> Self {
         Self {
@@ -97,7 +98,7 @@ impl FakeApiServer {
 
         let backend = AyaBackend::new(pin_root.clone());
         let loader = Loader::new(backend, pin_root.clone());
-        let (loader_handle, _loader_thread) = LoaderHandle::spawn(loader, 16);
+        let loader_handle = DefaultDataplaneLoader::spawn(loader, 16);
         loader_handle
             .load_global_maps()
             .await

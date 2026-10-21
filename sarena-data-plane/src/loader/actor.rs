@@ -1,10 +1,15 @@
-use std::thread::JoinHandle;
+use std::{
+    ops::ControlFlow,
+    sync::{Arc, Mutex, PoisonError},
+    thread::JoinHandle,
+};
 
+use async_trait::async_trait;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     error::{DataPlaneError, Res},
-    loader::{Loader, backend::BpfBackend, loader_endpoint::LoaderEndpointKind},
+    loader::{DataplaneLoader, Loader, backend::BpfBackend, loader_endpoint::LoaderEndpointKind},
 };
 
 enum Command {
@@ -31,14 +36,20 @@ enum Command {
     TeardownAll {
         reply: oneshot::Sender<Res<()>>,
     },
+    Shutdown {
+        reply: oneshot::Sender<Res<()>>,
+    },
 }
 
 #[derive(Clone)]
-pub struct LoaderHandle {
+pub struct DefaultDataplaneLoader {
     tx: mpsc::Sender<Command>,
+    // Shared between clones; whichever clone calls `shutdown` first takes
+    // the handle and joins the thread.
+    thread: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
-impl LoaderHandle {
+impl DefaultDataplaneLoader {
     /// Spawns the actor on its own dedicated OS thread - deliberately
     /// *not* a tokio task. The underlying bpf(2)/netlink calls a real
     /// backend makes are blocking syscalls (and the verifier can take a
@@ -46,18 +57,18 @@ impl LoaderHandle {
     /// on a tokio worker thread would stall every other task sharing
     /// that worker. A dedicated thread with `blocking_recv` sidesteps
     /// that entirely; callers still talk to it through a normal async
-    /// `LoaderHandle`.
+    /// `DefaultDataplaneLoader`.
     ///
     /// Commands are processed one at a time in the order received,
     /// which is what guarantees two calls (e.g. an ADD and a DEL racing
     /// for the same id) never interleave against the same pin tree -
     /// no locking needed anywhere else.
     ///
-    /// Returns the handle together with the actor thread's `JoinHandle`,
-    /// so a caller that wants an orderly shutdown (see [`LoaderHandle::shutdown`])
-    /// can wait for the thread to actually finish rather than just
-    /// dropping its senders and hoping.
-    pub fn spawn<B>(loader: Loader<B>, channel_buffer: usize) -> (Self, JoinHandle<()>)
+    /// The actor thread's `JoinHandle` is kept inside the handle, so an
+    /// orderly shutdown (see [`DataplaneLoader::shutdown`]) can wait for
+    /// the thread to actually finish rather than just dropping its senders
+    /// and hoping.
+    pub fn spawn<B>(loader: Loader<B>, channel_buffer: usize) -> Self
     where
         B: BpfBackend + Send + 'static,
         B::Instance: Send,
@@ -69,58 +80,18 @@ impl LoaderHandle {
             .spawn(move || {
                 let mut loader = loader;
                 while let Some(cmd) = rx.blocking_recv() {
-                    dispatch(&mut loader, cmd);
+                    if dispatch(&mut loader, cmd).is_break() {
+                        break;
+                    }
                 }
                 tracing::info!("loader actor channel closed, thread exiting");
             })
             .expect("failed to spawn sarena-data-plane actor thread");
 
-        (Self { tx }, thread)
-    }
-
-    pub async fn shutdown(self, thread: JoinHandle<()>) -> Res<()> {
-        self.teardown_all().await?;
-        drop(self);
-
-        tokio::task::spawn_blocking(move || thread.join())
-            .await
-            .expect("failed to join sarena-data-plane actor thread")
-            .expect("sarena-data-plane actor thread panicked");
-
-        Ok(())
-    }
-
-    pub async fn load_global_maps(&self) -> Res<()> {
-        self.call(|reply| Command::LoadGlobalMaps { reply }).await
-    }
-
-    pub async fn add_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
-        let link = link.to_string();
-        self.call(|reply| Command::AddLoaderEndpoint { kind, link, reply })
-            .await
-    }
-
-    pub async fn remove_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
-        let link = link.to_string();
-        self.call(|reply| Command::RemoveLoaderEndpoint { kind, link, reply })
-            .await
-    }
-
-    pub async fn list_loader_endpoints(&self) -> Res<Vec<(LoaderEndpointKind, String)>> {
-        self.call(|reply| Command::ListLoaderEndpoints { reply })
-            .await
-    }
-
-    pub async fn reconcile(
-        &self,
-        desired: Vec<(LoaderEndpointKind, String)>,
-    ) -> Res<Vec<(LoaderEndpointKind, String, DataPlaneError)>> {
-        self.call(|reply| Command::Reconcile { desired, reply })
-            .await
-    }
-
-    pub async fn teardown_all(&self) -> Res<()> {
-        self.call(|reply| Command::TeardownAll { reply }).await
+        Self {
+            tx,
+            thread: Arc::new(Mutex::new(Some(thread))),
+        }
     }
 
     async fn call<T>(&self, build: impl FnOnce(oneshot::Sender<Res<T>>) -> Command) -> Res<T> {
@@ -133,7 +104,61 @@ impl LoaderHandle {
     }
 }
 
-fn dispatch<B: BpfBackend>(loader: &mut Loader<B>, cmd: Command) {
+#[async_trait]
+impl DataplaneLoader for DefaultDataplaneLoader {
+    async fn load_global_maps(&self) -> Res<()> {
+        self.call(|reply| Command::LoadGlobalMaps { reply }).await
+    }
+
+    async fn add_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
+        let link = link.to_string();
+        self.call(|reply| Command::AddLoaderEndpoint { kind, link, reply })
+            .await
+    }
+
+    async fn remove_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
+        let link = link.to_string();
+        self.call(|reply| Command::RemoveLoaderEndpoint { kind, link, reply })
+            .await
+    }
+
+    async fn list_loader_endpoints(&self) -> Res<Vec<(LoaderEndpointKind, String)>> {
+        self.call(|reply| Command::ListLoaderEndpoints { reply })
+            .await
+    }
+
+    async fn reconcile(
+        &self,
+        desired: Vec<(LoaderEndpointKind, String)>,
+    ) -> Res<Vec<(LoaderEndpointKind, String, DataPlaneError)>> {
+        self.call(|reply| Command::Reconcile { desired, reply })
+            .await
+    }
+
+    async fn teardown_all(&self) -> Res<()> {
+        self.call(|reply| Command::TeardownAll { reply }).await
+    }
+
+    async fn shutdown(&self) -> Res<()> {
+        let teardown = self.call(|reply| Command::Shutdown { reply }).await;
+
+        let thread = self
+            .thread
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(thread) = thread {
+            tokio::task::spawn_blocking(move || thread.join())
+                .await
+                .expect("failed to join sarena-data-plane actor thread")
+                .expect("sarena-data-plane actor thread panicked");
+        }
+
+        teardown
+    }
+}
+
+fn dispatch<B: BpfBackend>(loader: &mut Loader<B>, cmd: Command) -> ControlFlow<()> {
     // `let _ =` on every send: if the caller dropped the receiving end
     // (e.g. it timed out and moved on), that's the caller's business,
     // not a reason to log noise or panic here.
@@ -156,7 +181,12 @@ fn dispatch<B: BpfBackend>(loader: &mut Loader<B>, cmd: Command) {
         Command::TeardownAll { reply } => {
             let _ = reply.send(loader.teardown_all());
         }
+        Command::Shutdown { reply } => {
+            let _ = reply.send(loader.teardown_all());
+            return ControlFlow::Break(());
+        }
     }
+    ControlFlow::Continue(())
 }
 
 #[cfg(test)]
@@ -168,7 +198,7 @@ mod tests {
     async fn actor_serializes_calls_and_reports_state_after_restart() {
         let pin_root = PinRoot::new("/sys/fs/bpf/test");
         let loader = Loader::new(MockBackend::new(), pin_root);
-        let (handle, _thread) = LoaderHandle::spawn(loader, 16);
+        let handle = DefaultDataplaneLoader::spawn(loader, 16);
 
         let kind = LoaderEndpointKind::Container;
         let link = "lxc00123";
@@ -185,10 +215,25 @@ mod tests {
     async fn dropping_a_cloned_handle_does_not_affect_other_handles() {
         let pin_root = PinRoot::new("/sys/fs/bpf/test");
         let loader = Loader::new(MockBackend::new(), pin_root);
-        let (handle, _thread) = LoaderHandle::spawn(loader, 16);
+        let handle = DefaultDataplaneLoader::spawn(loader, 16);
         drop(handle.clone());
 
         let active = handle.list_loader_endpoints().await.unwrap();
         assert!(active.is_empty());
+    }
+
+    #[tokio::test]
+    async fn shutdown_stops_the_actor_even_with_clones_alive() {
+        let pin_root = PinRoot::new("/sys/fs/bpf/test");
+        let loader = Loader::new(MockBackend::new(), pin_root);
+        let handle = DefaultDataplaneLoader::spawn(loader, 16);
+        let clone = handle.clone();
+
+        handle.shutdown().await.unwrap();
+
+        assert!(matches!(
+            clone.list_loader_endpoints().await,
+            Err(DataPlaneError::ActorGone)
+        ));
     }
 }

@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::PathBuf,
-    sync::{PoisonError, RwLock, RwLockReadGuard},
+    sync::{Arc, PoisonError, RwLock, RwLockReadGuard},
     time::Duration,
 };
 
@@ -13,7 +13,7 @@ use super::{
     id_allocator::{IdAllocator, IdLease},
 };
 use crate::{
-    DataPlaneError, EndpointPersist, LoaderHandle, Res, endpoint::id::EndpointIdentification,
+    DataPlaneError, DataplaneLoader, EndpointPersist, Res, endpoint::id::EndpointIdentification,
 };
 
 struct EndpointManagerInner {
@@ -106,11 +106,11 @@ impl EndpointManagerInner {
 pub struct EndpointManager {
     inner: RwLock<EndpointManagerInner>,
     pub(crate) id_allocator: IdAllocator,
-    pub(crate) loader_handle: LoaderHandle,
+    pub(crate) loader_handle: Arc<dyn DataplaneLoader>,
 }
 
 impl EndpointManager {
-    pub fn new(loader_handle: LoaderHandle) -> Self {
+    pub fn new(loader_handle: Arc<dyn DataplaneLoader>) -> Self {
         Self {
             inner: RwLock::new(EndpointManagerInner::new()),
             id_allocator: IdAllocator::new(),

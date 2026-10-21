@@ -120,7 +120,7 @@ impl BpfBackend for AyaBackend {
     fn resolve_link(&mut self, link: &str) -> Res<NetlinkLink> {
         // `NetworkProvisioner::get_link` is async (rtnetlink-based); this
         // method is called from the actor's own dedicated OS thread (see
-        // `actor::LoaderHandle::spawn`), which is never a tokio worker, so
+        // `actor::DefaultDataplaneLoader::spawn`), which is never a tokio worker, so
         // blocking here is fine. A one-shot current-thread runtime bridges
         // the two, the same way `sarena_infra::Netns::run` does internally.
         let rt = tokio::runtime::Builder::new_current_thread()

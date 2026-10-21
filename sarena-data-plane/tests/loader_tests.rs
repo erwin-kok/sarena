@@ -4,7 +4,9 @@ use std::{
 };
 
 use aya::programs::TcAttachType;
-use sarena_data_plane::{AyaBackend, Loader, LoaderEndpointKind, LoaderHandle, PinRoot};
+use sarena_data_plane::{
+    AyaBackend, DataplaneLoader as _, DefaultDataplaneLoader, Loader, LoaderEndpointKind, PinRoot,
+};
 use sarena_infra::{
     Link, NetlinkNetworkProvisioner, Netns, NetworkProvisioner, TcxAttach, VethSpec, test_support,
 };
@@ -25,7 +27,7 @@ async fn load_multiple_links() {
 
     let backend = AyaBackend::new(pin_root.clone());
     let loader = Loader::new(backend, pin_root.clone());
-    let (loader_handle, _loader_thread) = LoaderHandle::spawn(loader, 16);
+    let loader_handle = DefaultDataplaneLoader::spawn(loader, 16);
 
     test_support::with_temp_netns("dpi-p1-", |peer1_ns| async move {
         test_support::with_temp_netns("dpi-p2-", |peer2_ns| async move {

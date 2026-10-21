@@ -80,7 +80,7 @@ pub async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
 
     let data_plane = DefaultDataPlane::new(&config).await?;
 
-    let endpoint_manager = EndpointManager::new(data_plane.loader_handle());
+    let endpoint_manager = EndpointManager::new(data_plane.loader());
     endpoint_manager.init_metrics();
 
     let state = setup_services(config, endpoint_manager);
