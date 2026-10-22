@@ -1,6 +1,7 @@
-use std::env::home_dir;
+use std::{env::home_dir, net::Ipv4Addr, path::PathBuf};
 
 use config::{Config as ConfigLoader, Environment, File};
+use sarena_data_plane::PIN_ROOT;
 use sarena_utils::LogFormat;
 use serde::Deserialize;
 
@@ -19,6 +20,15 @@ pub struct Config {
     /// Log output format: `text` (default) or `json`.
     #[serde(default)]
     pub log_format: LogFormat,
+
+    /// BPF filesystem directory holding the datapath's pinned maps, opened by
+    /// the `bpf` subcommands. Default: `/sys/fs/bpf/sarena`.
+    #[serde(default = "default_pin_root")]
+    pub pin_root: PathBuf,
+}
+
+fn default_pin_root() -> PathBuf {
+    PathBuf::from(PIN_ROOT)
 }
 
 pub fn load_config(cli: &Cli) -> anyhow::Result<Config> {

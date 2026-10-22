@@ -4,8 +4,8 @@ use crate::{
     Res,
     endpoint::{
         directory::{
-            backup_directory_path, failed_directory_path, next_directory_path,
-            remove_dir_if_exists, state_directory_path,
+            failed_directory_path, next_directory_path, remove_dir_if_exists,
+            synchronize_directories,
         },
         worker::{EndpointPhase, EndpointWorker},
     },
@@ -25,7 +25,7 @@ impl EndpointWorker {
         let result = self.regenerate_bpf().await;
         match result {
             Ok(_revision) => {
-                self.synchronize_directories()?;
+                synchronize_directories(&self.state_dir, id)?;
 
                 // TODO
 		
@@ -57,27 +57,5 @@ impl EndpointWorker {
         self.state.persist.write_state(&next_dir)?;
 
         Ok(0)
-    }
-
-    pub(crate) fn synchronize_directories(&self) -> Res<()> {
-        let id = self.state.id();
-        let current_dir = state_directory_path(&self.state_dir, id);
-        let next_dir = next_directory_path(&self.state_dir, id);
-        let backup_dir = backup_directory_path(&self.state_dir, id);
-
-        remove_dir_if_exists(&backup_dir)?;
-        match fs::rename(&current_dir, &backup_dir) {
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            result => result?,
-        }
-
-        if let Err(e) = fs::rename(&next_dir, &current_dir) {
-            let _ = fs::rename(&backup_dir, &current_dir);
-            return Err(e.into());
-        }
-
-        remove_dir_if_exists(&backup_dir)?;
-
-        Ok(())
     }
 }

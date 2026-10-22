@@ -9,7 +9,7 @@ use sarena_shared::EndpointConfig;
 
 use crate::{
     AyaBackend, DataPlane, DataPlaneError, DataplaneLoader, DefaultDataplaneLoader,
-    EndpointConfigMap, Loader, LoaderEndpointKind, PIN_ROOT, PinRoot,
+    EndpointConfigMap, Loader, LoaderEndpointKind, PinRoot,
     config::DataPlaneConfig,
     error::Res,
     netlink::{SARENA_HOST, setup_host_device},
@@ -48,7 +48,7 @@ pub struct DefaultDataPlaneInner {
 }
 
 async fn start_control_plane(config: &DataPlaneConfig) -> Res<DefaultDataPlaneInner> {
-    let pin_root = PinRoot::new(PIN_ROOT);
+    let pin_root = config.pin_root.clone();
 
     std::fs::create_dir_all(pin_root.globals_dir()).expect("creating globals dir");
 
@@ -89,19 +89,19 @@ async fn start_control_plane(config: &DataPlaneConfig) -> Res<DefaultDataPlaneIn
         .add_loader_endpoint(LoaderEndpointKind::Host, SARENA_HOST)
         .await?;
 
-    set_endpoint_config(host.mac(), config.internal_ip);
+    set_endpoint_config(host.mac(), config.internal_ip, &pin_root);
 
     Ok(DefaultDataPlaneInner {
         dataplane_loader: loader_handle,
     })
 }
 
-fn set_endpoint_config(host_mac: MacAddress, addr: IpAddr) {
+fn set_endpoint_config(host_mac: MacAddress, addr: IpAddr, pin_root: &PinRoot) {
     let ipv4 = match addr {
         IpAddr::V4(addr) => addr,
         IpAddr::V6(_) => panic!("expected IPv4 address"),
     };
-    EndpointConfigMap::for_link(&PinRoot::new(PIN_ROOT), SARENA_HOST)
+    EndpointConfigMap::for_link(pin_root, SARENA_HOST)
         .expect("open endpoint_config map")
         .set(EndpointConfig {
             mac: host_mac.0,

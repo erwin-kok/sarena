@@ -10,8 +10,8 @@ use tracing::warn;
 
 use crate::{DataPlaneError, Res};
 
-const MIN_ID: EndpointId = EndpointId::new(1);
-const MAX_ID: EndpointId = EndpointId::new(4095);
+pub(crate) const MIN_ID: EndpointId = EndpointId::new(1);
+pub(crate) const MAX_ID: EndpointId = EndpointId::new(4095);
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EndpointId(u64);

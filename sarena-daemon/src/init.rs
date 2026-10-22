@@ -14,7 +14,9 @@ use anyhow::Context as _;
 use ipnet::{IpNet, Ipv4Net};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use sarena_api_types_v1::daemon::SarenaVersion;
-use sarena_data_plane::{DataPlane as _, DataPlaneConfig, DefaultDataPlane, EndpointManager};
+use sarena_data_plane::{
+    DataPlane as _, DataPlaneConfig, DefaultDataPlane, EndpointManager, PinRoot,
+};
 use sarena_services::{AppState, DefaultDaemonService, DefaultEndpointService, DefaultIpamService};
 use sarena_utils::{TracingConfig, logging, version};
 use tokio::{
@@ -72,11 +74,14 @@ pub async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
 
     info!("starting sarena-daemon, socket = {socket_path}");
 
+    let pin_root = PinRoot::new(config.pin_root);
+
     let config = DataPlaneConfig {
         gateway_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5)),
         internal_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 7)),
         ipam_ipv4_subnet: Some(IpNet::V4(Ipv4Net::new(Ipv4Addr::new(10, 0, 10, 0), 24)?)),
         ipam_ipv6_subnet: None,
+        pin_root: pin_root.clone(),
     };
 
     let data_plane = DefaultDataPlane::new(&config).await?;
@@ -88,6 +93,13 @@ pub async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
 
     let endpoint_manager = EndpointManager::new(data_plane.loader(), &state_dir);
     endpoint_manager.init_metrics();
+
+    let (restored, to_clean) = endpoint_manager.restore_old_endpoints(&pin_root).await?;
+    info!(
+        "endpoints restored: {}, endpoints to clean: {}",
+        restored.len(),
+        to_clean.len()
+    );
 
     let state = setup_services(config, endpoint_manager);
 

@@ -13,7 +13,8 @@ use super::{
     id_allocator::{IdAllocator, IdLease},
 };
 use crate::{
-    DataPlaneError, DataplaneLoader, EndpointPersist, Res, endpoint::id::EndpointIdentification,
+    DataPlaneError, DataplaneLoader, EndpointPersist, LxcMap, PinRoot, Res,
+    endpoint::{directory::read_endpoints, id::EndpointIdentification},
 };
 
 struct EndpointManagerInner {
@@ -118,6 +119,40 @@ impl EndpointManager {
             loader,
             state_dir: state_dir.into(),
         }
+    }
+
+    pub async fn restore_old_endpoints(
+        &self,
+        pin_root: &PinRoot,
+    ) -> Res<(Vec<EndpointPersist>, Vec<EndpointPersist>)> {
+        let mut restored: Vec<EndpointPersist> = Vec::new();
+        let mut to_clean: Vec<EndpointPersist> = Vec::new();
+
+        info!("restoring endpoints...");
+
+        let possible_endpoints = read_endpoints(&self.state_dir)?;
+        if possible_endpoints.is_empty() {
+            info!("no old endpoints found.");
+            return Ok((restored, to_clean));
+        }
+
+        let map = LxcMap::open(pin_root)?;
+        let existing_endpoints = map.endpoints()?;
+
+        let loader_endpoints = self.loader.list_loader_endpoints().await?;
+
+        for (id, endpoint) in possible_endpoints {
+            match self.allocate_reuse_id(id) {
+                Ok(lease) => {
+                    restored.push(endpoint);
+
+                    lease.commit();
+                }
+                Err(_) => {}
+            }
+        }
+
+        Ok((restored, to_clean))
     }
 
     pub fn init_metrics(&self) {}
@@ -296,16 +331,11 @@ impl EndpointManager {
         Ok(IdLease::new(&self.id_allocator, id))
     }
 
-    pub(crate) fn allocate_id(&self, current_id: Option<EndpointId>) -> Res<IdLease<'_>> {
-        match current_id {
-            Some(id) => {
-                self.id_allocator.reuse(id).map_err(|e| {
-                    DataPlaneError::GeneralError(format!("unable to reuse EndpointId: {e}"))
-                })?;
-                Ok(IdLease::new(&self.id_allocator, id))
-            }
-            None => self.allocate_new_id(),
-        }
+    pub(crate) fn allocate_reuse_id(&self, current_id: EndpointId) -> Res<IdLease<'_>> {
+        self.id_allocator.reuse(current_id).map_err(|e| {
+            DataPlaneError::GeneralError(format!("unable to reuse EndpointId: {e}"))
+        })?;
+        Ok(IdLease::new(&self.id_allocator, current_id))
     }
 
     fn release_id(&self, id: EndpointId) -> Res<()> {
