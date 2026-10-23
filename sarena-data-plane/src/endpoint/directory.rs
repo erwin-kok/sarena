@@ -220,7 +220,7 @@ mod tests {
 
     /// Writes a state directory `name` holding endpoint `id`, tagged with `marker` so the
     /// test can tell which directory was restored.
-    fn write_dir(state_dir: &Path, name: &str, id: u64, marker: &str) {
+    fn write_dir(state_dir: &Path, name: &str, id: u16, marker: &str) {
         let dir = state_dir.join(name);
         fs::create_dir_all(&dir).unwrap();
         let mut spec = EndpointSpec::default();
@@ -233,7 +233,7 @@ mod tests {
         .unwrap();
     }
 
-    fn marker(endpoints: &HashMap<EndpointId, EndpointPersist>, id: u64) -> &str {
+    fn marker(endpoints: &HashMap<EndpointId, EndpointPersist>, id: u16) -> &str {
         endpoints[&EndpointId::new(id)]
             .container_id
             .as_deref()

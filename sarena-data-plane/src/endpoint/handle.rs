@@ -111,7 +111,7 @@ impl Endpoint {
             abort.abort();
             Err(DataPlaneError::GeneralError(format!(
                 "endpoint {} did not drain within {timeout:?}, aborted",
-                u64::from(id)
+                id.get()
             )))
         }
     }

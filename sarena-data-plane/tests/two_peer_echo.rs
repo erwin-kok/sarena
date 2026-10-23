@@ -194,8 +194,10 @@ async fn create_endpoint(
     EndpointConfigMap::for_link(&pins, &lxc_ifname)
         .expect("open endpoint_config map")
         .set(EndpointConfig {
+            endpoint_id: 1234,
             host_mac: host_mac.0,
             ipv4: Some(peer_ip),
+            ipv6: None,
         })
         .expect("set endpoint config");
 
@@ -220,6 +222,7 @@ async fn create_endpoint(
                 },
             },
             &EndpointInfo {
+                endpoint_id: 1234,
                 if_index: host.ifindex(),
                 container_mac: peer.mac().0,
                 host_mac: host_mac.0,

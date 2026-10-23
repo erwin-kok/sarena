@@ -14,25 +14,25 @@ pub(crate) const MIN_ID: EndpointId = EndpointId::new(1);
 pub(crate) const MAX_ID: EndpointId = EndpointId::new(4095);
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct EndpointId(u64);
+pub struct EndpointId(u16);
 
 impl EndpointId {
-    pub const fn new(id: u64) -> Self {
+    pub const fn new(id: u16) -> Self {
         Self(id)
     }
 
-    pub const fn get(self) -> u64 {
+    pub const fn get(self) -> u16 {
         self.0
     }
 }
 
-impl From<u64> for EndpointId {
-    fn from(id: u64) -> Self {
+impl From<u16> for EndpointId {
+    fn from(id: u16) -> Self {
         Self(id)
     }
 }
 
-impl From<EndpointId> for u64 {
+impl From<EndpointId> for u16 {
     fn from(id: EndpointId) -> Self {
         id.0
     }
@@ -42,7 +42,7 @@ impl FromStr for EndpointId {
     type Err = std::num::ParseIntError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse::<u64>().map(Self)
+        s.parse::<u16>().map(Self)
     }
 }
 
@@ -260,7 +260,7 @@ mod tests {
         let allocator = IdAllocator::new();
         assert!(allocator.release(MIN_ID).is_err());
         assert!(allocator.release(MAX_ID).is_err());
-        assert_eq!(allocate_all(&allocator).len() as u64, MAX_ID.get());
+        assert_eq!(allocate_all(&allocator).len() as u16, MAX_ID.get());
     }
 
     #[test]
@@ -299,10 +299,10 @@ mod tests {
         assert!(allocator.reuse(MIN_ID).is_ok());
         assert!(allocator.reuse(MAX_ID).is_ok());
         assert!(allocator.reuse(EndpointId::new(MAX_ID.get() + 1)).is_ok());
-        assert!(allocator.reuse(EndpointId::new(u64::MAX)).is_ok());
+        assert!(allocator.reuse(EndpointId::new(u16::MAX)).is_ok());
 
         let ids = allocate_all(&allocator);
-        assert_eq!(ids.len() as u64, MAX_ID.get() - 2);
+        assert_eq!(ids.len() as u16, MAX_ID.get() - 2);
         assert!(!ids.contains(&MIN_ID));
         assert!(!ids.contains(&MAX_ID));
     }
@@ -338,7 +338,7 @@ mod tests {
         for id in rx {
             assert!(ids.insert(id), "ID {id} allocated more than once");
         }
-        assert_eq!(ids.len() as u64, MAX_ID.get());
+        assert_eq!(ids.len() as u16, MAX_ID.get());
     }
 
     #[test]

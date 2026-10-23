@@ -71,7 +71,7 @@ impl EndpointWorker {
     }
 
     pub(crate) fn spawn(self) -> JoinHandle<()> {
-        let span = tracing::info_span!("endpoint", id = u64::from(self.state.persist.id));
+        let span = tracing::info_span!("endpoint", id = self.state.persist.id.get());
         tokio::spawn(self.run().instrument(span))
     }
 
