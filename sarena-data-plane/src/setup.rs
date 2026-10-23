@@ -9,7 +9,7 @@ use sarena_shared::EndpointConfig;
 
 use crate::{
     AyaBackend, DataPlane, DataPlaneError, DataplaneLoader, DefaultDataplaneLoader,
-    EndpointConfigMap, Loader, LoaderEndpointKind, PinRoot,
+    EndpointConfigMap, Loader, LoaderEndpoint, PinRoot,
     config::DataPlaneConfig,
     error::Res,
     netlink::{SARENA_HOST, setup_host_device},
@@ -86,7 +86,9 @@ async fn start_control_plane(config: &DataPlaneConfig) -> Res<DefaultDataPlaneIn
     }
 
     loader_handle
-        .add_loader_endpoint(LoaderEndpointKind::Host, SARENA_HOST)
+        .add_loader_endpoint(&LoaderEndpoint::Host {
+            link: SARENA_HOST.to_string(),
+        })
         .await?;
 
     set_endpoint_config(host.mac(), config.internal_ip, &pin_root);

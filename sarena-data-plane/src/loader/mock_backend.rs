@@ -1,11 +1,14 @@
 use std::{
     collections::{HashMap, HashSet},
+    net::IpAddr,
     path::{Path, PathBuf},
 };
 
 use sarena_infra::{Link as _, mock_link::MockLink};
+use sarena_shared::{EndpointConfig, EndpointInfo};
 
 use crate::{
+    EndpointId, EndpointPersist,
     error::{DataPlaneError, Res},
     loader::{backend::BpfBackend, manifest::Hook},
 };
@@ -22,6 +25,9 @@ pub enum Call {
     },
     UnpinMap(PathBuf),
     RemovePinDir(PathBuf),
+    SetEndpointConfig(String),
+    UpsertEndpointInfo(EndpointId),
+    RemoveEndpointInfo(IpAddr),
     StopLogging(String),
     StopAllLogging,
 }
@@ -31,6 +37,7 @@ pub struct MockBackend {
     pub calls: Vec<Call>,
     pub maps: HashMap<String, PathBuf>,
     pub links: HashSet<PathBuf>,
+    pub endpoint_infos: HashMap<IpAddr, EndpointInfo>,
     pub call_count: usize,
     pub fail_at: Option<(usize, String)>,
 }
@@ -145,6 +152,32 @@ impl BpfBackend for MockBackend {
             .filter(|p| p.starts_with(prefix))
             .filter_map(|p| p.strip_prefix(prefix).ok().map(|p| p.to_path_buf()))
             .collect())
+    }
+
+    fn set_endpoint_config(&mut self, link: &str, _config: EndpointConfig) -> Res<()> {
+        self.tick()?;
+        self.calls.push(Call::SetEndpointConfig(link.to_string()));
+        Ok(())
+    }
+
+    fn upsert_endpoint_info(&mut self, endpoint: &EndpointPersist, info: &EndpointInfo) -> Res<()> {
+        self.tick()?;
+        self.calls.push(Call::UpsertEndpointInfo(endpoint.id));
+        for ip in endpoint.ips() {
+            self.endpoint_infos.insert(ip, *info);
+        }
+        Ok(())
+    }
+
+    fn remove_endpoint_info(&mut self, ip: IpAddr) -> Res<()> {
+        self.tick()?;
+        self.calls.push(Call::RemoveEndpointInfo(ip));
+        self.endpoint_infos.remove(&ip);
+        Ok(())
+    }
+
+    fn list_endpoint_infos(&self) -> Res<HashMap<IpAddr, EndpointInfo>> {
+        Ok(self.endpoint_infos.clone())
     }
 
     fn stop_logging(&mut self, link: &str) {

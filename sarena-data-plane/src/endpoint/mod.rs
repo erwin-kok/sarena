@@ -1,4 +1,3 @@
-mod container;
 mod directory;
 mod handle;
 mod id;

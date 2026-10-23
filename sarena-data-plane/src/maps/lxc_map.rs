@@ -35,14 +35,9 @@ impl LxcMap {
 
     /// Insert or overwrite the entry for `ep`.
     pub fn upsert_endpoint(&mut self, ep: &EndpointPersist, info: &EndpointInfo) -> Res<()> {
-        if let Some(ipv4) = ep.ipv4 {
+        for ip in ep.ips() {
             self.map
-                .insert(&EndpointKey::from_ipv4_octets(ipv4.octets()), info, 0)
-                .map_err(|e| access(&e))?;
-        }
-        if let Some(ipv6) = ep.ipv6 {
-            self.map
-                .insert(&EndpointKey::from_ipv6_octets(ipv6.octets()), info, 0)
+                .insert(&EndpointKey::from(ip), info, 0)
                 .map_err(|e| access(&e))?;
         }
         Ok(())
@@ -50,30 +45,19 @@ impl LxcMap {
 
     /// Remove the entry for `ep`. Missing keys are not an error.
     pub fn remove_endpoint(&mut self, ep: &EndpointPersist) -> Res<()> {
-        if let Some(ipv4) = ep.ipv4 {
-            match self
-                .map
-                .remove(&EndpointKey::from_ipv4_octets(ipv4.octets()))
-            {
-                Ok(()) | Err(MapError::KeyNotFound) => Ok(()),
-                Err(e) => Err(access(&e)),
-            }?;
-        }
-        if let Some(ipv6) = ep.ipv6 {
-            match self
-                .map
-                .remove(&EndpointKey::from_ipv6_octets(ipv6.octets()))
-            {
-                Ok(()) | Err(MapError::KeyNotFound) => Ok(()),
-                Err(e) => Err(access(&e)),
-            }?;
+        for ip in ep.ips() {
+            self.remove_key(&EndpointKey::from(ip))?;
         }
         Ok(())
     }
 
     /// Remove the entry for `ip`. Missing keys are not an error.
     pub fn remove_endpoint_by_ip(&mut self, ip: IpAddr) -> Res<()> {
-        match self.map.remove(&EndpointKey::from(ip)) {
+        self.remove_key(&EndpointKey::from(ip))
+    }
+
+    fn remove_key(&mut self, key: &EndpointKey) -> Res<()> {
+        match self.map.remove(key) {
             Ok(()) | Err(MapError::KeyNotFound) => Ok(()),
             Err(e) => Err(access(&e)),
         }
@@ -89,7 +73,7 @@ impl LxcMap {
     }
 
     /// Every `(ip, info)` currently in the table.
-    pub fn endpoints(&self) -> Res<Vec<(IpAddr, EndpointInfo)>> {
+    pub fn endpoints(&self) -> Res<std::collections::HashMap<IpAddr, EndpointInfo>> {
         self.map
             .iter()
             .map(|res| {

@@ -14,13 +14,12 @@ use axum::{
 };
 use sarena_api_types_v1::{daemon, endpoint, ipam};
 use sarena_data_plane::{
-    AyaBackend, DataplaneLoader as _, DefaultDataplaneLoader, EndpointConfigMap, EndpointId,
-    EndpointPersist, EndpointSpec, Loader, LoaderEndpointKind, LxcMap, PinRoot,
+    AyaBackend, DataplaneLoader as _, DefaultDataplaneLoader, EndpointId, EndpointPersist,
+    EndpointSpec, Loader, LoaderEndpoint, PinRoot,
 };
 use sarena_infra::{
     InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, NetworkProvisioner,
 };
-use sarena_shared::{EndpointConfig, EndpointInfo};
 use serde::Deserialize;
 use tokio::net::UnixListener;
 use tracing::info;
@@ -201,62 +200,36 @@ pub async fn create_endpoint(
         .await
         .expect("get_link");
 
-    state
-        .loader_handle
-        .add_loader_endpoint(LoaderEndpointKind::Container, &ep.host_iface_name)
-        .await
-        .expect("add endpoint");
-
-    if let Some(ipv4) = ep.ipv4 {
-        let peer_ip: IpAddr = ipv4.ip.parse::<InterfaceAddress>().expect("parse ip").ip;
-        let peer_ip = match peer_ip {
+    let ipv4 = ep.ipv4.as_ref().map(|ipv4| {
+        match ipv4.ip.parse::<InterfaceAddress>().expect("parse ip").ip {
             IpAddr::V4(ipv4_addr) => ipv4_addr,
             IpAddr::V6(_) => panic!("IPv6 peer addresses are not supported"),
-        };
+        }
+    });
 
-        let pins = PinRoot::new(TEST_PIN_ROOT);
+    let endpoint = LoaderEndpoint::Container(EndpointPersist {
+        id: EndpointId::new(1234),
+        spec: EndpointSpec {
+            container_name: None,
+            container_id: Some(ep.container_id.clone()),
+            docker_network_id: None,
+            docker_endpoint: None,
+            host_iface_name: ep.host_iface_name.clone(),
+            host_iface_index: host.ifindex(),
+            container_mac: MacAddress::parse(&ep.container_mac).expect("parse container mac"),
+            host_mac: MacAddress::parse(&ep.host_mac).expect("parse host mac"),
+            ipv4,
+            ipv6: None,
+            k8s_ns: Some(ep.k8s_namespace.clone()),
+            k8s_pod_name: Some(ep.k8s_pod_name.clone()),
+        },
+    });
 
-        let host_mac = MacAddress::parse(&ep.host_mac).expect("parse host mac");
-        EndpointConfigMap::for_link(&pins, &ep.host_iface_name)
-            .expect("open endpoint_config map")
-            .set(EndpointConfig {
-                endpoint_id: 1234,
-                host_mac: host_mac.0,
-                ipv4: Some(peer_ip),
-                ipv6: None,
-            })
-            .expect("set endpoint config");
-
-        let peer_mac = MacAddress::parse(&ep.container_mac).expect("parse container mac");
-        LxcMap::open(&pins)
-            .expect("open lxc_map")
-            .upsert_endpoint(
-                &EndpointPersist {
-                    id: EndpointId::new(1234),
-                    spec: EndpointSpec {
-                        container_name: None,
-                        container_id: Some(ep.container_id.clone()),
-                        docker_network_id: None,
-                        docker_endpoint: None,
-                        host_iface_name: ep.host_iface_name.clone(),
-                        host_iface_index: host.ifindex(),
-                        container_mac: peer_mac,
-                        host_mac,
-                        ipv4: Some(peer_ip),
-                        ipv6: None,
-                        k8s_ns: Some(ep.k8s_namespace.clone()),
-                        k8s_pod_name: Some(ep.k8s_pod_name.clone()),
-                    },
-                },
-                &EndpointInfo {
-                    endpoint_id: 1234,
-                    if_index: host.ifindex(),
-                    container_mac: peer_mac.0,
-                    host_mac: host_mac.0,
-                },
-            )
-            .expect("insert endpoint info");
-    }
+    state
+        .loader_handle
+        .add_loader_endpoint(&endpoint)
+        .await
+        .expect("add endpoint");
 
     Ok(Json(endpoint::EndpointCreateResponse {}))
 }

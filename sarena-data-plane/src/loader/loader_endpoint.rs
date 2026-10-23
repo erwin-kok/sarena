@@ -1,4 +1,5 @@
 use crate::{
+    EndpointPersist,
     loader::manifest::{
         CONTAINER_HOOKS, CONTAINER_PER_ENDPOINT_MAPS, HOST_HOOKS, HOST_PER_ENDPOINT_MAPS, HookSpec,
         NETDEV_HOOKS, NETDEV_PER_ENDPOINT_MAPS, OVERLAY_HOOKS, OVERLAY_PER_ENDPOINT_MAPS,
@@ -55,6 +56,49 @@ impl LoaderEndpointKind {
             LoaderEndpointKind::NetDev => NETDEV_PER_ENDPOINT_MAPS,
             LoaderEndpointKind::Overlay => OVERLAY_PER_ENDPOINT_MAPS,
             LoaderEndpointKind::Wireguard => WIREGUARD_PER_ENDPOINT_MAPS,
+        }
+    }
+}
+
+/// An endpoint the loader attaches programs to, together with whatever
+/// that kind of endpoint needs to fill in its maps.
+#[derive(Clone, Debug, PartialEq)]
+pub enum LoaderEndpoint {
+    /// A container's host-side veth. Gets an `endpoint_config` and an
+    /// `lxc_map` entry per IP.
+    Container(EndpointPersist),
+    Host {
+        link: String,
+    },
+    NetDev {
+        link: String,
+    },
+    Overlay {
+        link: String,
+    },
+    Wireguard {
+        link: String,
+    },
+}
+
+impl LoaderEndpoint {
+    pub fn kind(&self) -> LoaderEndpointKind {
+        match self {
+            LoaderEndpoint::Container(_) => LoaderEndpointKind::Container,
+            LoaderEndpoint::Host { .. } => LoaderEndpointKind::Host,
+            LoaderEndpoint::NetDev { .. } => LoaderEndpointKind::NetDev,
+            LoaderEndpoint::Overlay { .. } => LoaderEndpointKind::Overlay,
+            LoaderEndpoint::Wireguard { .. } => LoaderEndpointKind::Wireguard,
+        }
+    }
+
+    pub fn link(&self) -> &str {
+        match self {
+            LoaderEndpoint::Container(endpoint) => &endpoint.host_iface_name,
+            LoaderEndpoint::Host { link }
+            | LoaderEndpoint::NetDev { link }
+            | LoaderEndpoint::Overlay { link }
+            | LoaderEndpoint::Wireguard { link } => link,
         }
     }
 }

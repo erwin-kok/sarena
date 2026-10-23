@@ -13,7 +13,7 @@ use super::{
     id_allocator::{IdAllocator, IdLease},
 };
 use crate::{
-    DataPlaneError, DataplaneLoader, EndpointPersist, LxcMap, PinRoot, Res,
+    DataPlaneError, DataplaneLoader, EndpointPersist, LoaderEndpoint, LxcMap, PinRoot, Res,
     endpoint::{directory::read_endpoints, id::EndpointIdentification},
 };
 
@@ -183,11 +183,25 @@ impl EndpointManager {
         };
         let shutdown_result = match ep {
             Some(ep) => {
+                let is_host = ep.is_host();
+                let status = ep.watch_status();
                 ep.shutdown();
-                match timeout {
-                    Some(d) => ep.wait_for_shutdown(d).await,
-                    None => Ok(()),
-                }
+                // Always wait for the worker, even without a timeout: a
+                // regenerate still in its queue would otherwise re-attach the
+                // endpoint after it was removed below. A worker aborted on
+                // timeout sends nothing more, and anything it already sent to
+                // the loader is serialized before the remove.
+                let drained = ep.wait_for_shutdown(timeout.unwrap_or(Duration::MAX)).await;
+                // The host endpoint is attached by `setup`, not by its worker.
+                let removed = if is_host {
+                    Ok(())
+                } else {
+                    let persist = status.borrow().persist.clone();
+                    self.loader
+                        .remove_loader_endpoint(&LoaderEndpoint::Container(persist))
+                        .await
+                };
+                drained.and(removed)
             }
             None => Ok(()),
         };
@@ -319,14 +333,14 @@ impl EndpointManager {
         inner.lookup_pod_name(name)
     }
 
-    pub(crate) fn allocate_new_id(&self) -> Res<IdLease<'_>> {
+    pub fn allocate_new_id(&self) -> Res<IdLease<'_>> {
         let id = self.id_allocator.allocate().ok_or_else(|| {
             DataPlaneError::GeneralError("no more EndpointId's available".to_string())
         })?;
         Ok(IdLease::new(&self.id_allocator, id))
     }
 
-    pub(crate) fn allocate_reuse_id(&self, current_id: EndpointId) -> Res<IdLease<'_>> {
+    pub fn allocate_reuse_id(&self, current_id: EndpointId) -> Res<IdLease<'_>> {
         self.id_allocator.reuse(current_id).map_err(|e| {
             DataPlaneError::GeneralError(format!("unable to reuse EndpointId: {e}"))
         })?;
@@ -335,5 +349,46 @@ impl EndpointManager {
 
     fn release_id(&self, id: EndpointId) -> Res<()> {
         self.id_allocator.release(id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{EndpointSpec, LoaderCall, LoaderEndpointKind, MockDataplaneLoader};
+
+    #[tokio::test]
+    async fn delete_endpoint_removes_it_from_the_loader_after_queued_work() {
+        let dir = std::env::temp_dir().join(format!("sarena-mgr-delete-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let loader = Arc::new(MockDataplaneLoader::new());
+        let manager = EndpointManager::new(loader.clone(), &dir);
+
+        let persist = EndpointPersist {
+            id: EndpointId::new(3),
+            spec: EndpointSpec {
+                host_iface_name: "lxc3".to_string(),
+                ..Default::default()
+            },
+        };
+        manager
+            .add_endpoint(&persist)
+            .unwrap()
+            .regenerate()
+            .await
+            .unwrap();
+        manager.delete_endpoint(persist.id, None).await.unwrap();
+
+        let kind = LoaderEndpointKind::Container;
+        assert_eq!(
+            loader.calls(),
+            vec![
+                LoaderCall::AddLoaderEndpoint(kind, "lxc3".to_string()),
+                LoaderCall::RemoveLoaderEndpoint(kind, "lxc3".to_string()),
+            ]
+        );
+        assert!(!manager.endpoint_exists(persist.id));
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

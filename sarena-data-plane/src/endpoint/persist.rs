@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    net::{Ipv4Addr, Ipv6Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     ops::Deref,
     path::{Path, PathBuf},
 };
@@ -59,6 +59,14 @@ impl EndpointSpec {
             self.k8s_ns.as_deref()?,
             self.k8s_pod_name.as_deref()?
         ))
+    }
+
+    /// The IPv4 and/or IPv6 address of this endpoint.
+    pub fn ips(&self) -> impl Iterator<Item = IpAddr> {
+        self.ipv4
+            .map(IpAddr::V4)
+            .into_iter()
+            .chain(self.ipv6.map(IpAddr::V6))
     }
 }
 

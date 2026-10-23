@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    net::IpAddr,
     os::fd::AsFd as _,
     path::{Path, PathBuf},
     sync::{
@@ -20,9 +21,10 @@ use sarena_infra::{
     Link as _, NetlinkNetworkProvisioner, NetworkProvisioner, TcxAttach as _,
     netlink_link::NetlinkLink,
 };
+use sarena_shared::{EndpointConfig, EndpointInfo};
 
 use crate::{
-    PinRoot,
+    EndpointConfigMap, EndpointPersist, LxcMap, PinRoot,
     error::{DataPlaneError, Res},
     loader::{backend::BpfBackend, manifest::Hook},
 };
@@ -205,6 +207,22 @@ impl BpfBackend for AyaBackend {
             src: e.to_string(),
         })?;
         Ok(out)
+    }
+
+    fn set_endpoint_config(&mut self, link: &str, config: EndpointConfig) -> Res<()> {
+        EndpointConfigMap::for_link(&self.pin_root, link)?.set(config)
+    }
+
+    fn upsert_endpoint_info(&mut self, endpoint: &EndpointPersist, info: &EndpointInfo) -> Res<()> {
+        LxcMap::open(&self.pin_root)?.upsert_endpoint(endpoint, info)
+    }
+
+    fn remove_endpoint_info(&mut self, ip: IpAddr) -> Res<()> {
+        LxcMap::open(&self.pin_root)?.remove_endpoint_by_ip(ip)
+    }
+
+    fn list_endpoint_infos(&self) -> Res<HashMap<IpAddr, EndpointInfo>> {
+        LxcMap::open(&self.pin_root)?.endpoints()
     }
 
     fn stop_logging(&mut self, link: &str) {

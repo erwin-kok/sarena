@@ -36,6 +36,10 @@ impl EndpointState {
     pub fn id(&self) -> EndpointId {
         self.persist.id
     }
+
+    pub fn persist(&self) -> EndpointPersist {
+        self.persist.clone()
+    }
 }
 
 /// Owns the endpoint's mutable state and handles its commands one at a time,
@@ -43,7 +47,7 @@ impl EndpointState {
 /// `&mut self` without locking; [`Endpoint`](crate::endpoint::Endpoint) is
 /// the handle to it.
 pub(crate) struct EndpointWorker {
-    pub(crate) _loader: Arc<dyn DataplaneLoader>,
+    pub(crate) loader: Arc<dyn DataplaneLoader>,
     pub(crate) state: EndpointState,
     pub(crate) state_dir: PathBuf,
     command_rx: mpsc::Receiver<EndpointCommand>,
@@ -61,7 +65,7 @@ impl EndpointWorker {
         stop: CancellationToken,
     ) -> Self {
         Self {
-            _loader: loader,
+            loader,
             state,
             state_dir,
             command_rx,
@@ -88,23 +92,23 @@ impl EndpointWorker {
                     None => return,
                 },
             };
-            self.handle(command);
+            self.handle(command).await;
         }
 
         // Drain: refuse new commands, but still run the ones already queued.
         self.command_rx.close();
         while let Some(command) = self.command_rx.recv().await {
-            self.handle(command);
+            self.handle(command).await;
         }
         tracing::debug!("endpoint queue drained, worker exiting");
     }
 
     // `let _ =` on every reply: if the caller stopped waiting, the command
     // still ran; there is just nobody left to tell.
-    fn handle(&mut self, command: EndpointCommand) {
+    async fn handle(&mut self, command: EndpointCommand) {
         match command {
             EndpointCommand::Regenerate { reply } => {
-                let _ = reply.send(self.regenerate());
+                let _ = reply.send(self.regenerate().await);
             }
         }
     }

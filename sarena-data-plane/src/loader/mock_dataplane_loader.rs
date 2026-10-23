@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use crate::{
     error::{DataPlaneError, Res},
-    loader::{DataplaneLoader, LoaderEndpointKind},
+    loader::{DataplaneLoader, LoaderEndpoint, LoaderEndpointKind},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,7 +76,8 @@ impl DataplaneLoader for MockDataplaneLoader {
         Ok(())
     }
 
-    async fn add_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
+    async fn add_loader_endpoint(&self, endpoint: &LoaderEndpoint) -> Res<()> {
+        let (kind, link) = (endpoint.kind(), endpoint.link());
         let mut state = self.record(LoaderCall::AddLoaderEndpoint(kind, link.to_string()))?;
         let endpoint = (kind, link.to_string());
         if !state.endpoints.contains(&endpoint) {
@@ -85,7 +86,8 @@ impl DataplaneLoader for MockDataplaneLoader {
         Ok(())
     }
 
-    async fn remove_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
+    async fn remove_loader_endpoint(&self, endpoint: &LoaderEndpoint) -> Res<()> {
+        let (kind, link) = (endpoint.kind(), endpoint.link());
         let mut state = self.record(LoaderCall::RemoveLoaderEndpoint(kind, link.to_string()))?;
         state.endpoints.retain(|(k, l)| !(*k == kind && l == link));
         Ok(())
@@ -98,8 +100,12 @@ impl DataplaneLoader for MockDataplaneLoader {
 
     async fn reconcile(
         &self,
-        desired: Vec<(LoaderEndpointKind, String)>,
+        desired: Vec<LoaderEndpoint>,
     ) -> Res<Vec<(LoaderEndpointKind, String, DataPlaneError)>> {
+        let desired: Vec<_> = desired
+            .iter()
+            .map(|endpoint| (endpoint.kind(), endpoint.link().to_string()))
+            .collect();
         let mut state = self.record(LoaderCall::Reconcile(desired.clone()))?;
         state.endpoints.clear();
         for endpoint in desired {
@@ -129,11 +135,14 @@ mod tests {
     #[tokio::test]
     async fn mock_tracks_endpoints_and_records_calls() {
         let loader = MockDataplaneLoader::new();
-        let kind = LoaderEndpointKind::Container;
+        let kind = LoaderEndpointKind::Host;
+        let host = |link: &str| LoaderEndpoint::Host {
+            link: link.to_string(),
+        };
 
-        loader.add_loader_endpoint(kind, "lxc0").await.unwrap();
-        loader.add_loader_endpoint(kind, "lxc1").await.unwrap();
-        loader.remove_loader_endpoint(kind, "lxc0").await.unwrap();
+        loader.add_loader_endpoint(&host("lxc0")).await.unwrap();
+        loader.add_loader_endpoint(&host("lxc1")).await.unwrap();
+        loader.remove_loader_endpoint(&host("lxc0")).await.unwrap();
 
         assert_eq!(
             loader.list_loader_endpoints().await.unwrap(),

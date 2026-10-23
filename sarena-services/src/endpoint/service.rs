@@ -6,7 +6,7 @@ use sarena_api_types_v1::endpoint::{
     Addressing, EndpointCreateRequest, EndpointCreateResponse, EndpointHealthResponse,
     EndpointHealthStatus,
 };
-use sarena_data_plane::{EndpointManager, EndpointSpec, MacAddress};
+use sarena_data_plane::{EndpointManager, EndpointPersist, EndpointSpec, MacAddress};
 use tracing::info;
 
 use crate::{
@@ -65,22 +65,30 @@ impl EndpointService for DefaultEndpointService {
 
         let host_mac = MacAddress::parse(&request.host_mac).expect("parse host mac");
         let container_mac = MacAddress::parse(&request.container_mac).expect("parse container mac");
-        let spec = EndpointSpec {
-            container_name: None,
-            container_id: Some(request.container_id),
-            docker_network_id: None,
-            docker_endpoint: None,
-            host_iface_name: request.host_iface_name,
-            host_iface_index: request.host_iface_index,
-            container_mac,
-            host_mac,
-            ipv4,
-            ipv6,
-            k8s_ns: Some(request.k8s_namespace),
-            k8s_pod_name: Some(request.k8s_pod_name),
+        let lease = self.endpoint_manager.allocate_new_id()?;
+        let endpoint = EndpointPersist {
+            id: lease.id(),
+            spec: EndpointSpec {
+                container_name: None,
+                container_id: Some(request.container_id),
+                docker_network_id: None,
+                docker_endpoint: None,
+                host_iface_name: request.host_iface_name,
+                host_iface_index: request.host_iface_index,
+                container_mac,
+                host_mac,
+                ipv4,
+                ipv6,
+                k8s_ns: Some(request.k8s_namespace),
+                k8s_pod_name: Some(request.k8s_pod_name),
+            },
         };
-        let id = self.endpoint_manager.create_endpoint(spec).await?;
+
+        let ep = self.endpoint_manager.add_endpoint(&endpoint)?;
+        let id = lease.commit();
         info!("endpoint {attachment_id} created with id {id}");
+
+        ep.regenerate().await?;
 
         Ok(EndpointCreateResponse {})
     }

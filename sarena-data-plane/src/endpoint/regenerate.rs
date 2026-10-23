@@ -1,7 +1,7 @@
 use std::{fs, os::unix::fs::PermissionsExt as _};
 
 use crate::{
-    Res,
+    LoaderEndpoint, Res,
     endpoint::{
         directory::{
             failed_directory_path, next_directory_path, remove_dir_if_exists,
@@ -12,7 +12,7 @@ use crate::{
 };
 
 impl EndpointWorker {
-    pub(crate) fn regenerate(&mut self) -> Res<()> {
+    pub(crate) async fn regenerate(&mut self) -> Res<()> {
         let id = self.state.id();
         tracing::info!("regenerating endpoint {id}");
 
@@ -22,7 +22,7 @@ impl EndpointWorker {
         fs::create_dir_all(&next_dir)?;
         fs::set_permissions(&next_dir, fs::Permissions::from_mode(0o777))?;
 
-        let result = self.regenerate_bpf();
+        let result = self.regenerate_bpf().await;
         match result {
             Ok(_revision) => {
                 synchronize_directories(&self.state_dir, id)?;
@@ -50,10 +50,16 @@ impl EndpointWorker {
         Ok(())
     }
 
-    pub(crate) fn regenerate_bpf(&mut self) -> Res<u64> {
+    pub(crate) async fn regenerate_bpf(&mut self) -> Res<u64> {
         let id = self.state.id();
+        let persist = self.state.persist();
         let next_dir = next_directory_path(&self.state_dir, id);
-        self.state.persist.write_state(&next_dir)?;
+
+        persist.write_state(&next_dir)?;
+
+        self.loader
+            .add_loader_endpoint(&LoaderEndpoint::Container(persist))
+            .await?;
 
         Ok(0)
     }

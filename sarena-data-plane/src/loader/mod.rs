@@ -15,7 +15,7 @@ pub use actor::DefaultDataplaneLoader;
 use async_trait::async_trait;
 pub use aya_backend::AyaBackend;
 pub use data_plane_loader::Loader;
-pub use loader_endpoint::LoaderEndpointKind;
+pub use loader_endpoint::{LoaderEndpoint, LoaderEndpointKind};
 #[cfg(any(test, feature = "test-util"))]
 pub use mock_dataplane_loader::{LoaderCall, MockDataplaneLoader};
 pub use pin::PinRoot;
@@ -26,17 +26,21 @@ use crate::error::{DataPlaneError, Res};
 pub trait DataplaneLoader: Send + Sync {
     async fn load_global_maps(&self) -> Res<()>;
 
-    async fn add_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()>;
+    /// Loads and attaches `endpoint`'s programs and fills in its maps.
+    async fn add_loader_endpoint(&self, endpoint: &LoaderEndpoint) -> Res<()>;
 
-    async fn remove_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()>;
+    /// Removes `endpoint`'s map entries, detaches its programs and unpins
+    /// its per-endpoint maps.
+    async fn remove_loader_endpoint(&self, endpoint: &LoaderEndpoint) -> Res<()>;
 
     async fn list_loader_endpoints(&self) -> Res<Vec<(LoaderEndpointKind, String)>>;
 
-    /// Brings the active endpoints in line with `desired`. Per-endpoint
-    /// failures are returned rather than aborting the whole reconcile.
+    /// Brings the active endpoints and the `lxc_map` in line with
+    /// `desired`, which must be the complete set. Per-endpoint failures are
+    /// returned rather than aborting the whole reconcile.
     async fn reconcile(
         &self,
-        desired: Vec<(LoaderEndpointKind, String)>,
+        desired: Vec<LoaderEndpoint>,
     ) -> Res<Vec<(LoaderEndpointKind, String, DataPlaneError)>>;
 
     async fn teardown_all(&self) -> Res<()>;

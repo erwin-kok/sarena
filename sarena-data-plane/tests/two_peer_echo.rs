@@ -6,14 +6,13 @@ use std::{
 
 use ipnet::{IpNet, Ipv4Net};
 use sarena_data_plane::{
-    AyaBackend, DataplaneLoader as _, DefaultDataplaneLoader, EndpointConfigMap, EndpointId,
-    EndpointPersist, EndpointSpec, Loader, LoaderEndpointKind, LxcMap, PinRoot,
+    AyaBackend, DataplaneLoader as _, DefaultDataplaneLoader, EndpointId, EndpointPersist,
+    EndpointSpec, Loader, LoaderEndpoint, PinRoot,
 };
 use sarena_infra::{
     InfraError, InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, Netns,
     NetnsGuard, NetworkProvisioner as _, VethSpec, netlink_link::NetlinkLink, route::Route,
 };
-use sarena_shared::{EndpointConfig, EndpointInfo};
 use sarena_utils::{TracingConfig, logging};
 use tracing::info;
 
@@ -182,53 +181,30 @@ async fn create_endpoint(
         peer.ifindex()
     );
 
+    let endpoint = LoaderEndpoint::Container(EndpointPersist {
+        id: EndpointId::new(1234),
+        spec: EndpointSpec {
+            container_name: None,
+            container_id: Some(container_id.to_string()),
+            docker_network_id: None,
+            docker_endpoint: None,
+            host_iface_name: lxc_ifname.clone(),
+            host_iface_index: host.ifindex(),
+            container_mac: peer.mac(),
+            host_mac,
+            ipv4: Some(peer_ip),
+            ipv6: None,
+            k8s_ns: None,
+            k8s_pod_name: None,
+        },
+    });
+
     loader_handle
-        .add_loader_endpoint(LoaderEndpointKind::Container, &lxc_ifname)
+        .add_loader_endpoint(&endpoint)
         .await
         .expect("add_endpoint");
 
     info!("endpoint {} attached", lxc_ifname);
-
-    let pins = PinRoot::new(TEST_PIN_ROOT);
-
-    EndpointConfigMap::for_link(&pins, &lxc_ifname)
-        .expect("open endpoint_config map")
-        .set(EndpointConfig {
-            endpoint_id: 1234,
-            host_mac: host_mac.0,
-            ipv4: Some(peer_ip),
-            ipv6: None,
-        })
-        .expect("set endpoint config");
-
-    LxcMap::open(&pins)
-        .expect("open lxc_map")
-        .upsert_endpoint(
-            &EndpointPersist {
-                id: EndpointId::new(1234),
-                spec: EndpointSpec {
-                    container_name: None,
-                    container_id: Some(container_id.to_string()),
-                    docker_network_id: None,
-                    docker_endpoint: None,
-                    host_iface_name: lxc_ifname.clone(),
-                    host_iface_index: host.ifindex(),
-                    container_mac: peer.mac(),
-                    host_mac,
-                    ipv4: Some(peer_ip),
-                    ipv6: None,
-                    k8s_ns: None,
-                    k8s_pod_name: None,
-                },
-            },
-            &EndpointInfo {
-                endpoint_id: 1234,
-                if_index: host.ifindex(),
-                container_mac: peer.mac().0,
-                host_mac: host_mac.0,
-            },
-        )
-        .expect("insert endpoint info");
 
     (host, peer)
 }

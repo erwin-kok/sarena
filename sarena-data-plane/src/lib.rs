@@ -20,7 +20,8 @@ pub use controller::{
 pub use endpoint::{EndpointId, EndpointManager, EndpointPersist, EndpointSpec};
 pub use error::{DataPlaneError, Res};
 pub use loader::{
-    AyaBackend, DataplaneLoader, DefaultDataplaneLoader, Loader, LoaderEndpointKind, PinRoot,
+    AyaBackend, DataplaneLoader, DefaultDataplaneLoader, Loader, LoaderEndpoint,
+    LoaderEndpointKind, PinRoot,
 };
 #[cfg(any(test, feature = "test-util"))]
 pub use loader::{LoaderCall, MockDataplaneLoader};

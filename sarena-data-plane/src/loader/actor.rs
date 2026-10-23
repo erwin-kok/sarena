@@ -9,7 +9,11 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     error::{DataPlaneError, Res},
-    loader::{DataplaneLoader, Loader, backend::BpfBackend, loader_endpoint::LoaderEndpointKind},
+    loader::{
+        DataplaneLoader, Loader,
+        backend::BpfBackend,
+        loader_endpoint::{LoaderEndpoint, LoaderEndpointKind},
+    },
 };
 
 enum Command {
@@ -17,20 +21,18 @@ enum Command {
         reply: oneshot::Sender<Res<()>>,
     },
     AddLoaderEndpoint {
-        kind: LoaderEndpointKind,
-        link: String,
+        endpoint: LoaderEndpoint,
         reply: oneshot::Sender<Res<()>>,
     },
     RemoveLoaderEndpoint {
-        kind: LoaderEndpointKind,
-        link: String,
+        endpoint: LoaderEndpoint,
         reply: oneshot::Sender<Res<()>>,
     },
     ListLoaderEndpoints {
         reply: oneshot::Sender<Res<Vec<(LoaderEndpointKind, String)>>>,
     },
     Reconcile {
-        desired: Vec<(LoaderEndpointKind, String)>,
+        desired: Vec<LoaderEndpoint>,
         reply: oneshot::Sender<Res<Vec<(LoaderEndpointKind, String, DataPlaneError)>>>,
     },
     TeardownAll {
@@ -110,15 +112,15 @@ impl DataplaneLoader for DefaultDataplaneLoader {
         self.call(|reply| Command::LoadGlobalMaps { reply }).await
     }
 
-    async fn add_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
-        let link = link.to_string();
-        self.call(|reply| Command::AddLoaderEndpoint { kind, link, reply })
+    async fn add_loader_endpoint(&self, endpoint: &LoaderEndpoint) -> Res<()> {
+        let endpoint = endpoint.clone();
+        self.call(|reply| Command::AddLoaderEndpoint { endpoint, reply })
             .await
     }
 
-    async fn remove_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
-        let link = link.to_string();
-        self.call(|reply| Command::RemoveLoaderEndpoint { kind, link, reply })
+    async fn remove_loader_endpoint(&self, endpoint: &LoaderEndpoint) -> Res<()> {
+        let endpoint = endpoint.clone();
+        self.call(|reply| Command::RemoveLoaderEndpoint { endpoint, reply })
             .await
     }
 
@@ -129,7 +131,7 @@ impl DataplaneLoader for DefaultDataplaneLoader {
 
     async fn reconcile(
         &self,
-        desired: Vec<(LoaderEndpointKind, String)>,
+        desired: Vec<LoaderEndpoint>,
     ) -> Res<Vec<(LoaderEndpointKind, String, DataPlaneError)>> {
         self.call(|reply| Command::Reconcile { desired, reply })
             .await
@@ -166,11 +168,11 @@ fn dispatch<B: BpfBackend>(loader: &mut Loader<B>, cmd: Command) -> ControlFlow<
         Command::LoadGlobalMaps { reply } => {
             let _ = reply.send(loader.load_global_maps());
         }
-        Command::AddLoaderEndpoint { kind, link, reply } => {
-            let _ = reply.send(loader.add_loader_endpoint(kind, &link));
+        Command::AddLoaderEndpoint { endpoint, reply } => {
+            let _ = reply.send(loader.add_loader_endpoint(&endpoint));
         }
-        Command::RemoveLoaderEndpoint { kind, link, reply } => {
-            let _ = reply.send(loader.remove_loader_endpoint(kind, &link));
+        Command::RemoveLoaderEndpoint { endpoint, reply } => {
+            let _ = reply.send(loader.remove_loader_endpoint(&endpoint));
         }
         Command::ListLoaderEndpoints { reply } => {
             let _ = reply.send(loader.list_loader_endpoints());
@@ -200,14 +202,18 @@ mod tests {
         let loader = Loader::new(MockBackend::new(), pin_root);
         let handle = DefaultDataplaneLoader::spawn(loader, 16);
 
-        let kind = LoaderEndpointKind::Container;
-        let link = "lxc00123";
-        handle.add_loader_endpoint(kind, link).await.unwrap();
+        let endpoint = LoaderEndpoint::Host {
+            link: "lxc00123".to_string(),
+        };
+        handle.add_loader_endpoint(&endpoint).await.unwrap();
 
         let active = handle.list_loader_endpoints().await.unwrap();
-        assert_eq!(active, vec![(kind, link.to_string())]);
+        assert_eq!(
+            active,
+            vec![(LoaderEndpointKind::Host, "lxc00123".to_string())]
+        );
 
-        handle.remove_loader_endpoint(kind, link).await.unwrap();
+        handle.remove_loader_endpoint(&endpoint).await.unwrap();
         assert!(handle.list_loader_endpoints().await.unwrap().is_empty());
     }
 

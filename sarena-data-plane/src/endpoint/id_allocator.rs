@@ -99,7 +99,7 @@ impl IdAllocator {
 }
 
 #[must_use = "dropping an IdLease releases the EndpointId"]
-pub(crate) struct IdLease<'a> {
+pub struct IdLease<'a> {
     allocator: &'a IdAllocator,
     id: Option<EndpointId>,
 }
@@ -116,7 +116,7 @@ impl<'a> IdLease<'a> {
         self.id.expect("IdLease already committed")
     }
 
-    pub(crate) fn commit(mut self) -> EndpointId {
+    pub fn commit(mut self) -> EndpointId {
         self.id.take().expect("IdLease already committed")
     }
 }
