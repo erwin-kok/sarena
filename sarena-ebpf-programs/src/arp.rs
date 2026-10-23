@@ -24,22 +24,24 @@ pub fn process_arp(ctx: &TcContext, config: &EndpointConfig) -> Res<Verdict> {
     debug!(ctx, "arp: dst mac {:mac}, src mac {:mac}", dst_mac, src_mac);
 
     let for_us =
-        eth_is_bcast(&dst_mac) || bpf_memcmp(dst_mac.as_ptr(), config.mac.as_ptr(), 6) == 0;
+        eth_is_bcast(&dst_mac) || bpf_memcmp(dst_mac.as_ptr(), config.host_mac.as_ptr(), 6) == 0;
     if !is_request || !for_us {
         return Ok(Verdict::Pass);
     }
 
     // Our own endpoint IP is answered by the stack, not here.
-    if target_ip == config.ipv4.octets() {
+    if let Some(ipv4) = config.ipv4
+        && target_ip == ipv4.octets()
+    {
         return Ok(Verdict::Next);
     }
 
     debug!(
         ctx,
-        "arp: who-has {:i}? replying with {:mac}", target_ip, config.mac
+        "arp: who-has {:i}? replying with {:mac}", target_ip, config.host_mac
     );
 
-    write_arp_reply(ctx, config.mac, src_mac, target_ip, sender_ip)?;
+    write_arp_reply(ctx, config.host_mac, src_mac, target_ip, sender_ip)?;
 
     let ifindex = ctx_get_ifindex(ctx);
     Ok(Verdict::Redirect(ctx_redirect_peer(ifindex, 0) as i32))

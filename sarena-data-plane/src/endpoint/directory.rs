@@ -13,24 +13,20 @@ pub(crate) const NEXT_DIRECTORY_SUFFIX: &str = "_next";
 pub(crate) const NEXT_FAILED_DIRECTORY_SUFFIX: &str = "_next_fail";
 pub(crate) const BACKUP_DIRECTORY_SUFFIX: &str = "_stale";
 
-pub(crate) fn state_directory_path(state_dir: &PathBuf, id: EndpointId) -> PathBuf {
+pub(crate) fn state_directory_path(state_dir: &Path, id: EndpointId) -> PathBuf {
     state_dir.join(id.to_string())
 }
 
-pub(crate) fn next_directory_path(state_dir: &PathBuf, id: EndpointId) -> PathBuf {
-    state_dir.join(format!("{}{}", id.to_string(), NEXT_DIRECTORY_SUFFIX))
+pub(crate) fn next_directory_path(state_dir: &Path, id: EndpointId) -> PathBuf {
+    state_dir.join(format!("{id}{NEXT_DIRECTORY_SUFFIX}"))
 }
 
-pub(crate) fn failed_directory_path(state_dir: &PathBuf, id: EndpointId) -> PathBuf {
-    state_dir.join(format!(
-        "{}{}",
-        id.to_string(),
-        NEXT_FAILED_DIRECTORY_SUFFIX
-    ))
+pub(crate) fn failed_directory_path(state_dir: &Path, id: EndpointId) -> PathBuf {
+    state_dir.join(format!("{id}{NEXT_FAILED_DIRECTORY_SUFFIX}"))
 }
 
-pub(crate) fn backup_directory_path(state_dir: &PathBuf, id: EndpointId) -> PathBuf {
-    state_dir.join(format!("{}{}", id.to_string(), BACKUP_DIRECTORY_SUFFIX))
+pub(crate) fn backup_directory_path(state_dir: &Path, id: EndpointId) -> PathBuf {
+    state_dir.join(format!("{id}{BACKUP_DIRECTORY_SUFFIX}"))
 }
 
 pub(crate) fn remove_dir_if_exists(dir: &PathBuf) -> std::io::Result<()> {
@@ -40,14 +36,15 @@ pub(crate) fn remove_dir_if_exists(dir: &PathBuf) -> std::io::Result<()> {
     }
 }
 
-pub(crate) fn remove_directories(state_dir: &PathBuf, id: EndpointId) {
+#[allow(dead_code)]
+pub(crate) fn remove_directories(state_dir: &Path, id: EndpointId) {
     let _ = remove_dir_if_exists(&state_directory_path(state_dir, id));
     let _ = remove_dir_if_exists(&next_directory_path(state_dir, id));
     let _ = remove_dir_if_exists(&failed_directory_path(state_dir, id));
     let _ = remove_dir_if_exists(&backup_directory_path(state_dir, id));
 }
 
-pub(crate) fn synchronize_directories(state_dir: &PathBuf, id: EndpointId) -> Res<()> {
+pub(crate) fn synchronize_directories(state_dir: &Path, id: EndpointId) -> Res<()> {
     let current_dir = state_directory_path(state_dir, id);
     let next_dir = next_directory_path(state_dir, id);
     let backup_dir = backup_directory_path(state_dir, id);
@@ -99,7 +96,7 @@ enum DirKind {
     /// applied.
     Next,
     /// `<id>_stale`: the previously committed state, left behind when
-    /// synchronize_directories() was interrupted or failed to roll back.
+    /// `synchronize_directories()` was interrupted or failed to roll back.
     Backup,
     /// `<id>_next_fail`: the state of a failed regeneration.
     NextFailed,

@@ -1,20 +1,21 @@
-use std::{net::Ipv4Addr, path::Path};
+use std::{net::IpAddr, path::Path};
 
 use aya::maps::{HashMap, Map, MapData, MapError};
-use sarena_shared::{EndpointInfo, Ipv4Key, Ipv4KeyExt as _};
+use sarena_shared::{EndpointInfo, EndpointKey};
 
 use crate::{
+    EndpointPersist,
     error::{DataPlaneError, Res},
     loader::PinRoot,
     maps::GlobalMap,
 };
 
-/// Global endpoint lookup table: `Ipv4Key -> EndpointInfo`.
+/// Global endpoint lookup table: `EndpointKey -> EndpointInfo`.
 pub const LXC_MAP_NAME: &str = "lxc_map";
 
 #[derive(Debug)]
 pub struct LxcMap {
-    map: HashMap<MapData, Ipv4Key, EndpointInfo>,
+    map: HashMap<MapData, EndpointKey, EndpointInfo>,
 }
 
 impl LxcMap {
@@ -32,24 +33,55 @@ impl LxcMap {
         Ok(Self { map })
     }
 
-    /// Insert or overwrite the entry for `ip`.
-    pub fn upsert_endpoint(&mut self, ip: Ipv4Addr, info: EndpointInfo) -> Res<()> {
-        self.map
-            .insert(&Ipv4Key::from_addr(ip), &info, 0)
-            .map_err(|e| access(&e))
+    /// Insert or overwrite the entry for `ep`.
+    pub fn upsert_endpoint(&mut self, ep: &EndpointPersist, info: &EndpointInfo) -> Res<()> {
+        if let Some(ipv4) = ep.ipv4 {
+            self.map
+                .insert(&EndpointKey::from_ipv4_octets(ipv4.octets()), info, 0)
+                .map_err(|e| access(&e))?;
+        }
+        if let Some(ipv6) = ep.ipv6 {
+            self.map
+                .insert(&EndpointKey::from_ipv6_octets(ipv6.octets()), info, 0)
+                .map_err(|e| access(&e))?;
+        }
+        Ok(())
+    }
+
+    /// Remove the entry for `ep`. Missing keys are not an error.
+    pub fn remove_endpoint(&mut self, ep: &EndpointPersist) -> Res<()> {
+        if let Some(ipv4) = ep.ipv4 {
+            match self
+                .map
+                .remove(&EndpointKey::from_ipv4_octets(ipv4.octets()))
+            {
+                Ok(()) | Err(MapError::KeyNotFound) => Ok(()),
+                Err(e) => Err(access(&e)),
+            }?;
+        }
+        if let Some(ipv6) = ep.ipv6 {
+            match self
+                .map
+                .remove(&EndpointKey::from_ipv6_octets(ipv6.octets()))
+            {
+                Ok(()) | Err(MapError::KeyNotFound) => Ok(()),
+                Err(e) => Err(access(&e)),
+            }?;
+        }
+        Ok(())
     }
 
     /// Remove the entry for `ip`. Missing keys are not an error.
-    pub fn remove_endpoint(&mut self, ip: Ipv4Addr) -> Res<()> {
-        match self.map.remove(&Ipv4Key::from_addr(ip)) {
+    pub fn remove_endpoint_by_ip(&mut self, ip: IpAddr) -> Res<()> {
+        match self.map.remove(&EndpointKey::from(ip)) {
             Ok(()) | Err(MapError::KeyNotFound) => Ok(()),
             Err(e) => Err(access(&e)),
         }
     }
 
     /// Look up the entry for `ip`, if any.
-    pub fn get_endpoint(&self, ip: Ipv4Addr) -> Res<Option<EndpointInfo>> {
-        match self.map.get(&Ipv4Key::from_addr(ip), 0) {
+    pub fn get_endpoint(&self, ip: IpAddr) -> Res<Option<EndpointInfo>> {
+        match self.map.get(&EndpointKey::from(ip), 0) {
             Ok(info) => Ok(Some(info)),
             Err(MapError::KeyNotFound) => Ok(None),
             Err(e) => Err(access(&e)),
@@ -57,12 +89,16 @@ impl LxcMap {
     }
 
     /// Every `(ip, info)` currently in the table.
-    pub fn endpoints(&self) -> Res<Vec<(Ipv4Addr, EndpointInfo)>> {
+    pub fn endpoints(&self) -> Res<Vec<(IpAddr, EndpointInfo)>> {
         self.map
             .iter()
             .map(|res| {
-                res.map(|(key, info)| (key.to_addr(), info))
-                    .map_err(|e| access(&e))
+                let (key, info) = res.map_err(|e| access(&e))?;
+                let ip = IpAddr::try_from(key).map_err(|e| DataPlaneError::MapAccess {
+                    map: LXC_MAP_NAME,
+                    src: e.to_string(),
+                })?;
+                Ok((ip, info))
             })
             .collect()
     }

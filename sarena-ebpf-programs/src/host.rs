@@ -5,10 +5,10 @@ use network_types::{
     ip::Ipv4Hdr,
 };
 use sarena_ebpf_common::ref_at;
-use sarena_shared::{Ipv4Key, Ipv4KeyExt as _, OBS_POINT_HOST_FORWARD};
+use sarena_shared::{EndpointKey, OBS_POINT_HOST_FORWARD};
 
 use crate::{
-    endpoint::{get_endpoint_config, lookup_ipv4_endpoint},
+    endpoint::lookup_endpoint,
     error::{Res, Verdict},
     ipv4::is_fragmented,
     local_delivery, metrics,
@@ -20,12 +20,6 @@ pub fn try_from_host(ctx: TcContext) -> Res<Verdict> {
     let Ok(ether_type) = eth.ether_type() else {
         return Ok(Verdict::Pass);
     };
-
-    let config = get_endpoint_config()?;
-    debug!(
-        &ctx,
-        "endpoint config: {:mac}, ip: {:i}", config.mac, config.ipv4
-    );
 
     match ether_type {
         EtherType::Ipv4 => process_ipv4(&ctx),
@@ -40,17 +34,16 @@ pub fn try_to_host(_ctx: TcContext) -> Res<Verdict> {
 
 #[inline(always)]
 fn process_ipv4(ctx: &TcContext) -> Res<Verdict> {
-    let (fragmented, dst_ip) = {
-        let ip4: &Ipv4Hdr = unsafe { ref_at(ctx, EthHdr::LEN)? };
-        (is_fragmented(ip4), Ipv4Key::from_octets(ip4.dst_addr))
-    };
+    let ip4: &Ipv4Hdr = unsafe { ref_at(ctx, EthHdr::LEN)? };
+    let fragmented = is_fragmented(ip4);
 
     if fragmented {
         debug!(ctx, "drop fragmented IP packet");
         return Ok(Verdict::Drop);
     }
 
-    if let Some(ep) = lookup_ipv4_endpoint(dst_ip) {
+    let dst_ip: EndpointKey = EndpointKey::from_ipv4_octets(ip4.dst_addr);
+    if let Some(ep) = lookup_endpoint(dst_ip) {
         metrics::update_metrics(ctx.len() as u64, OBS_POINT_HOST_FORWARD);
 
         return local_delivery(ctx, ep);

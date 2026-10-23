@@ -12,7 +12,7 @@ use crate::{
 };
 
 impl EndpointWorker {
-    pub(crate) async fn regenerate(&mut self) -> Res<()> {
+    pub(crate) fn regenerate(&mut self) -> Res<()> {
         let id = self.state.id();
         tracing::info!("regenerating endpoint {id}");
 
@@ -22,13 +22,12 @@ impl EndpointWorker {
         fs::create_dir_all(&next_dir)?;
         fs::set_permissions(&next_dir, fs::Permissions::from_mode(0o777))?;
 
-        let result = self.regenerate_bpf().await;
+        let result = self.regenerate_bpf();
         match result {
             Ok(_revision) => {
                 synchronize_directories(&self.state_dir, id)?;
 
                 // TODO
-		
 
                 self.state.phase = EndpointPhase::Ready;
                 self.state.generation += 1;
@@ -45,13 +44,13 @@ impl EndpointWorker {
         }
 
         remove_dir_if_exists(&next_dir)?;
-	
+
         self.publish();
 
         Ok(())
     }
 
-    pub(crate) async fn regenerate_bpf(&mut self) -> Res<u64> {
+    pub(crate) fn regenerate_bpf(&mut self) -> Res<u64> {
         let id = self.state.id();
         let next_dir = next_directory_path(&self.state_dir, id);
         self.state.persist.write_state(&next_dir)?;

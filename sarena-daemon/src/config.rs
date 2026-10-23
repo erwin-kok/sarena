@@ -1,4 +1,4 @@
-use std::{env::home_dir, net::Ipv4Addr, path::PathBuf};
+use std::{env::home_dir, path::PathBuf};
 
 use config::{Config as ConfigLoader, Environment, File};
 use sarena_data_plane::PIN_ROOT;

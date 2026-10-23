@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     io::{self, Write as _},
-    net::Ipv4Addr,
+    net::IpAddr,
 };
 
 use anyhow::{Context as _, Result};
@@ -34,8 +34,8 @@ pub enum BpfEndpointCommands {
 
 #[derive(Args, Debug)]
 pub struct DeleteArgs {
-    /// IPv4 address of the endpoint to remove
-    pub ip: Ipv4Addr,
+    /// IPv4 or IPv6 address of the endpoint to remove
+    pub ip: IpAddr,
 }
 
 pub fn run(app: &App, command: &BpfEndpointCommand) -> Result<()> {
@@ -63,12 +63,12 @@ fn list_endpoints(app: &App, format: Option<&OutputFormat>) -> Result<()> {
     }
 }
 
-fn delete_endpoint(app: &App, ip: Ipv4Addr) -> Result<()> {
+fn delete_endpoint(app: &App, ip: IpAddr) -> Result<()> {
     require_root_privilege("sarena bpf endpoint delete");
 
     let pins = PinRoot::new(app.config.pin_root.clone());
     let mut map = LxcMap::open(&pins).context("opening lxc_map (is the datapath loaded?)")?;
-    map.remove_endpoint(ip)
+    map.remove_endpoint_by_ip(ip)
         .context("removing endpoint from lxc_map")?;
     info!(%ip, "deleted local endpoint");
     Ok(())

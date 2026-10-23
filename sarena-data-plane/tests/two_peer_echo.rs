@@ -6,8 +6,8 @@ use std::{
 
 use ipnet::{IpNet, Ipv4Net};
 use sarena_data_plane::{
-    AyaBackend, DataplaneLoader as _, DefaultDataplaneLoader, EndpointConfigMap, Loader,
-    LoaderEndpointKind, LxcMap, PinRoot,
+    AyaBackend, DataplaneLoader as _, DefaultDataplaneLoader, EndpointConfigMap, EndpointId,
+    EndpointPersist, EndpointSpec, Loader, LoaderEndpointKind, LxcMap, PinRoot,
 };
 use sarena_infra::{
     InfraError, InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, Netns,
@@ -194,16 +194,32 @@ async fn create_endpoint(
     EndpointConfigMap::for_link(&pins, &lxc_ifname)
         .expect("open endpoint_config map")
         .set(EndpointConfig {
-            mac: host_mac.0,
-            ipv4: peer_ip,
+            host_mac: host_mac.0,
+            ipv4: Some(peer_ip),
         })
         .expect("set endpoint config");
 
     LxcMap::open(&pins)
         .expect("open lxc_map")
         .upsert_endpoint(
-            peer_ip,
-            EndpointInfo {
+            &EndpointPersist {
+                id: EndpointId::new(1234),
+                spec: EndpointSpec {
+                    container_name: None,
+                    container_id: Some(container_id.to_string()),
+                    docker_network_id: None,
+                    docker_endpoint: None,
+                    host_iface_name: lxc_ifname.clone(),
+                    host_iface_index: host.ifindex(),
+                    container_mac: peer.mac(),
+                    host_mac,
+                    ipv4: Some(peer_ip),
+                    ipv6: None,
+                    k8s_ns: None,
+                    k8s_pod_name: None,
+                },
+            },
+            &EndpointInfo {
                 if_index: host.ifindex(),
                 container_mac: peer.mac().0,
                 host_mac: host_mac.0,

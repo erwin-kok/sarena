@@ -104,8 +104,8 @@ fn set_endpoint_config(host_mac: MacAddress, addr: IpAddr, pin_root: &PinRoot) {
     EndpointConfigMap::for_link(pin_root, SARENA_HOST)
         .expect("open endpoint_config map")
         .set(EndpointConfig {
-            mac: host_mac.0,
-            ipv4,
+            host_mac: host_mac.0,
+            ipv4: Some(ipv4),
         })
         .expect("set endpoint config");
 }

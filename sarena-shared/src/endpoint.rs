@@ -3,8 +3,8 @@ use core::net::Ipv4Addr;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct EndpointConfig {
-    pub mac: [u8; 6],
-    pub ipv4: Ipv4Addr,
+    pub host_mac: [u8; 6],
+    pub ipv4: Option<Ipv4Addr>,
 }
 
 #[repr(C)]

@@ -126,7 +126,7 @@ impl EndpointManager {
         pin_root: &PinRoot,
     ) -> Res<(Vec<EndpointPersist>, Vec<EndpointPersist>)> {
         let mut restored: Vec<EndpointPersist> = Vec::new();
-        let mut to_clean: Vec<EndpointPersist> = Vec::new();
+        let to_clean: Vec<EndpointPersist> = Vec::new();
 
         info!("restoring endpoints...");
 
@@ -137,18 +137,13 @@ impl EndpointManager {
         }
 
         let map = LxcMap::open(pin_root)?;
-        let existing_endpoints = map.endpoints()?;
-
-        let loader_endpoints = self.loader.list_loader_endpoints().await?;
+        let _existing_endpoints = map.endpoints()?;
+        let _loader_endpoints = self.loader.list_loader_endpoints().await?;
 
         for (id, endpoint) in possible_endpoints {
-            match self.allocate_reuse_id(id) {
-                Ok(lease) => {
-                    restored.push(endpoint);
-
-                    lease.commit();
-                }
-                Err(_) => {}
+            if let Ok(lease) = self.allocate_reuse_id(id) {
+                restored.push(endpoint);
+                lease.commit();
             }
         }
 

@@ -33,13 +33,8 @@ impl EndpointManager {
             .add_loader_endpoint(LoaderEndpointKind::Container, &endpoint.host_iface_name)
             .await?;
         let host = provisioner.get_link(&endpoint.host_iface_name).await?;
-        set_endpoint_config(&host, endpoint.host_mac, container_ip)?;
-        insert_endpoint_info(
-            &host,
-            endpoint.host_mac,
-            endpoint.container_mac,
-            container_ip,
-        )?;
+        set_endpoint_config(&host, endpoint.host_mac, Some(container_ip))?;
+        insert_endpoint_info(&host, &endpoint)?;
 
         Ok(lease.commit())
     }
@@ -48,26 +43,21 @@ impl EndpointManager {
 fn set_endpoint_config(
     link: &NetlinkLink,
     host_mac: MacAddress,
-    container_ip: Ipv4Addr,
+    ipv4: Option<Ipv4Addr>,
 ) -> Res<()> {
     EndpointConfigMap::for_link(&PinRoot::new(PIN_ROOT), link.ifname())?.set(EndpointConfig {
-        mac: host_mac.0,
-        ipv4: container_ip,
+        host_mac: host_mac.0,
+        ipv4,
     })
 }
 
-fn insert_endpoint_info(
-    link: &NetlinkLink,
-    host_mac: MacAddress,
-    container_mac: MacAddress,
-    container_ip: Ipv4Addr,
-) -> Res<()> {
+fn insert_endpoint_info(link: &NetlinkLink, endpoint: &EndpointPersist) -> Res<()> {
     LxcMap::open(&PinRoot::new(PIN_ROOT))?.upsert_endpoint(
-        container_ip,
-        EndpointInfo {
+        endpoint,
+        &EndpointInfo {
             if_index: link.ifindex(),
-            container_mac: container_mac.0,
-            host_mac: host_mac.0,
+            container_mac: endpoint.container_mac.0,
+            host_mac: endpoint.host_mac.0,
         },
     )
 }

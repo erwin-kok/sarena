@@ -14,8 +14,8 @@ use axum::{
 };
 use sarena_api_types_v1::{daemon, endpoint, ipam};
 use sarena_data_plane::{
-    AyaBackend, DataplaneLoader as _, DefaultDataplaneLoader, EndpointConfigMap, Loader,
-    LoaderEndpointKind, LxcMap, PinRoot,
+    AyaBackend, DataplaneLoader as _, DefaultDataplaneLoader, EndpointConfigMap, EndpointId,
+    EndpointPersist, EndpointSpec, Loader, LoaderEndpointKind, LxcMap, PinRoot,
 };
 use sarena_infra::{
     InterfaceAddress, Link as _, MacAddress, NetlinkNetworkProvisioner, NetworkProvisioner,
@@ -220,8 +220,8 @@ pub async fn create_endpoint(
         EndpointConfigMap::for_link(&pins, &ep.host_iface_name)
             .expect("open endpoint_config map")
             .set(EndpointConfig {
-                mac: host_mac.0,
-                ipv4: peer_ip,
+                host_mac: host_mac.0,
+                ipv4: Some(peer_ip),
             })
             .expect("set endpoint config");
 
@@ -229,8 +229,24 @@ pub async fn create_endpoint(
         LxcMap::open(&pins)
             .expect("open lxc_map")
             .upsert_endpoint(
-                peer_ip,
-                EndpointInfo {
+                &EndpointPersist {
+                    id: EndpointId::new(1234),
+                    spec: EndpointSpec {
+                        container_name: None,
+                        container_id: Some(ep.container_id.clone()),
+                        docker_network_id: None,
+                        docker_endpoint: None,
+                        host_iface_name: ep.host_iface_name.clone(),
+                        host_iface_index: host.ifindex(),
+                        container_mac: peer_mac,
+                        host_mac,
+                        ipv4: Some(peer_ip),
+                        ipv6: None,
+                        k8s_ns: Some(ep.k8s_namespace.clone()),
+                        k8s_pod_name: Some(ep.k8s_pod_name.clone()),
+                    },
+                },
+                &EndpointInfo {
                     if_index: host.ifindex(),
                     container_mac: peer_mac.0,
                     host_mac: host_mac.0,
