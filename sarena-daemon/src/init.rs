@@ -94,7 +94,7 @@ pub async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
     let endpoint_manager = EndpointManager::new(data_plane.loader(), &state_dir);
     endpoint_manager.init_metrics();
 
-    let (restored, to_clean) = endpoint_manager.restore_old_endpoints(&pin_root).await?;
+    let (restored, to_clean) = endpoint_manager.restore_old_endpoints().await?;
     info!(
         "endpoints restored: {}, endpoints to clean: {}",
         restored.len(),

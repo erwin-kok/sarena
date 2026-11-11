@@ -1,4 +1,8 @@
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::{
+    collections::HashSet,
+    net::IpAddr,
+    sync::{Mutex, MutexGuard, PoisonError},
+};
 
 use async_trait::async_trait;
 
@@ -13,7 +17,10 @@ pub enum LoaderCall {
     AddLoaderEndpoint(LoaderEndpointKind, String),
     RemoveLoaderEndpoint(LoaderEndpointKind, String),
     ListLoaderEndpoints,
-    Reconcile(Vec<(LoaderEndpointKind, String)>),
+    LinkExists(String),
+    DetachLoaderEndpoint(LoaderEndpointKind, String),
+    /// The kept IPs, sorted.
+    PruneEndpointInfos(Vec<IpAddr>),
     TeardownAll,
     Shutdown,
 }
@@ -29,6 +36,7 @@ pub struct MockDataplaneLoader {
 struct MockState {
     calls: Vec<LoaderCall>,
     endpoints: Vec<(LoaderEndpointKind, String)>,
+    missing_links: HashSet<String>,
     fail_next: Option<String>,
     shut_down: bool,
 }
@@ -44,6 +52,11 @@ impl MockDataplaneLoader {
 
     pub fn endpoints(&self) -> Vec<(LoaderEndpointKind, String)> {
         self.lock().endpoints.clone()
+    }
+
+    /// Makes `link_exists` report `link` as gone; every other link exists.
+    pub fn remove_link(&self, link: impl Into<String>) {
+        self.lock().missing_links.insert(link.into());
     }
 
     /// Makes the next call fail with [`DataPlaneError::Injected`].
@@ -98,22 +111,22 @@ impl DataplaneLoader for MockDataplaneLoader {
         Ok(state.endpoints.clone())
     }
 
-    async fn reconcile(
-        &self,
-        desired: Vec<LoaderEndpoint>,
-    ) -> Res<Vec<(LoaderEndpointKind, String, DataPlaneError)>> {
-        let desired: Vec<_> = desired
-            .iter()
-            .map(|endpoint| (endpoint.kind(), endpoint.link().to_string()))
-            .collect();
-        let mut state = self.record(LoaderCall::Reconcile(desired.clone()))?;
-        state.endpoints.clear();
-        for endpoint in desired {
-            if !state.endpoints.contains(&endpoint) {
-                state.endpoints.push(endpoint);
-            }
-        }
-        Ok(Vec::new())
+    async fn link_exists(&self, link: &str) -> Res<bool> {
+        let state = self.record(LoaderCall::LinkExists(link.to_string()))?;
+        Ok(!state.missing_links.contains(link))
+    }
+
+    async fn detach_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
+        let mut state = self.record(LoaderCall::DetachLoaderEndpoint(kind, link.to_string()))?;
+        state.endpoints.retain(|(k, l)| !(*k == kind && l == link));
+        Ok(())
+    }
+
+    async fn prune_endpoint_infos(&self, keep: HashSet<IpAddr>) -> Res<()> {
+        let mut keep: Vec<_> = keep.into_iter().collect();
+        keep.sort();
+        drop(self.record(LoaderCall::PruneEndpointInfos(keep))?);
+        Ok(())
     }
 
     async fn teardown_all(&self) -> Res<()> {

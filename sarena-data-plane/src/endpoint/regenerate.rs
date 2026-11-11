@@ -27,8 +27,6 @@ impl EndpointWorker {
             Ok(_revision) => {
                 synchronize_directories(&self.state_dir, id)?;
 
-                // TODO
-
                 self.state.phase = EndpointPhase::Ready;
                 self.state.generation += 1;
             }

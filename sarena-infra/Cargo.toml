@@ -28,8 +28,8 @@ tracing = { workspace = true }
 # Netlink / rtnetlink. NOTE: these two need to be a mutually-compatible pair
 # -- if `cargo update` pulls a newer rtnetlink that expects a newer
 # netlink-packet-route, bump both together.
-rtnetlink = "0.23"
-netlink-packet-route = "0.33"
+rtnetlink = "0.24"
+netlink-packet-route = "0.34"
 
 [dev-dependencies]
 sarena-ebpf-objects = { path = "../sarena-ebpf-objects" }

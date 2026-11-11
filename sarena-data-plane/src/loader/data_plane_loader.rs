@@ -126,7 +126,9 @@ impl<B: BpfBackend> Loader<B> {
         self.detach_loader_endpoint(endpoint.kind(), endpoint.link())
     }
 
-    fn detach_loader_endpoint(&mut self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
+    /// Detaches the programs of the endpoint known only by `kind` and `link`
+    /// and unpins its maps. Its `lxc_map` entries are left alone.
+    pub fn detach_loader_endpoint(&mut self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
         self.backend.stop_logging(link);
 
         self.backend
@@ -138,6 +140,10 @@ impl<B: BpfBackend> Loader<B> {
         }
 
         Ok(())
+    }
+
+    pub fn link_exists(&self, link: &str) -> Res<bool> {
+        self.backend.link_exists(link)
     }
 
     pub fn list_loader_endpoints(&self) -> Res<Vec<(LoaderEndpointKind, String)>> {
@@ -171,49 +177,15 @@ impl<B: BpfBackend> Loader<B> {
             .collect())
     }
 
-    /// Adds every `desired` endpoint, detaches every attached endpoint not in
-    /// `desired`, and drops every `lxc_map` entry whose IP no desired
-    /// container owns. `desired` must therefore be the complete set.
-    pub fn reconcile(
-        &mut self,
-        desired: &[LoaderEndpoint],
-    ) -> Res<Vec<(LoaderEndpointKind, String, DataPlaneError)>> {
-        let mut errors = Vec::new();
-
-        for endpoint in desired {
-            if let Err(e) = self.add_loader_endpoint(endpoint) {
-                errors.push((endpoint.kind(), endpoint.link().to_string(), e));
-            }
-        }
-
-        let existing: HashSet<_> = self.list_loader_endpoints()?.into_iter().collect();
-        let wanted: HashSet<_> = desired
-            .iter()
-            .map(|endpoint| (endpoint.kind(), endpoint.link().to_string()))
-            .collect();
-        for (kind, link) in existing.difference(&wanted) {
-            if let Err(e) = self.detach_loader_endpoint(*kind, link) {
-                errors.push((*kind, link.clone(), e));
-            }
-        }
-
-        // Stale endpoints are only known by link name, not by IP, so their
-        // `lxc_map` entries are found by what is *not* wanted instead.
-        let wanted_ips: HashSet<IpAddr> = desired
-            .iter()
-            .filter_map(|endpoint| match endpoint {
-                LoaderEndpoint::Container(persist) => Some(persist.ips()),
-                _ => None,
-            })
-            .flatten()
-            .collect();
-        for ip in self.backend.list_endpoint_infos()?.into_keys() {
-            if !wanted_ips.contains(&ip) {
+    /// Drops every `lxc_map` entry whose IP is not in `keep`. The host's
+    /// entries (endpoint id 0) are never dropped.
+    pub fn prune_endpoint_infos(&mut self, keep: &HashSet<IpAddr>) -> Res<()> {
+        for (ip, info) in self.backend.list_endpoint_infos()? {
+            if info.endpoint_id != 0 && !keep.contains(&ip) {
                 self.backend.remove_endpoint_info(ip)?;
             }
         }
-
-        Ok(errors)
+        Ok(())
     }
 
     pub fn teardown_all(&mut self) -> Res<()> {
@@ -502,52 +474,20 @@ mod tests {
     }
 
     #[test]
-    fn reconcile_removes_endpoints_missing_from_desired_state() {
+    fn detach_removes_an_endpoint_known_only_by_link() {
         let pin_root = PinRoot::new("/sys/fs/bpf/test");
         let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader.add_loader_endpoint(&container(1)).unwrap();
         loader.add_loader_endpoint(&container(2)).unwrap();
 
-        let desired = vec![container(1)];
-        let errors = loader.reconcile(&desired).unwrap();
-        assert!(errors.is_empty());
+        loader
+            .detach_loader_endpoint(LoaderEndpointKind::Container, &link(2))
+            .unwrap();
 
         assert_eq!(
             loader.list_loader_endpoints().unwrap(),
             vec![(LoaderEndpointKind::Container, link(1))]
         );
-    }
-
-    #[test]
-    fn reconcile_repairs_half_attached_endpoints_found_on_disk() {
-        let pin_root = PinRoot::new("/sys/fs/bpf/test");
-        let mut loader = Loader::new(MockBackend::new(), pin_root);
-        loader.add_loader_endpoint(&container(1)).unwrap();
-
-        // link(2): let resolve_link/load_instance succeed, then fail
-        // exactly on its first hook (ingress) - a genuinely half-attached
-        // endpoint.
-        // resolve, load, endpoint_config, lxc_map, then the ingress hook.
-        let fail_index = loader.backend.next_call_index() + 4;
-        loader.backend.fail_at = Some((fail_index, "crash right after loading".into()));
-        let _ = loader.add_loader_endpoint(&container(2));
-        loader.backend.fail_at = None;
-
-        assert_eq!(
-            loader.list_loader_endpoints().unwrap(),
-            vec![(LoaderEndpointKind::Container, link(1))]
-        );
-
-        let desired = vec![container(1), container(2)];
-        let errors = loader.reconcile(&desired).unwrap();
-        assert!(
-            errors.is_empty(),
-            "reconcile should finish attaching the second endpoint: {errors:?}"
-        );
-
-        let mut active = loader.list_loader_endpoints().unwrap();
-        active.sort_by_key(|(_, l)| l.clone());
-        assert_eq!(active.len(), 2);
     }
 
     #[test]
@@ -644,16 +584,27 @@ mod tests {
     }
 
     #[test]
-    fn reconcile_drops_lxc_map_entries_of_endpoints_missing_from_desired_state() {
+    fn prune_drops_lxc_map_entries_not_kept_except_the_hosts() {
         let pin_root = PinRoot::new("/sys/fs/bpf/test");
         let mut loader = Loader::new(MockBackend::new(), pin_root);
         loader.add_loader_endpoint(&container(1)).unwrap();
         loader.add_loader_endpoint(&container(2)).unwrap();
+        loader.backend.endpoint_infos.insert(
+            ip(3),
+            EndpointInfo {
+                endpoint_id: 0,
+                if_index: 0,
+                container_mac: [0; 6],
+                host_mac: [0; 6],
+            },
+        );
 
-        let errors = loader.reconcile(&[container(1)]).unwrap();
-        assert!(errors.is_empty());
+        loader
+            .prune_endpoint_infos(&HashSet::from([ip(1)]))
+            .unwrap();
 
-        let ips: Vec<_> = loader.backend.endpoint_infos.keys().copied().collect();
-        assert_eq!(ips, vec![ip(1)]);
+        let mut ips: Vec<_> = loader.backend.endpoint_infos.keys().copied().collect();
+        ips.sort();
+        assert_eq!(ips, vec![ip(1), ip(3)]);
     }
 }

@@ -1,20 +1,23 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::PathBuf,
     sync::{Arc, PoisonError, RwLock},
     time::Duration,
 };
 
-use tracing::info;
+use tracing::{info, warn};
 
 use super::{
     Endpoint, EndpointId,
     id_allocator::{IdAllocator, IdLease},
 };
 use crate::{
-    DataPlaneError, DataplaneLoader, EndpointPersist, LoaderEndpoint, LxcMap, PinRoot, Res,
-    endpoint::{directory::read_endpoints, id::EndpointIdentification},
+    DataPlaneError, DataplaneLoader, EndpointPersist, LoaderEndpoint, LoaderEndpointKind, Res,
+    endpoint::{
+        directory::{read_endpoints, remove_directories},
+        id::EndpointIdentification,
+    },
 };
 
 struct EndpointManagerInner {
@@ -121,30 +124,77 @@ impl EndpointManager {
         }
     }
 
-    pub async fn restore_old_endpoints(
-        &self,
-        pin_root: &PinRoot,
-    ) -> Res<(Vec<EndpointPersist>, Vec<EndpointPersist>)> {
+    /// Reads the endpoints persisted in the state directory and reclaims
+    /// their ids, then drops whatever the data plane still holds for any
+    /// other container: its `lxc_map` entries and its attached programs.
+    /// Returns the endpoints to restore (still to be added and regenerated)
+    /// and those that could not be restored, whose state directories are
+    /// removed.
+    pub async fn restore_old_endpoints(&self) -> Res<(Vec<EndpointPersist>, Vec<EndpointPersist>)> {
         let mut restored: Vec<EndpointPersist> = Vec::new();
-        let to_clean: Vec<EndpointPersist> = Vec::new();
+        let mut to_clean: Vec<EndpointPersist> = Vec::new();
 
         info!("restoring endpoints...");
 
+        // Even without old endpoints, the data plane may still hold stale
+        // state, so carry on and clean it up.
         let possible_endpoints = read_endpoints(&self.state_dir)?;
         if possible_endpoints.is_empty() {
             info!("no old endpoints found.");
-            return Ok((restored, to_clean));
         }
 
-        let map = LxcMap::open(pin_root)?;
-        let _existing_endpoints = map.endpoints()?;
-        let _loader_endpoints = self.loader.list_loader_endpoints().await?;
-
         for (id, endpoint) in possible_endpoints {
-            if let Ok(lease) = self.allocate_reuse_id(id) {
-                restored.push(endpoint);
-                lease.commit();
+            match self.loader.link_exists(&endpoint.host_iface_name).await {
+                Ok(true) => {}
+                Ok(false) => {
+                    warn!(
+                        "unable to restore endpoint {id}: interface {} is gone",
+                        endpoint.host_iface_name
+                    );
+                    to_clean.push(endpoint);
+                    continue;
+                }
+                // Not a reason to drop its state; regenerating it will
+                // fail if the interface really is gone.
+                Err(e) => warn!(
+                    "unable to check interface {} of endpoint {id}: {e}",
+                    endpoint.host_iface_name
+                ),
             }
+            match self.allocate_reuse_id(id) {
+                Ok(lease) => {
+                    lease.commit();
+                    restored.push(endpoint);
+                }
+                Err(e) => {
+                    warn!("unable to restore endpoint {id}: {e}");
+                    to_clean.push(endpoint);
+                }
+            }
+        }
+
+        let keep: HashSet<IpAddr> = restored
+            .iter()
+            .flat_map(|endpoint| endpoint.ips())
+            .collect();
+        self.loader.prune_endpoint_infos(keep).await?;
+
+        // The other kinds (e.g. the host) are attached by `setup`.
+        let links: HashSet<&str> = restored
+            .iter()
+            .map(|endpoint| endpoint.host_iface_name.as_str())
+            .collect();
+        for (kind, link) in self.loader.list_loader_endpoints().await? {
+            if kind != LoaderEndpointKind::Container || links.contains(link.as_str()) {
+                continue;
+            }
+            if let Err(e) = self.loader.detach_loader_endpoint(kind, &link).await {
+                warn!("unable to detach stale endpoint {link}: {e}");
+            }
+        }
+
+        for endpoint in &to_clean {
+            remove_directories(&self.state_dir, endpoint.id);
         }
 
         Ok((restored, to_clean))
@@ -355,7 +405,9 @@ impl EndpointManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{EndpointSpec, LoaderCall, LoaderEndpointKind, MockDataplaneLoader};
+    use crate::{
+        EndpointSpec, LoaderCall, MockDataplaneLoader, endpoint::directory::state_directory_path,
+    };
 
     #[tokio::test]
     async fn delete_endpoint_removes_it_from_the_loader_after_queued_work() {
@@ -388,6 +440,102 @@ mod tests {
             ]
         );
         assert!(!manager.endpoint_exists(persist.id));
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn restore_reclaims_persisted_endpoints_and_drops_stale_containers() {
+        let dir = std::env::temp_dir().join(format!("sarena-mgr-restore-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let persist = EndpointPersist {
+            id: EndpointId::new(3),
+            spec: EndpointSpec {
+                host_iface_name: "lxc3".to_string(),
+                ipv4: Some(Ipv4Addr::new(10, 0, 0, 3)),
+                ..Default::default()
+            },
+        };
+        let state = state_directory_path(&dir, persist.id);
+        std::fs::create_dir_all(&state).unwrap();
+        persist.write_state(&state).unwrap();
+
+        let loader = Arc::new(MockDataplaneLoader::new());
+        let host = LoaderEndpoint::Host {
+            link: "sarena_host".to_string(),
+        };
+        let stale = LoaderEndpoint::Container(EndpointPersist {
+            id: EndpointId::new(4),
+            spec: EndpointSpec {
+                host_iface_name: "lxc4".to_string(),
+                ..Default::default()
+            },
+        });
+        for endpoint in [&host, &LoaderEndpoint::Container(persist.clone()), &stale] {
+            loader.add_loader_endpoint(endpoint).await.unwrap();
+        }
+        let manager = EndpointManager::new(loader.clone(), &dir);
+
+        let (restored, to_clean) = manager.restore_old_endpoints().await.unwrap();
+
+        assert_eq!(restored, vec![persist.clone()]);
+        assert_eq!(to_clean, vec![]);
+        assert!(manager.allocate_reuse_id(persist.id).is_err());
+        assert!(
+            loader
+                .calls()
+                .contains(&LoaderCall::PruneEndpointInfos(vec![IpAddr::V4(
+                    Ipv4Addr::new(10, 0, 0, 3)
+                )]))
+        );
+        assert_eq!(
+            loader.endpoints(),
+            vec![
+                (LoaderEndpointKind::Host, "sarena_host".to_string()),
+                (LoaderEndpointKind::Container, "lxc3".to_string()),
+            ]
+        );
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn restore_cleans_up_endpoints_whose_interface_is_gone() {
+        let dir = std::env::temp_dir().join(format!("sarena-mgr-gone-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let persist = EndpointPersist {
+            id: EndpointId::new(5),
+            spec: EndpointSpec {
+                host_iface_name: "lxc5".to_string(),
+                ipv4: Some(Ipv4Addr::new(10, 0, 0, 5)),
+                ..Default::default()
+            },
+        };
+        let state = state_directory_path(&dir, persist.id);
+        std::fs::create_dir_all(&state).unwrap();
+        persist.write_state(&state).unwrap();
+
+        let loader = Arc::new(MockDataplaneLoader::new());
+        loader
+            .add_loader_endpoint(&LoaderEndpoint::Container(persist.clone()))
+            .await
+            .unwrap();
+        loader.remove_link("lxc5");
+        let manager = EndpointManager::new(loader.clone(), &dir);
+
+        let (restored, to_clean) = manager.restore_old_endpoints().await.unwrap();
+
+        assert_eq!(restored, vec![]);
+        assert_eq!(to_clean, vec![persist.clone()]);
+        assert!(!state.exists());
+        // Its id was never reclaimed.
+        manager.allocate_reuse_id(persist.id).unwrap().commit();
+        assert!(
+            loader
+                .calls()
+                .contains(&LoaderCall::PruneEndpointInfos(vec![]))
+        );
+        assert_eq!(loader.endpoints(), vec![]);
 
         std::fs::remove_dir_all(&dir).unwrap();
     }

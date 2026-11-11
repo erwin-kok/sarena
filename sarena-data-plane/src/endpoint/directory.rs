@@ -36,7 +36,6 @@ pub(crate) fn remove_dir_if_exists(dir: &PathBuf) -> std::io::Result<()> {
     }
 }
 
-#[allow(dead_code)]
 pub(crate) fn remove_directories(state_dir: &Path, id: EndpointId) {
     let _ = remove_dir_if_exists(&state_directory_path(state_dir, id));
     let _ = remove_dir_if_exists(&next_directory_path(state_dir, id));

@@ -1,4 +1,6 @@
 use std::{
+    collections::HashSet,
+    net::IpAddr,
     ops::ControlFlow,
     sync::{Arc, Mutex, PoisonError},
     thread::JoinHandle,
@@ -31,9 +33,18 @@ enum Command {
     ListLoaderEndpoints {
         reply: oneshot::Sender<Res<Vec<(LoaderEndpointKind, String)>>>,
     },
-    Reconcile {
-        desired: Vec<LoaderEndpoint>,
-        reply: oneshot::Sender<Res<Vec<(LoaderEndpointKind, String, DataPlaneError)>>>,
+    LinkExists {
+        link: String,
+        reply: oneshot::Sender<Res<bool>>,
+    },
+    DetachLoaderEndpoint {
+        kind: LoaderEndpointKind,
+        link: String,
+        reply: oneshot::Sender<Res<()>>,
+    },
+    PruneEndpointInfos {
+        keep: HashSet<IpAddr>,
+        reply: oneshot::Sender<Res<()>>,
     },
     TeardownAll {
         reply: oneshot::Sender<Res<()>>,
@@ -129,11 +140,19 @@ impl DataplaneLoader for DefaultDataplaneLoader {
             .await
     }
 
-    async fn reconcile(
-        &self,
-        desired: Vec<LoaderEndpoint>,
-    ) -> Res<Vec<(LoaderEndpointKind, String, DataPlaneError)>> {
-        self.call(|reply| Command::Reconcile { desired, reply })
+    async fn link_exists(&self, link: &str) -> Res<bool> {
+        let link = link.to_string();
+        self.call(|reply| Command::LinkExists { link, reply }).await
+    }
+
+    async fn detach_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()> {
+        let link = link.to_string();
+        self.call(|reply| Command::DetachLoaderEndpoint { kind, link, reply })
+            .await
+    }
+
+    async fn prune_endpoint_infos(&self, keep: HashSet<IpAddr>) -> Res<()> {
+        self.call(|reply| Command::PruneEndpointInfos { keep, reply })
             .await
     }
 
@@ -177,8 +196,14 @@ fn dispatch<B: BpfBackend>(loader: &mut Loader<B>, cmd: Command) -> ControlFlow<
         Command::ListLoaderEndpoints { reply } => {
             let _ = reply.send(loader.list_loader_endpoints());
         }
-        Command::Reconcile { desired, reply } => {
-            let _ = reply.send(loader.reconcile(&desired));
+        Command::LinkExists { link, reply } => {
+            let _ = reply.send(loader.link_exists(&link));
+        }
+        Command::DetachLoaderEndpoint { kind, link, reply } => {
+            let _ = reply.send(loader.detach_loader_endpoint(kind, &link));
+        }
+        Command::PruneEndpointInfos { keep, reply } => {
+            let _ = reply.send(loader.prune_endpoint_infos(&keep));
         }
         Command::TeardownAll { reply } => {
             let _ = reply.send(loader.teardown_all());

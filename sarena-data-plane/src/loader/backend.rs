@@ -14,6 +14,7 @@ pub trait BpfBackend {
     type LinkType: Link;
 
     fn resolve_link(&mut self, link: &str) -> Res<Self::LinkType>;
+    fn link_exists(&self, link: &str) -> Res<bool>;
     fn load_global_maps(&mut self, maps: &HashMap<String, PathBuf>) -> Res<Self::Instance>;
     fn load_instance(&mut self, link: &str, maps: &HashMap<String, PathBuf>)
     -> Res<Self::Instance>;

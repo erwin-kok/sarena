@@ -38,6 +38,7 @@ pub struct MockBackend {
     pub maps: HashMap<String, PathBuf>,
     pub links: HashSet<PathBuf>,
     pub endpoint_infos: HashMap<IpAddr, EndpointInfo>,
+    pub missing_links: HashSet<String>,
     pub call_count: usize,
     pub fail_at: Option<(usize, String)>,
 }
@@ -158,6 +159,10 @@ impl BpfBackend for MockBackend {
         self.tick()?;
         self.calls.push(Call::SetEndpointConfig(link.to_string()));
         Ok(())
+    }
+
+    fn link_exists(&self, link: &str) -> Res<bool> {
+        Ok(!self.missing_links.contains(link))
     }
 
     fn upsert_endpoint_info(&mut self, endpoint: &EndpointPersist, info: &EndpointInfo) -> Res<()> {

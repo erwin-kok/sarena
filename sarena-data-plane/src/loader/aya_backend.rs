@@ -18,7 +18,7 @@ use aya_log::EbpfLogger;
 use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 use sarena_ebpf_objects::EbpfObject;
 use sarena_infra::{
-    Link as _, NetlinkNetworkProvisioner, NetworkProvisioner, TcxAttach as _,
+    InfraError, Link as _, NetlinkNetworkProvisioner, NetworkProvisioner, TcxAttach as _,
     netlink_link::NetlinkLink,
 };
 use sarena_shared::{EndpointConfig, EndpointInfo};
@@ -137,6 +137,25 @@ impl BpfBackend for AyaBackend {
                 link: link.to_string(),
                 src: e.to_string(),
             })
+    }
+
+    fn link_exists(&self, link: &str) -> Res<bool> {
+        // See `resolve_link` for why blocking here is fine.
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| DataPlaneError::LinkResolve {
+                link: link.to_string(),
+                src: format!("failed to build link-resolution runtime: {e}"),
+            })?;
+        match rt.block_on(self.provisioner.get_link(link)) {
+            Ok(_) => Ok(true),
+            Err(InfraError::LinkNotFound(_)) => Ok(false),
+            Err(e) => Err(DataPlaneError::LinkResolve {
+                link: link.to_string(),
+                src: e.to_string(),
+            }),
+        }
     }
 
     fn load_global_maps(&mut self, maps: &HashMap<String, PathBuf>) -> Res<Ebpf> {

@@ -11,6 +11,8 @@ mod mock_backend;
 #[cfg(any(test, feature = "test-util"))]
 mod mock_dataplane_loader;
 
+use std::{collections::HashSet, net::IpAddr};
+
 pub use actor::DefaultDataplaneLoader;
 use async_trait::async_trait;
 pub use aya_backend::AyaBackend;
@@ -20,7 +22,7 @@ pub use loader_endpoint::{LoaderEndpoint, LoaderEndpointKind};
 pub use mock_dataplane_loader::{LoaderCall, MockDataplaneLoader};
 pub use pin::PinRoot;
 
-use crate::error::{DataPlaneError, Res};
+use crate::error::Res;
 
 #[async_trait]
 pub trait DataplaneLoader: Send + Sync {
@@ -35,13 +37,18 @@ pub trait DataplaneLoader: Send + Sync {
 
     async fn list_loader_endpoints(&self) -> Res<Vec<(LoaderEndpointKind, String)>>;
 
-    /// Brings the active endpoints and the `lxc_map` in line with
-    /// `desired`, which must be the complete set. Per-endpoint failures are
-    /// returned rather than aborting the whole reconcile.
-    async fn reconcile(
-        &self,
-        desired: Vec<LoaderEndpoint>,
-    ) -> Res<Vec<(LoaderEndpointKind, String, DataPlaneError)>>;
+    /// Whether network interface `link` exists. `Ok(false)` only when it is
+    /// known not to; a failed lookup is an error.
+    async fn link_exists(&self, link: &str) -> Res<bool>;
+
+    /// Detaches the programs of the endpoint known only by `kind` and `link`
+    /// and unpins its maps, e.g. a stale one found on restart. Its `lxc_map`
+    /// entries are left alone, see [`Self::prune_endpoint_infos`].
+    async fn detach_loader_endpoint(&self, kind: LoaderEndpointKind, link: &str) -> Res<()>;
+
+    /// Drops every `lxc_map` entry whose IP is not in `keep`, except the
+    /// host's.
+    async fn prune_endpoint_infos(&self, keep: HashSet<IpAddr>) -> Res<()>;
 
     async fn teardown_all(&self) -> Res<()>;
 
