@@ -18,11 +18,11 @@ fn v4(ip: Ipv4Addr, prefix: u8) -> InterfaceAddress {
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn open_socket_on_configured_veth_peer() {
     test_support::with_temp_netns("dpi-sock-", |peer_ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let host_name = test_support::unique_name("dpisk0-");
         let peer_name = test_support::unique_name("dpisk1-");
 
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: host_name.clone(),
                 peer_ifname: peer_name.clone(),
@@ -88,7 +88,7 @@ async fn forward_udp_packet_between_two_peer_namespaces() {
 
     test_support::with_temp_netns("dpi-p1-", |peer1_ns| async move {
         test_support::with_temp_netns("dpi-p2-", |peer2_ns| async move {
-            let mut provisioner = NetlinkNetworkProvisioner;
+            let mut network_provisioner = NetlinkNetworkProvisioner;
 
             let host1_name = test_support::unique_name("dpir10-");
             let peer1_name = test_support::unique_name("dpir11-");
@@ -98,7 +98,7 @@ async fn forward_udp_packet_between_two_peer_namespaces() {
             // The peer end of each pair is moved into `peer{1,2}_ns`
             // directly below, right after creation; the host end stays
             // in the default namespace.
-            let pair1 = provisioner
+            let pair1 = network_provisioner
                 .create_veth(VethSpec {
                     host_ifname: host1_name.clone(),
                     peer_ifname: peer1_name.clone(),
@@ -111,7 +111,7 @@ async fn forward_udp_packet_between_two_peer_namespaces() {
             let target1 = Netns::open_path(&peer1_ns).expect("open peer1 netns failed");
             peer1.set_ns(&target1).await.expect("peer1 set_ns failed");
 
-            let pair2 = provisioner
+            let pair2 = network_provisioner
                 .create_veth(VethSpec {
                     host_ifname: host2_name.clone(),
                     peer_ifname: peer2_name.clone(),

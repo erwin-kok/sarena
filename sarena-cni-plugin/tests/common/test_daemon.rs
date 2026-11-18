@@ -103,9 +103,9 @@ impl FakeApiServer {
             .await
             .expect("load_global_maps");
 
-        let provisioner = NetlinkNetworkProvisioner;
+        let network_provisioner = NetlinkNetworkProvisioner;
 
-        let state = AppState::new(loader_handle, provisioner);
+        let state = AppState::new(loader_handle, network_provisioner);
 
         if Path::new(driver_sock).exists() {
             std::fs::remove_file(driver_sock).expect("could not remove stale socket");

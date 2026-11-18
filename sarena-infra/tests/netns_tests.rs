@@ -16,9 +16,9 @@ async fn create_and_delete_round_trip() {
     );
 
     // create_netns should have brought lo up automatically.
-    let provisioner = NetlinkNetworkProvisioner;
+    let network_provisioner = NetlinkNetworkProvisioner;
     let netns = Netns::open(&name).expect("open temp netns");
-    let lo = provisioner
+    let lo = network_provisioner
         .get_link_in_ns(&netns, "lo")
         .await
         .expect("failed to fetch lo in freshly created namespace");

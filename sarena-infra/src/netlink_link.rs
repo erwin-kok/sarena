@@ -8,13 +8,13 @@ use aya::programs::{SchedClassifier, TcAttachType};
 use futures::TryStreamExt;
 use netlink_packet_route::{
     address::{AddressAttribute, AddressFlags, AddressHeaderFlags, AddressMessage},
-    link::{InfoData, InfoKind, InfoVeth, LinkAttribute, LinkFlags, LinkInfo, LinkMessage},
+    link::{InfoData, InfoKind, InfoVeth, LinkAttribute, LinkFlags, LinkInfo, LinkMessage, State},
     route::{RouteAttribute, RouteMetric, RouteScope},
 };
 
 use crate::{
-    AddressFamily, InfraError, InterfaceAddress, Link, MacAddress, Netns, PinnedTcxProgram, Res,
-    TcxAttach, route::Route, tcx,
+    AddressFamily, AddressScope, InfraError, InterfaceAddress, Link, MacAddress, Netns,
+    PinnedTcxProgram, Res, ScopedAddress, TcxAttach, route::Route, tcx,
 };
 
 /// Recognised `IFLA_INFO_KIND` strings mapped to typed variants.
@@ -81,6 +81,10 @@ pub struct NetlinkLink {
     /// MTU from `IFLA_MTU`, if present.
     pub mtu: Option<u32>,
 
+    /// Operational state from `IFLA_OPERSTATE` (RFC 2863), `Unknown` when
+    /// absent.
+    pub oper_state: State,
+
     /// `IFLA_MASTER` – index of the bridge / bond this interface belongs to.
     pub master_index: Option<u32>,
 
@@ -108,6 +112,10 @@ impl Link for NetlinkLink {
 
     fn ifindex(&self) -> u32 {
         self.index
+    }
+
+    fn is_oper_up(&self) -> bool {
+        self.oper_state == State::Up
     }
 
     fn mac(&self) -> MacAddress {
@@ -262,7 +270,7 @@ impl Link for NetlinkLink {
         }
     }
 
-    async fn addresses(&self, family: Option<AddressFamily>) -> Res<Vec<InterfaceAddress>> {
+    async fn addresses(&self, family: Option<AddressFamily>) -> Res<Vec<ScopedAddress>> {
         let index = self.index;
         if let Some(ns) = &self.netns {
             let netns = Netns::open_path(ns)?;
@@ -519,12 +527,14 @@ fn parse_link(msg: LinkMessage) -> NetlinkLink {
     let mut mac: Option<MacAddress> = None;
     let mut mtu: Option<u32> = None;
     let mut master_index: Option<u32> = None;
+    let mut oper_state = State::Unknown;
 
     for attr in &msg.attributes {
         match attr {
             LinkAttribute::IfName(n) => name.clone_from(n),
             LinkAttribute::Mtu(m) => mtu = Some(*m),
             LinkAttribute::Controller(idx) => master_index = Some(*idx),
+            LinkAttribute::OperState(state) => oper_state = *state,
             LinkAttribute::Address(bytes) if bytes.len() == 6 => {
                 let mut arr = [0u8; 6];
                 arr.copy_from_slice(bytes);
@@ -553,6 +563,7 @@ fn parse_link(msg: LinkMessage) -> NetlinkLink {
         kind,
         mac,
         mtu,
+        oper_state,
         master_index,
         netns: None,
     }
@@ -565,7 +576,7 @@ fn parse_link(msg: LinkMessage) -> NetlinkLink {
 /// interfaces such as veth/ethernet. Returns `None` if neither attribute
 /// is present, or if the kernel-reported prefix length is invalid for the
 /// address family (neither should happen in practice).
-fn parse_address(msg: AddressMessage) -> Option<InterfaceAddress> {
+fn parse_address(msg: AddressMessage) -> Option<ScopedAddress> {
     let ip = msg
         .attributes
         .iter()
@@ -580,7 +591,10 @@ fn parse_address(msg: AddressMessage) -> Option<InterfaceAddress> {
             })
         })?;
 
-    InterfaceAddress::new(ip, msg.header.prefix_len).ok()
+    Some(ScopedAddress {
+        addr: InterfaceAddress::new(ip, msg.header.prefix_len).ok()?,
+        scope: AddressScope(msg.header.scope.into()),
+    })
 }
 
 /// Fetch a single link by name; called from within an active namespace.
@@ -779,8 +793,8 @@ async fn link_addresses_impl(
     handle: &rtnetlink::Handle,
     index: u32,
     family: Option<AddressFamily>,
-) -> Res<Vec<InterfaceAddress>> {
-    let addrs: Vec<Option<InterfaceAddress>> = handle
+) -> Res<Vec<ScopedAddress>> {
+    let addrs: Vec<Option<ScopedAddress>> = handle
         .address()
         .get()
         .set_link_index_filter(index)
@@ -793,7 +807,7 @@ async fn link_addresses_impl(
     Ok(addrs
         .into_iter()
         .flatten()
-        .filter(|addr| family.is_none_or(|f| f.matches(&addr.ip)))
+        .filter(|scoped| family.is_none_or(|f| f.matches(&scoped.addr.ip)))
         .collect())
 }
 

@@ -60,12 +60,12 @@ async fn start_control_plane(config: &DataPlaneConfig) -> Res<DefaultDataPlaneIn
 
     loader_handle.load_global_maps().await?;
 
-    let mut provisioner = NetlinkNetworkProvisioner;
+    let mut network_provisioner = NetlinkNetworkProvisioner;
 
-    provisioner.set_rp_filter(0).await?;
+    network_provisioner.set_rp_filter(0).await?;
 
     let (mut host, _) = setup_host_device(
-        &mut provisioner,
+        &mut network_provisioner,
         1500,
         InterfaceAddress {
             ip: config.internal_ip,

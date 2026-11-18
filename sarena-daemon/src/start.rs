@@ -17,8 +17,10 @@ use sarena_api_types_v1::daemon::SarenaVersion;
 use sarena_data_plane::{
     DataPlane as _, DataPlaneConfig, DefaultDataPlane, EndpointManager, PinRoot,
 };
+use sarena_infra::NetlinkNetworkProvisioner;
 use sarena_services::{AppState, DefaultDaemonService, DefaultEndpointService, DefaultIpamService};
 use sarena_utils::{TracingConfig, logging, version};
+use semver::{Version, VersionReq};
 use tokio::{
     signal::unix::{SignalKind, signal},
     task::{Id, JoinError, JoinSet},
@@ -27,8 +29,9 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
-use crate::{cli::Cli, config::load_config, metrics::BootstrapStatistics};
+use crate::{cli::Cli, config::load_config, metrics::BootstrapStatistics, node::LocalNode};
 
+const MINIMUM_KERNEL_VESRION: &str = "5.10.0";
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 const TELEMETRY_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const SHUTDOWN_BUDGET: Duration = Duration::from_secs(25);
@@ -58,12 +61,16 @@ pub async fn start_daemon(cli: Cli) -> anyhow::Result<()> {
 
     print_banner();
 
-    let prometheus_handle = PrometheusBuilder::new()
-        .with_recommended_naming(true)
-        .install_recorder()?;
+    let version = get_kernel_version()?;
+    info!("Linux kernel version: {version}");
+    check_kernel_version(&version, MINIMUM_KERNEL_VESRION)?;
 
     let bootstrap_statistics = BootstrapStatistics::new();
     bootstrap_statistics.overall.start();
+
+    let prometheus_handle = PrometheusBuilder::new()
+        .with_recommended_naming(true)
+        .install_recorder()?;
 
     let shutdown: CancellationToken = CancellationToken::new();
     spawn_signal_handler(shutdown.clone())?;
@@ -85,10 +92,23 @@ pub async fn start_daemon(cli: Cli) -> anyhow::Result<()> {
             .with_context(|| format!("failed to create socket directory {}", parent.display()))?;
     }
 
-    let pin_root = PinRoot::new(config.pin_root);
+    let pin_root = PinRoot::new(&config.pin_root);
     pin_root
         .ensure_bpffs()
         .context("BPF filesystem is not usable")?;
+
+    if !config.enable_ipv4 && !config.enable_ipv6 {
+        anyhow::bail!("IPv4 and/or IPv6 addressing must be enabled");
+    }
+
+    let network_provisioner = NetlinkNetworkProvisioner;
+
+    let mut local_node = LocalNode::default();
+    local_node
+        .initialize(&network_provisioner, &config, None)
+        .await?;
+
+    info!("LocalNode config: {local_node:?}");
 
     let data_plane_config = DataPlaneConfig {
         gateway_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5)),
@@ -327,4 +347,45 @@ pub fn print_banner() {
     } else {
         eprintln!("Sarena {version}");
     }
+}
+
+fn get_kernel_version() -> anyhow::Result<Version> {
+    let release = fs::read_to_string("/proc/sys/kernel/osrelease")?;
+    parse_kernel_version(release.trim())
+}
+
+fn check_kernel_version(kernel_version: &Version, min_version: &str) -> anyhow::Result<()> {
+    let requirement = VersionReq::parse(&format!(">={min_version}"))?;
+    if !requirement.matches(kernel_version) {
+        anyhow::bail!(
+            "kernel version {kernel_version} does not satisfy minimum version {min_version}"
+        );
+    }
+    Ok(())
+}
+
+fn parse_kernel_version(ver: &str) -> anyhow::Result<Version> {
+    let parts: Vec<&str> = ver.split('.').collect();
+
+    if parts.len() < 2 {
+        anyhow::bail!("unable to get kernel version from {ver:?}");
+    }
+
+    let major = parts[0].parse().context("invalid kernel major version")?;
+
+    let minor = parts[1].parse().context("invalid kernel minor version")?;
+
+    let patch = if parts.len() < 3 {
+        0
+    } else {
+        let digits: String = parts[2].chars().take_while(char::is_ascii_digit).collect();
+
+        if digits.is_empty() {
+            0
+        } else {
+            digits.parse().context("invalid kernel patch version")?
+        }
+    };
+
+    Ok(Version::new(major, minor, patch))
 }

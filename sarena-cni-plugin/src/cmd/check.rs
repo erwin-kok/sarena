@@ -77,7 +77,8 @@ async fn verify_interface(
         Error::InvalidNetworkConfig(format!("could not get address of interface {ifname}: {e}"))
     })?;
 
-    let addresses: HashSet<InterfaceAddress> = HashSet::from_iter(addresses);
+    let addresses: HashSet<InterfaceAddress> =
+        addresses.into_iter().map(|scoped| scoped.addr).collect();
     let mut want_addresses: Vec<InterfaceAddress> = Vec::new();
     for (index, iface) in prev_result.interfaces.iter().enumerate() {
         if iface.sandbox.is_none() {

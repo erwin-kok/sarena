@@ -142,13 +142,15 @@ impl MockNetworkProvisioner {
 
 #[cfg(test)]
 mod tests {
+    use std::net::IpAddr;
+
     use super::*;
     use crate::{MacAddress, Res};
 
     async fn provision_and_start_port<P: NetworkProvisioner>(
-        provisioner: &mut P,
+        network_provisioner: &mut P,
     ) -> Res<VethPair<P::LinkType>> {
-        let mut pair = provisioner
+        let mut pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: "veth-test0".to_owned(),
                 peer_ifname: "veth-test1".to_owned(),
@@ -174,5 +176,28 @@ mod tests {
         assert_eq!(pair.host.up_calls, 1);
         assert_eq!(mock.veths_created.len(), 1);
         assert_eq!(mock.netns_created, vec!["test-ns".to_owned()]);
+    }
+
+    #[tokio::test]
+    async fn excluded_ips_covers_down_and_prefixed_links_only() {
+        let link = |ifname: &str, oper_up: bool, addr: &str| MockLink {
+            ifname: ifname.to_owned(),
+            oper_up,
+            addr_calls: vec![addr.parse().unwrap()],
+            ..MockLink::default()
+        };
+
+        let mut mock = MockNetworkProvisioner::default();
+        mock.add_link(link("eth0", true, "192.168.1.10/24"));
+        mock.add_link(link("eth1", false, "10.1.0.1/16"));
+        mock.add_link(link("docker0", true, "172.17.0.1/16"));
+        mock.add_link(link("lo", false, "127.0.0.1/8"));
+
+        let excluded: Vec<IpAddr> = mock.excluded_ips().await.unwrap();
+        let expected: Vec<IpAddr> = ["10.1.0.1", "172.17.0.1", "127.0.0.1"]
+            .iter()
+            .map(|ip| ip.parse().unwrap())
+            .collect();
+        assert_eq!(excluded, expected);
     }
 }

@@ -102,7 +102,7 @@ async fn find_route(ns: &Path, prefix: Ipv4Addr, prefix_len: u8) -> Option<Route
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn veth_pair_create_and_configure() {
     test_support::with_temp_netns("dpid-peer-", |peer_ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let peer_netns = Netns::open_path(&peer_ns).expect("open temp netns");
         let name = test_support::unique_name("dpid0-");
         let peer_name = test_support::unique_name("dpid1-");
@@ -111,7 +111,7 @@ async fn veth_pair_create_and_configure() {
         // asynchronously after creation -- racing with the `set_mac` below.
         // Creating it with an explicit MAC opts it out of that policy.
         let initial_mac = MacAddress::parse("02:00:00:00:00:01").expect("valid MAC literal");
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
@@ -125,8 +125,8 @@ async fn veth_pair_create_and_configure() {
 
         assert_eq!(host.ifname(), name);
         assert_eq!(peer.ifname(), peer_name);
-        let host_snapshot = provisioner.get_link(&name).await.unwrap();
-        let peer_snapshot = provisioner
+        let host_snapshot = network_provisioner.get_link(&name).await.unwrap();
+        let peer_snapshot = network_provisioner
             .get_link_in_ns(&peer_netns, &peer_name)
             .await
             .unwrap();
@@ -136,39 +136,42 @@ async fn veth_pair_create_and_configure() {
         assert_eq!(host_snapshot.mac, Some(initial_mac));
 
         host.set_up().await.expect("link_set_up failed");
-        let refreshed = provisioner.get_link(&name).await.unwrap();
+        let refreshed = network_provisioner.get_link(&name).await.unwrap();
         assert!(refreshed.is_up());
 
         host.set_mtu(1400).await.expect("link_set_mtu failed");
-        let refreshed = provisioner.get_link(&name).await.unwrap();
+        let refreshed = network_provisioner.get_link(&name).await.unwrap();
         assert_eq!(refreshed.mtu, Some(1400));
 
         let mac = MacAddress::parse("02:00:00:00:00:02").expect("valid MAC literal");
         host.set_mac(mac).await.expect("link_set_mac failed");
-        let refreshed = provisioner.get_link(&name).await.unwrap();
+        let refreshed = network_provisioner.get_link(&name).await.unwrap();
         assert_eq!(refreshed.mac, Some(mac));
 
         host.set_down().await.expect("link_set_down failed");
-        let refreshed = provisioner.get_link(&name).await.unwrap();
+        let refreshed = network_provisioner.get_link(&name).await.unwrap();
         assert!(!refreshed.is_up());
 
-        let links = provisioner.list_links().await.expect("list_links failed");
+        let links = network_provisioner
+            .list_links()
+            .await
+            .expect("list_links failed");
         let names: Vec<_> = links.iter().map(|l| l.ifname()).collect();
         assert!(names.contains(&name.as_str()));
         assert!(!names.contains(&peer_name.as_str()));
 
         let renamed = test_support::unique_name("dpid2-");
         host.rename(&renamed).await.expect("rename failed");
-        assert!(provisioner.get_link(&name).await.is_err());
-        assert!(provisioner.get_link(&renamed).await.is_ok());
+        assert!(network_provisioner.get_link(&name).await.is_err());
+        assert!(network_provisioner.get_link(&renamed).await.is_ok());
 
         host.delete().await.expect("delete failed");
-        assert!(provisioner.get_link(&renamed).await.is_err());
+        assert!(network_provisioner.get_link(&renamed).await.is_err());
 
         // Deleting one end of a veth pair deletes both, even though the
         // peer lives in a different namespace.
         assert!(
-            provisioner
+            network_provisioner
                 .get_link_in_ns(&peer_netns, &peer_name)
                 .await
                 .is_err()
@@ -181,11 +184,11 @@ async fn veth_pair_create_and_configure() {
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn rename_link_by_name() {
     test_support::with_temp_netns("dpi-rn-", |ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let from_name = test_support::unique_name("dpiold0-");
         let peer_name = test_support::unique_name("dpiold1-");
         let to_name = test_support::unique_name("dpinew0-");
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: from_name.clone(),
                 peer_ifname: peer_name.clone(),
@@ -200,8 +203,8 @@ async fn rename_link_by_name() {
 
         host.rename(&to_name).await.expect("rename failed");
 
-        assert!(provisioner.get_link(&from_name).await.is_err());
-        assert!(provisioner.get_link(&to_name).await.is_ok());
+        assert!(network_provisioner.get_link(&from_name).await.is_err());
+        assert!(network_provisioner.get_link(&to_name).await.is_ok());
     })
     .await;
 }
@@ -211,12 +214,12 @@ async fn rename_link_by_name() {
 async fn link_setns_moves_only_the_moved_end() {
     test_support::with_temp_netns("dpi-mva-", |ns_a| async move {
         test_support::with_temp_netns("dpi-mvb-", |ns_b| async move {
-            let mut provisioner = NetlinkNetworkProvisioner;
+            let mut network_provisioner = NetlinkNetworkProvisioner;
             let netns_a = Netns::open_path(&ns_a).expect("open temp netns");
             let netns_b = Netns::open_path(&ns_b).expect("open temp netns");
             let host_name = test_support::unique_name("dpimv0-");
             let peer_name = test_support::unique_name("dpimv1-");
-            let pair = provisioner
+            let pair = network_provisioner
                 .create_veth(VethSpec {
                     host_ifname: host_name.clone(),
                     peer_ifname: peer_name.clone(),
@@ -230,15 +233,15 @@ async fn link_setns_moves_only_the_moved_end() {
 
             host.set_ns(&netns_b).await.expect("link_setns failed");
 
-            assert!(provisioner.get_link(&host_name).await.is_err());
+            assert!(network_provisioner.get_link(&host_name).await.is_err());
             assert!(
-                provisioner
+                network_provisioner
                     .get_link_in_ns(&netns_b, &host_name)
                     .await
                     .is_ok()
             );
 
-            let still_there = provisioner
+            let still_there = network_provisioner
                 .get_link_in_ns(&netns_a, &peer_name)
                 .await
                 .expect("peer should still be in ns_a");
@@ -253,11 +256,11 @@ async fn link_setns_moves_only_the_moved_end() {
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn list_links_includes_loopback_and_veth() {
     test_support::with_temp_netns("dpi-list-", |ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpils0-");
         let peer_name = test_support::unique_name("dpils1-");
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
@@ -272,7 +275,7 @@ async fn list_links_includes_loopback_and_veth() {
             .await
             .expect("link_setns failed for host");
 
-        let links = provisioner
+        let links = network_provisioner
             .list_links_in_ns(&netns)
             .await
             .expect("list_links failed");
@@ -289,11 +292,11 @@ async fn list_links_includes_loopback_and_veth() {
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn set_addr_and_add_gateway_configure_the_link() {
     test_support::with_temp_netns("dpi-addr-", |ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpiad0-");
         let peer_name = test_support::unique_name("dpiad1-");
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
@@ -335,9 +338,9 @@ async fn set_addr_and_add_gateway_configure_the_link() {
 #[tokio::test]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn get_link_for_missing_name_fails() {
-    let provisioner = NetlinkNetworkProvisioner;
+    let network_provisioner = NetlinkNetworkProvisioner;
     let missing = test_support::unique_name("dpim0-");
-    let err = provisioner
+    let err = network_provisioner
         .get_link(&missing)
         .await
         .expect_err("get_link should fail for a name that was never created");
@@ -358,11 +361,11 @@ async fn list_links_in_ns_for_missing_namespace_fails() {
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn set_ns_to_missing_namespace_fails_without_moving_the_link() {
     test_support::with_temp_netns("dpi-nsx-", |ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let name = test_support::unique_name("dpinx0-");
         let peer_name = test_support::unique_name("dpinx1-");
         let missing_ns = test_support::unique_name("dpi-missing-");
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
@@ -377,7 +380,7 @@ async fn set_ns_to_missing_namespace_fails_without_moving_the_link() {
         let err = Netns::open(&missing_ns)
             .expect_err("opening a namespace that doesn't exist should fail");
         assert!(matches!(err, InfraError::OpenNamespace { name, .. } if name == missing_ns));
-        assert!(provisioner.get_link(&name).await.is_ok());
+        assert!(network_provisioner.get_link(&name).await.is_ok());
         host.delete().await.expect("cleanup delete failed");
     })
     .await;
@@ -387,11 +390,11 @@ async fn set_ns_to_missing_namespace_fails_without_moving_the_link() {
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn rename_to_existing_name_fails() {
     test_support::with_temp_netns("dpi-rnerr-", |ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpirn0-");
         let peer_name = test_support::unique_name("dpirn1-");
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
@@ -406,7 +409,12 @@ async fn rename_to_existing_name_fails() {
             .await
             .expect("link_setns failed for host");
         assert!(host.rename(&peer_name).await.is_err());
-        assert!(provisioner.get_link_in_ns(&netns, &name).await.is_ok());
+        assert!(
+            network_provisioner
+                .get_link_in_ns(&netns, &name)
+                .await
+                .is_ok()
+        );
     })
     .await;
 }
@@ -415,10 +423,10 @@ async fn rename_to_existing_name_fails() {
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn delete_twice_fails_the_second_time() {
     test_support::with_temp_netns("dpi-del2-", |ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let name = test_support::unique_name("dpidl0-");
         let peer_name = test_support::unique_name("dpidl1-");
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
@@ -444,11 +452,11 @@ async fn delete_twice_fails_the_second_time() {
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn create_veth_with_duplicate_name_fails() {
     test_support::with_temp_netns("dpi-dup-", |ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let name = test_support::unique_name("dpidup0-");
         let peer_name = test_support::unique_name("dpidup1-");
         let other_peer_name = test_support::unique_name("dpidup2-");
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
@@ -461,7 +469,7 @@ async fn create_veth_with_duplicate_name_fails() {
         let netns = Netns::open_path(&ns).expect("open temp netns");
         peer.set_ns(&netns).await.expect("peer set_ns failed");
 
-        let result = provisioner
+        let result = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: other_peer_name,
@@ -483,11 +491,11 @@ async fn create_veth_with_duplicate_name_fails() {
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn delete_link_by_name_removes_it_and_its_peer() {
     test_support::with_temp_netns("dpi-dlnm-", |ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpidln0-");
         let peer_name = test_support::unique_name("dpidln1-");
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
@@ -499,14 +507,14 @@ async fn delete_link_by_name_removes_it_and_its_peer() {
         let mut peer = pair.peer;
         peer.set_ns(&netns).await.expect("peer set_ns failed");
 
-        provisioner
+        network_provisioner
             .delete_link(&name)
             .await
             .expect("delete_link failed");
 
-        assert!(provisioner.get_link(&name).await.is_err());
+        assert!(network_provisioner.get_link(&name).await.is_err());
         assert!(
-            provisioner
+            network_provisioner
                 .get_link_in_ns(&netns, &peer_name)
                 .await
                 .is_err()
@@ -519,11 +527,11 @@ async fn delete_link_by_name_removes_it_and_its_peer() {
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn delete_link_in_ns_removes_it_and_its_peer() {
     test_support::with_temp_netns("dpi-dlin-", |ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpidli0-");
         let peer_name = test_support::unique_name("dpidli1-");
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
@@ -538,14 +546,19 @@ async fn delete_link_in_ns_removes_it_and_its_peer() {
             .await
             .expect("link_setns failed for host");
 
-        provisioner
+        network_provisioner
             .delete_link_in_ns(&netns, &name)
             .await
             .expect("delete_link_in_ns failed");
 
-        assert!(provisioner.get_link_in_ns(&netns, &name).await.is_err());
         assert!(
-            provisioner
+            network_provisioner
+                .get_link_in_ns(&netns, &name)
+                .await
+                .is_err()
+        );
+        assert!(
+            network_provisioner
                 .get_link_in_ns(&netns, &peer_name)
                 .await
                 .is_err()
@@ -557,10 +570,10 @@ async fn delete_link_in_ns_removes_it_and_its_peer() {
 #[tokio::test]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn delete_link_for_missing_name_fails() {
-    let provisioner = NetlinkNetworkProvisioner;
+    let network_provisioner = NetlinkNetworkProvisioner;
     let missing = test_support::unique_name("dpidlm0-");
 
-    let err = provisioner
+    let err = network_provisioner
         .delete_link(&missing)
         .await
         .expect_err("delete_link should fail for a name that was never created");
@@ -571,11 +584,11 @@ async fn delete_link_for_missing_name_fails() {
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn delete_link_in_ns_for_missing_link_fails() {
     test_support::with_temp_netns("dpi-dlml-", |ns| async move {
-        let provisioner = NetlinkNetworkProvisioner;
+        let network_provisioner = NetlinkNetworkProvisioner;
         let netns = Netns::open_path(&ns).expect("open temp netns");
         let missing = test_support::unique_name("dpidlm1-");
 
-        let err = provisioner
+        let err = network_provisioner
             .delete_link_in_ns(&netns, &missing)
             .await
             .expect_err("delete_link_in_ns should fail for a name that was never created");
@@ -614,11 +627,11 @@ fn route(prefix: IpNet) -> Route {
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn add_route_without_a_nexthop_installs_an_on_link_route() {
     test_support::with_temp_netns("dpi-rtol-", |ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpirt0-");
         let peer_name = test_support::unique_name("dpirt1-");
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
@@ -665,11 +678,11 @@ async fn add_route_without_a_nexthop_installs_an_on_link_route() {
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn add_route_with_a_nexthop_installs_a_route_via_gateway() {
     test_support::with_temp_netns("dpi-rtgw-", |ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpirt2-");
         let peer_name = test_support::unique_name("dpirt3-");
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),
@@ -720,11 +733,11 @@ async fn add_route_with_a_nexthop_installs_a_route_via_gateway() {
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn add_route_sets_table_and_mtu() {
     test_support::with_temp_netns("dpi-rttm-", |ns| async move {
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let netns = Netns::open_path(&ns).expect("open temp netns");
         let name = test_support::unique_name("dpirt4-");
         let peer_name = test_support::unique_name("dpirt5-");
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: name.clone(),
                 peer_ifname: peer_name.clone(),

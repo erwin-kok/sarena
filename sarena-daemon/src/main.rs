@@ -6,21 +6,15 @@ use clap_markdown_generator::{
     generate_markdown_for_command_with_options,
 };
 use sarena_api_types_v1::daemon::SarenaVersion;
+use sarena_daemon::{
+    cli::{Cli, Commands},
+    start,
+};
 use sarena_utils::{
     cli_output::{self, OutputFormat},
     root::require_root_privilege,
     version,
 };
-
-use crate::{
-    cli::{Cli, Commands},
-    start::start_daemon,
-};
-
-mod cli;
-mod config;
-mod metrics;
-mod start;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -30,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Start => {
             let command = Cli::command();
             require_root_privilege(command.get_name());
-            if let Err(err) = start_daemon(cli).await {
+            if let Err(err) = start::start_daemon(cli).await {
                 // Tracing may already be shut down at this point, so print directly.
                 eprintln!("Error: {err:?}");
                 process::exit(1);

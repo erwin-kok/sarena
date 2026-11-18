@@ -1,13 +1,15 @@
 use std::{
-    net::Ipv4Addr,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::{Path, PathBuf},
 };
 
 use aya::programs::{ProgramError, TcAttachType};
 use route::Route;
 use thiserror::Error;
+use tracing::debug;
 
 pub mod address;
+mod address_selection;
 pub mod mac_address;
 pub mod mock_link;
 pub mod mock_provisioner;
@@ -20,11 +22,17 @@ pub mod tcx;
 #[cfg(any(test, feature = "test-util"))]
 pub mod test_support;
 
-pub use address::{AddressFamily, InterfaceAddress};
+pub use address::{AddressFamily, AddressScope, InterfaceAddress, ScopedAddress};
+pub use address_selection::is_public_addr;
 pub use mac_address::MacAddress;
 pub use mock_provisioner::MockNetworkProvisioner;
 pub use netlink_provisioner::NetlinkNetworkProvisioner;
 pub use netns::{Netns, NetnsGuard};
+
+/// Interface name prefixes whose addresses are excluded from address
+/// selection even while the interface is up, see
+/// [`NetworkProvisioner::excluded_ips`].
+pub const EXCLUDED_LINK_PREFIXES: &[&str] = &["docker"];
 
 /// Everything needed to create one veth pair. Both ends stay in whatever
 /// namespace the calling process is already in -- move the peer into a
@@ -87,6 +95,85 @@ pub trait NetworkProvisioner {
     async fn list_links(&self) -> Res<Vec<Self::LinkType>>;
     /// List all links visible inside namespace `ns`.
     async fn list_links_in_ns(&self, ns: &Netns) -> Res<Vec<Self::LinkType>>;
+
+    /// Addresses in the default namespace that must not be picked when
+    /// selecting a node address: those on links that are not operationally
+    /// up (they aren't reachable) and on links whose name starts with one of
+    /// [`EXCLUDED_LINK_PREFIXES`] (e.g. `docker0`).
+    ///
+    /// Note that the loopback device reports an operational state of
+    /// `UNKNOWN`, not `UP`, so its addresses are excluded too.
+    ///
+    /// A link whose addresses can't be read (e.g. because it was deleted
+    /// after being listed) is skipped.
+    async fn excluded_ips(&self) -> Res<Vec<IpAddr>> {
+        let mut excluded = Vec::new();
+        for link in self.list_links().await? {
+            let has_excluded_prefix = EXCLUDED_LINK_PREFIXES
+                .iter()
+                .any(|prefix| link.ifname().starts_with(prefix));
+            if link.is_oper_up() && !has_excluded_prefix {
+                continue;
+            }
+            match link.addresses(None).await {
+                Ok(addrs) => excluded.extend(addrs.into_iter().map(|scoped| scoped.addr.ip)),
+                Err(err) => debug!(
+                    ifname = link.ifname(),
+                    %err,
+                    "skipping link whose addresses can't be listed"
+                ),
+            }
+        }
+        Ok(excluded)
+    }
+
+    /// The node's IPv4 address: the lowest global IPv4 address, preferring
+    /// public over private ones.
+    ///
+    /// - `ifname`: only consider that link's addresses. When it doesn't exist, or has no usable
+    ///   address, all links are considered.
+    /// - `preferred`: returned when it is among the candidates (e.g. an address restored from a
+    ///   previous run), unless it is private while public candidates exist.
+    ///
+    /// Universe-scope addresses are tried first, then site and user-defined
+    /// scopes; link- and host-scope addresses are never returned. When
+    /// searching all links, [`Self::excluded_ips`] are skipped.
+    async fn first_global_ipv4(
+        &self,
+        ifname: Option<&str>,
+        preferred: Option<Ipv4Addr>,
+    ) -> Res<Ipv4Addr> {
+        let ip = address_selection::first_global_addr(
+            self,
+            ifname,
+            preferred.map(IpAddr::V4),
+            AddressFamily::V4,
+        )
+        .await?;
+        match ip {
+            IpAddr::V4(ip) => Ok(ip),
+            IpAddr::V6(_) => unreachable!("addresses are filtered to IPv4"),
+        }
+    }
+
+    /// The node's IPv6 address, see [`Self::first_global_ipv4`].
+    async fn first_global_ipv6(
+        &self,
+        ifname: Option<&str>,
+        preferred: Option<Ipv6Addr>,
+    ) -> Res<Ipv6Addr> {
+        let ip = address_selection::first_global_addr(
+            self,
+            ifname,
+            preferred.map(IpAddr::V6),
+            AddressFamily::V6,
+        )
+        .await?;
+        match ip {
+            IpAddr::V6(ip) => Ok(ip),
+            IpAddr::V4(_) => unreachable!("addresses are filtered to IPv6"),
+        }
+    }
 }
 
 #[allow(async_fn_in_trait)]
@@ -97,6 +184,10 @@ pub trait Link {
     fn ifindex(&self) -> u32;
     /// This link's hardware (MAC) address.
     fn mac(&self) -> MacAddress;
+    /// Whether this link's operational state (`IFLA_OPERSTATE`) is `UP`, i.e.
+    /// it can actually pass traffic -- unlike `IFF_UP`, which only says it
+    /// was administratively brought up.
+    fn is_oper_up(&self) -> bool;
 
     /// Bring this link up (set `IFF_UP`).
     async fn set_up(&mut self) -> Res<()>;
@@ -125,9 +216,9 @@ pub trait Link {
     async fn replace_addr(&mut self, addr: InterfaceAddress) -> Res<()>;
     /// Remove `addr` from this link.
     async fn delete_addr(&mut self, addr: InterfaceAddress) -> Res<()>;
-    /// All addresses currently configured on this link, optionally
-    /// filtered to a single address family (`None` returns both).
-    async fn addresses(&self, family: Option<AddressFamily>) -> Res<Vec<InterfaceAddress>>;
+    /// All addresses currently configured on this link with their scope,
+    /// optionally filtered to a single address family (`None` returns both).
+    async fn addresses(&self, family: Option<AddressFamily>) -> Res<Vec<ScopedAddress>>;
     /// Add (replacing any existing one) the default route (`0.0.0.0/0`) via
     /// `gateway`, routed out through this link.
     async fn add_gateway(&mut self, gateway: Ipv4Addr) -> Res<()>;
@@ -318,6 +409,9 @@ pub enum InfraError {
 
     #[error("invalid prefix: {0} (max: {1})")]
     PrefixLenError(u8, u8),
+
+    #[error("no global {0:?} address found")]
+    NoGlobalAddress(AddressFamily),
 
     #[error("error parsing interface address: {0}")]
     InterfaceAddressParseError(String),

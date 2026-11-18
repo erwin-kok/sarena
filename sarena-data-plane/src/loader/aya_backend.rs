@@ -39,7 +39,7 @@ struct LoggerHandle {
 pub struct AyaBackend {
     object: EbpfObject,
     pin_root: PinRoot,
-    provisioner: NetlinkNetworkProvisioner,
+    network_provisioner: NetlinkNetworkProvisioner,
     loggers: HashMap<String, LoggerHandle>,
 }
 
@@ -55,7 +55,7 @@ impl AyaBackend {
         Self {
             object,
             pin_root,
-            provisioner: NetlinkNetworkProvisioner,
+            network_provisioner: NetlinkNetworkProvisioner,
             loggers: HashMap::new(),
         }
     }
@@ -132,7 +132,7 @@ impl BpfBackend for AyaBackend {
                 link: link.to_string(),
                 src: format!("failed to build link-resolution runtime: {e}"),
             })?;
-        rt.block_on(self.provisioner.get_link(link))
+        rt.block_on(self.network_provisioner.get_link(link))
             .map_err(|e| DataPlaneError::LinkResolve {
                 link: link.to_string(),
                 src: e.to_string(),
@@ -148,7 +148,7 @@ impl BpfBackend for AyaBackend {
                 link: link.to_string(),
                 src: format!("failed to build link-resolution runtime: {e}"),
             })?;
-        match rt.block_on(self.provisioner.get_link(link)) {
+        match rt.block_on(self.network_provisioner.get_link(link)) {
             Ok(_) => Ok(true),
             Err(InfraError::LinkNotFound(_)) => Ok(false),
             Err(e) => Err(DataPlaneError::LinkResolve {

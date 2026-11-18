@@ -19,6 +19,30 @@ impl AddressFamily {
     }
 }
 
+/// An address's scope (`ifa_scope`, the `RT_SCOPE_*` values): how far away
+/// it is meaningful. Smaller is wider, so `scope <= max` reads as "at least
+/// as wide as `max`". Values 1..=199 are user defined.
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct AddressScope(pub u8);
+
+impl AddressScope {
+    /// `RT_SCOPE_UNIVERSE`: globally valid.
+    pub const UNIVERSE: Self = Self(0);
+    /// `RT_SCOPE_SITE`: valid within the site.
+    pub const SITE: Self = Self(200);
+    /// `RT_SCOPE_LINK`: valid on the attached link only (e.g. `fe80::/10`).
+    pub const LINK: Self = Self(253);
+    /// `RT_SCOPE_HOST`: valid on this host only (e.g. `127.0.0.1`).
+    pub const HOST: Self = Self(254);
+}
+
+/// An address configured on a link, together with its scope.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct ScopedAddress {
+    pub addr: InterfaceAddress,
+    pub scope: AddressScope,
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct InterfaceAddress {
     pub ip: IpAddr,

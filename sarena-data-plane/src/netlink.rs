@@ -9,15 +9,15 @@ pub const SARENA_HOST: &str = "sarena_host";
 pub const SARENA_NET: &str = "sarena_net";
 
 pub async fn setup_host_device(
-    provisioner: &mut NetlinkNetworkProvisioner,
+    network_provisioner: &mut NetlinkNetworkProvisioner,
     device_mtu: u32,
     addr: InterfaceAddress,
 ) -> Res<(NetlinkLink, NetlinkLink)> {
-    let link = provisioner.get_link(SARENA_HOST).await;
+    let link = network_provisioner.get_link(SARENA_HOST).await;
     if matches!(&link, Err(InfraError::LinkNotFound(_))) {
         let host_mac = MacAddress::generate_rand();
         let peer_mac = MacAddress::generate_rand();
-        let _ = provisioner
+        let _ = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: SARENA_HOST.to_string(),
                 peer_ifname: SARENA_NET.to_string(),
@@ -32,8 +32,8 @@ pub async fn setup_host_device(
             src: src.to_string(),
         })?;
     }
-    let mut host = setup_link(provisioner, SARENA_HOST, device_mtu).await?;
-    let net = setup_link(provisioner, SARENA_NET, device_mtu).await?;
+    let mut host = setup_link(network_provisioner, SARENA_HOST, device_mtu).await?;
+    let net = setup_link(network_provisioner, SARENA_NET, device_mtu).await?;
 
     host.replace_addr(addr).await?;
 
@@ -41,17 +41,18 @@ pub async fn setup_host_device(
 }
 
 async fn setup_link(
-    provisioner: &mut NetlinkNetworkProvisioner,
+    network_provisioner: &mut NetlinkNetworkProvisioner,
     name: &str,
     device_mtu: u32,
 ) -> Res<NetlinkLink> {
-    let mut link = provisioner
-        .get_link(name)
-        .await
-        .map_err(|src| DataPlaneError::LinkLookup {
-            name: SARENA_HOST.to_string(),
-            src: src.to_string(),
-        })?;
+    let mut link =
+        network_provisioner
+            .get_link(name)
+            .await
+            .map_err(|src| DataPlaneError::LinkLookup {
+                name: SARENA_HOST.to_string(),
+                src: src.to_string(),
+            })?;
 
     link.set_up().await?;
 

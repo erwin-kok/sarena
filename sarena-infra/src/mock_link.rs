@@ -1,13 +1,14 @@
 use std::{
-    net::Ipv4Addr,
+    collections::HashMap,
+    net::{IpAddr, Ipv4Addr},
     path::{Path, PathBuf},
 };
 
 use aya::programs::TcAttachType;
 
 use crate::{
-    AddressFamily, InfraError, InterfaceAddress, Link, MacAddress, Netns, PinnedTcxProgram, Res,
-    TcxAttach, route::Route,
+    AddressFamily, AddressScope, InfraError, InterfaceAddress, Link, MacAddress, Netns,
+    PinnedTcxProgram, Res, ScopedAddress, TcxAttach, route::Route,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -21,11 +22,16 @@ pub struct MockLink {
     pub ifindex: u32,
     pub mac: MacAddress,
     pub peer_ifname: Option<String>,
+    /// What [`Link::is_oper_up`] reports; `false` by default.
+    pub oper_up: bool,
     pub up_calls: u32,
     pub down_calls: u32,
     pub mtu_calls: Vec<u32>,
     pub mac_calls: Vec<MacAddress>,
     pub addr_calls: Vec<InterfaceAddress>,
+    /// Scope [`Link::addresses`] reports for an address in
+    /// `addr_calls`; universe for addresses not listed.
+    pub addr_scopes: HashMap<IpAddr, AddressScope>,
     pub replace_addr_calls: Vec<InterfaceAddress>,
     pub delete_addr_calls: Vec<InterfaceAddress>,
     pub gateway_calls: Vec<Ipv4Addr>,
@@ -55,6 +61,10 @@ impl Link for MockLink {
 
     fn ifindex(&self) -> u32 {
         self.ifindex
+    }
+
+    fn is_oper_up(&self) -> bool {
+        self.oper_up
     }
 
     fn mac(&self) -> MacAddress {
@@ -119,12 +129,15 @@ impl Link for MockLink {
         Ok(())
     }
 
-    async fn addresses(&self, family: Option<AddressFamily>) -> Res<Vec<InterfaceAddress>> {
+    async fn addresses(&self, family: Option<AddressFamily>) -> Res<Vec<ScopedAddress>> {
         Ok(self
             .addr_calls
             .iter()
-            .copied()
             .filter(|addr| family.is_none_or(|f| f.matches(&addr.ip)))
+            .map(|&addr| ScopedAddress {
+                addr,
+                scope: self.addr_scopes.get(&addr.ip).copied().unwrap_or_default(),
+            })
             .collect())
     }
 
@@ -211,9 +224,9 @@ mod tests {
     use crate::{MacAddress, MockNetworkProvisioner, NetworkProvisioner, Res, VethPair, VethSpec};
 
     async fn provision_and_start_port<P: NetworkProvisioner>(
-        provisioner: &mut P,
+        network_provisioner: &mut P,
     ) -> Res<VethPair<P::LinkType>> {
-        let mut pair = provisioner
+        let mut pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: "veth-test0".to_owned(),
                 peer_ifname: "veth-test1".to_owned(),

@@ -24,9 +24,12 @@ async fn attach_detach_tcx() {
         let _ = fs::remove_dir_all(link_dir);
         fs::create_dir_all(link_dir).unwrap();
 
-        let provisioner = NetlinkNetworkProvisioner;
+        let network_provisioner = NetlinkNetworkProvisioner;
         let netns = Netns::open_path(&ns).expect("open temp netns");
-        let lo = provisioner.get_link_in_ns(&netns, "lo").await.unwrap();
+        let lo = network_provisioner
+            .get_link_in_ns(&netns, "lo")
+            .await
+            .unwrap();
 
         // Attaching the same program twice should result in a link create,
         // then an update -- both must resolve to the same kernel link ID.
@@ -61,9 +64,9 @@ async fn upsert_tcx_recovers_from_a_defunct_pin_after_device_replacement() {
         let _ = fs::remove_dir_all(link_dir);
         fs::create_dir_all(link_dir).unwrap();
 
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
 
-        let mut pair = provisioner
+        let mut pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: test_support::unique_name("dpienolk0-"),
                 peer_ifname: test_support::unique_name("dpienolk1-"),
@@ -80,14 +83,14 @@ async fn upsert_tcx_recovers_from_a_defunct_pin_after_device_replacement() {
 
         // Delete the device *without* detaching first - this is exactly
         // what leaves the pinned link defunct instead of cleanly removed.
-        provisioner
+        network_provisioner
             .delete_veth(&mut pair)
             .await
             .expect("delete_veth failed");
 
         // An unrelated replacement device to reattach onto, reusing the
         // same pin path/program name.
-        let mut pair2 = provisioner
+        let mut pair2 = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: test_support::unique_name("dpienolk2-"),
                 peer_ifname: test_support::unique_name("dpienolk3-"),
@@ -110,7 +113,7 @@ async fn upsert_tcx_recovers_from_a_defunct_pin_after_device_replacement() {
         assert!(has_tcx(&pair2.host, "dummy_test", TcAttachType::Egress).unwrap());
 
         second.detach(link_dir).unwrap();
-        provisioner
+        network_provisioner
             .delete_veth(&mut pair2)
             .await
             .expect("cleanup delete_veth failed");
@@ -135,10 +138,10 @@ async fn upsert_tcx_program_rejects_non_local_link() {
         let _ = fs::remove_dir_all(link_dir);
         fs::create_dir_all(link_dir).unwrap();
 
-        let mut provisioner = NetlinkNetworkProvisioner;
+        let mut network_provisioner = NetlinkNetworkProvisioner;
         let host_name = test_support::unique_name("dpitcx0-");
         let peer_name = test_support::unique_name("dpitcx1-");
-        let pair = provisioner
+        let pair = network_provisioner
             .create_veth(VethSpec {
                 host_ifname: host_name.clone(),
                 peer_ifname: peer_name.clone(),
