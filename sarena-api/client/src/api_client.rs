@@ -17,7 +17,7 @@ use crate::{
 
 const X_REQUEST_ID: &str = "x-request-id";
 
-const DEFAULT_SOCKET_PATH: &str = "/tmp/sarena.sock";
+const DEFAULT_SOCKET_PATH: &str = "/var/run/sarena/sarena.sock";
 const DEFAULT_RETRY_ATTEMPTS: u32 = 3;
 const DEFAULT_RETRY_INTERVAL: Duration = Duration::from_millis(500);
 
@@ -272,7 +272,7 @@ impl<T: Transport> ApiClientInner<T> {
 }
 
 pub fn default_socket_path() -> String {
-    env::var("SARENA_SOCKET")
+    env::var("SARENA_SOCKET_PATH")
         .ok()
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| DEFAULT_SOCKET_PATH.to_string())

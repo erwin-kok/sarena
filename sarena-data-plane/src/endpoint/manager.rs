@@ -291,10 +291,10 @@ impl EndpointManager {
     }
 
     pub fn host_endpoint_exists(&self) -> bool {
-        self.host_endpoint_id().is_some()
+        self.host_endpoint().is_some()
     }
 
-    pub fn host_endpoint_id(&self) -> Option<EndpointId> {
+    pub fn host_endpoint(&self) -> Option<Endpoint> {
         let Ok(inner) = self.inner.read() else {
             return None;
         };
@@ -302,7 +302,7 @@ impl EndpointManager {
             .endpoints
             .values()
             .find(|endpoint| endpoint.is_host())
-            .map(Endpoint::id)
+            .cloned()
     }
 
     pub fn update_references(&self, id: EndpointId, endpoint: &EndpointPersist) {

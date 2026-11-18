@@ -1,6 +1,7 @@
 mod actor;
 mod aya_backend;
 mod backend;
+mod bpffs;
 mod data_plane_loader;
 mod loader_endpoint;
 mod manifest;
@@ -16,6 +17,7 @@ use std::{collections::HashSet, net::IpAddr};
 pub use actor::DefaultDataplaneLoader;
 use async_trait::async_trait;
 pub use aya_backend::AyaBackend;
+pub use bpffs::BpffsError;
 pub use data_plane_loader::Loader;
 pub use loader_endpoint::{LoaderEndpoint, LoaderEndpointKind};
 #[cfg(any(test, feature = "test-util"))]

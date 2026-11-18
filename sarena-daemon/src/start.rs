@@ -1,10 +1,10 @@
 use std::{
     collections::HashMap,
     env::consts,
+    fs,
     future::Future,
     io::IsTerminal as _,
     net::{IpAddr, Ipv4Addr},
-    path::PathBuf,
     process,
     sync::Arc,
     time::Duration,
@@ -32,7 +32,6 @@ use crate::{cli::Cli, config::load_config, metrics::BootstrapStatistics};
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 const TELEMETRY_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const SHUTDOWN_BUDGET: Duration = Duration::from_secs(25);
-const DEFAULT_SOCKET_PATH: &str = "/tmp/sarena.sock";
 const TCP_PORT: u16 = 3000;
 /// Same interval `PrometheusBuilder::install` would use for its own upkeep task.
 const METRICS_UPKEEP_INTERVAL: Duration = Duration::from_secs(5);
@@ -48,7 +47,7 @@ const BANNER: [&str; 5] = [
 // 256-color codes, blue to purple
 const SHADES: [u8; 5] = [33, 69, 105, 141, 177];
 
-pub async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
+pub async fn start_daemon(cli: Cli) -> anyhow::Result<()> {
     let config = load_config(&cli)?;
 
     logging::init_tracing(&TracingConfig {
@@ -66,17 +65,32 @@ pub async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
     let bootstrap_statistics = BootstrapStatistics::new();
     bootstrap_statistics.overall.start();
 
-    let shutdown = CancellationToken::new();
+    let shutdown: CancellationToken = CancellationToken::new();
     spawn_signal_handler(shutdown.clone())?;
 
-    let socket_path =
-        std::env::var("SARENA_SOCKET").unwrap_or_else(|_| DEFAULT_SOCKET_PATH.to_string());
-
-    info!("starting sarena-daemon, socket = {socket_path}");
+    fs::create_dir_all(&config.runtime_path).with_context(|| {
+        format!(
+            "failed to create runtime path directory {}",
+            config.runtime_path.display()
+        )
+    })?;
+    fs::create_dir_all(&config.statedir_path).with_context(|| {
+        format!(
+            "failed to create statedir directory {}",
+            config.statedir_path.display()
+        )
+    })?;
+    if let Some(parent) = config.socket_path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create socket directory {}", parent.display()))?;
+    }
 
     let pin_root = PinRoot::new(config.pin_root);
+    pin_root
+        .ensure_bpffs()
+        .context("BPF filesystem is not usable")?;
 
-    let config = DataPlaneConfig {
+    let data_plane_config = DataPlaneConfig {
         gateway_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5)),
         internal_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 7)),
         ipam_ipv4_subnet: Some(IpNet::V4(Ipv4Net::new(Ipv4Addr::new(10, 0, 10, 0), 24)?)),
@@ -84,14 +98,9 @@ pub async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
         pin_root: pin_root.clone(),
     };
 
-    let data_plane = DefaultDataPlane::new(&config).await?;
+    let data_plane = DefaultDataPlane::new(&data_plane_config).await?;
 
-    let runtime_path = PathBuf::from("/var/run/sarena");
-    let state_dir = runtime_path.join("state");
-
-    std::fs::create_dir_all(&state_dir)?;
-
-    let endpoint_manager = EndpointManager::new(data_plane.loader(), &state_dir);
+    let endpoint_manager = EndpointManager::new(data_plane.loader(), &config.statedir_path);
     endpoint_manager.init_metrics();
 
     let (restored, to_clean) = endpoint_manager.restore_old_endpoints().await?;
@@ -101,7 +110,7 @@ pub async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
         to_clean.len()
     );
 
-    let state = setup_services(config, endpoint_manager);
+    let state = setup_services(data_plane_config, endpoint_manager);
 
     let mut tasks = JoinSet::new();
     let mut task_names = HashMap::new();
@@ -123,7 +132,7 @@ pub async fn init_daemon(cli: Cli) -> anyhow::Result<()> {
         let handle = tasks.spawn(async move {
             sarena_api_server::ApiServer::new()
                 .start(
-                    &socket_path,
+                    &config.socket_path,
                     TCP_PORT,
                     state,
                     prometheus_handle,

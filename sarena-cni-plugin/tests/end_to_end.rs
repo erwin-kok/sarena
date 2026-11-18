@@ -19,6 +19,8 @@ const UDP_PORT: u16 = 9999;
 
 mod common;
 
+const TEST_SOCKET_PATH: &str = "/tmp/sarena.sock";
+
 // `current_thread`, not the default multi-threaded flavor: `Netns::unshare_self`
 // below is only safe before the runtime's worker pool exists (see its doc
 // comment) -- with a multi-threaded runtime, that pool is already running by
@@ -41,7 +43,12 @@ async fn cni_add_creates_working_connectivity_between_two_pods() {
     let sarena_plugin = SarenaPlugin;
 
     let api_server = FakeApiServer::new();
-    api_server.start("/tmp/sarena.sock").await;
+    api_server.start(TEST_SOCKET_PATH).await;
+    // Point the plugin's API client at the fake server instead of the real
+    // daemon's default socket.
+    unsafe {
+        std::env::set_var("SARENA_SOCKET_PATH", TEST_SOCKET_PATH);
+    }
 
     let pid = std::process::id();
 

@@ -14,13 +14,13 @@ use sarena_utils::{
 
 use crate::{
     cli::{Cli, Commands},
-    init::init_daemon,
+    start::start_daemon,
 };
 
 mod cli;
 mod config;
-mod init;
 mod metrics;
+mod start;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -30,7 +30,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Start => {
             let command = Cli::command();
             require_root_privilege(command.get_name());
-            if let Err(err) = init_daemon(cli).await {
+            if let Err(err) = start_daemon(cli).await {
                 // Tracing may already be shut down at this point, so print directly.
                 eprintln!("Error: {err:?}");
                 process::exit(1);

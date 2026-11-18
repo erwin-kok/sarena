@@ -27,7 +27,7 @@ futures = { workspace = true }
 ipnet = { workspace = true }
 log = { workspace = true }
 network-types = { workspace = true, default-features = false }
-nix = { workspace = true, features = ["poll"] }
+nix = { workspace = true, features = ["fs", "mount", "poll"] }
 rand = { workspace = true, features = ["thread_rng"] }
 serde = { workspace = true }
 serde_json = { workspace = true }

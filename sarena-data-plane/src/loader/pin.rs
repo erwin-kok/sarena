@@ -1,14 +1,18 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    loader::loader_endpoint::LoaderEndpointKind,
+    loader::{
+        bpffs::{self, BpffsError},
+        loader_endpoint::LoaderEndpointKind,
+    },
     maps::{EndpointMap, GlobalMap},
 };
 
 /// Resolves every pin path this loader ever touches, all under one
 /// root (e.g. `/sys/fs/bpf/sarena`). Pure and deterministic on
-/// purpose - no I/O here, so every method is trivially unit-testable
-/// and there's exactly one place that knows the on-disk layout.
+/// purpose - no I/O here (except the explicit [`PinRoot::ensure_bpffs`]),
+/// so every method is trivially unit-testable and there's exactly one
+/// place that knows the on-disk layout.
 ///
 /// Layout (uniform across every kind - `link` is always the network
 /// interface name):
@@ -29,6 +33,17 @@ impl PinRoot {
     #[allow(dead_code)]
     pub fn root(&self) -> &Path {
         &self.0
+    }
+
+    /// Makes sure the BPF filesystem is mounted on the parent of the root
+    /// (e.g. `/sys/fs/bpf` for `/sys/fs/bpf/sarena`), mounting it when nothing
+    /// is mounted there. Fails when another filesystem is mounted there or
+    /// several bpffs instances are stacked on it.
+    ///
+    /// The one method here that does I/O (and needs `CAP_SYS_ADMIN` to
+    /// mount); call it once at daemon startup, before anything gets pinned.
+    pub fn ensure_bpffs(&self) -> Result<(), BpffsError> {
+        bpffs::ensure_bpffs(&self.0)
     }
 
     pub fn links_dir(&self) -> PathBuf {

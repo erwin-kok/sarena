@@ -13,7 +13,8 @@ use crate::cli::Cli;
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     /// Address of the daemon, as `unix://<path>` or `tcp://<host:port>`.
-    /// When unset the client falls back to `unix:///tmp/sarena.sock`.
+    /// When unset the client falls back to `unix:///var/run/sarena/sarena.sock`
+    /// (or `unix://$SARENA_SOCKET_PATH` when that is set).
     pub host: Option<String>,
 
     /// Emit debug-level log messages.

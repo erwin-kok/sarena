@@ -10,6 +10,8 @@ use crate::common::FakeApiServer;
 
 mod common;
 
+const TEST_SOCKET_PATH: &str = "/tmp/sarena.sock";
+
 #[tokio::test(flavor = "current_thread")]
 #[ignore = "requires CAP_NET_ADMIN/CAP_SYS_ADMIN and a writable /run/netns"]
 async fn cni_status_reports_daemon_ready() {
@@ -22,7 +24,12 @@ async fn cni_status_reports_daemon_ready() {
     let sarena_plugin = SarenaPlugin;
 
     let api_server = FakeApiServer::new();
-    api_server.start("/tmp/sarena.sock").await;
+    api_server.start(TEST_SOCKET_PATH).await;
+    // Point the plugin's API client at the fake server instead of the real
+    // daemon's default socket.
+    unsafe {
+        std::env::set_var("SARENA_SOCKET_PATH", TEST_SOCKET_PATH);
+    }
 
     unsafe {
         env::set_var("CNI_COMMAND", "STATUS");

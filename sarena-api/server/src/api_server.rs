@@ -38,7 +38,7 @@ impl ApiServer {
 
     pub async fn start(
         &self,
-        driver_sock: &str,
+        socket_path: &Path,
         tcp_port: u16,
         state: AppState,
         prometheus_handle: PrometheusHandle,
@@ -47,7 +47,7 @@ impl ApiServer {
         let router = build_router(state, prometheus_handle);
 
         tokio::try_join!(
-            unix_listener(driver_sock, router.clone(), shutdown.child_token()),
+            unix_listener(socket_path, router.clone(), shutdown.child_token()),
             tcp_listener(tcp_port, router, shutdown.child_token()),
         )?;
 
@@ -57,17 +57,17 @@ impl ApiServer {
 }
 
 async fn unix_listener(
-    driver_sock: &str,
+    socket_path: &Path,
     router: Router,
     shutdown: CancellationToken,
 ) -> anyhow::Result<()> {
-    if Path::new(driver_sock).exists() {
-        std::fs::remove_file(driver_sock)?;
-        info!("Removed stale socket: {}", driver_sock);
+    if socket_path.exists() {
+        std::fs::remove_file(socket_path)?;
+        info!("Removed stale socket: {}", socket_path.display());
     }
 
-    let listener = UnixListener::bind(driver_sock)?;
-    info!("Listening on Unix domain socket {}", driver_sock);
+    let listener = UnixListener::bind(socket_path)?;
+    info!("Listening on Unix domain socket {}", socket_path.display());
 
     let mut connections = tokio::task::JoinSet::new();
     loop {
@@ -110,7 +110,7 @@ async fn unix_listener(
     }
 
     // Remove our socket rather than leaving it behind.
-    let _ = std::fs::remove_file(driver_sock);
+    let _ = std::fs::remove_file(socket_path);
 
     Ok(())
 }

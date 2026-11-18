@@ -26,7 +26,7 @@ pub struct Cli {
 
     /// Address of the daemon to talk to, as `unix://<path>` or `tcp://<host:port>`.
     /// Overrides `host` from the config file.
-    /// Default: `unix:///tmp/sarena.sock`.
+    /// Default: `unix:///var/run/sarena/sarena.sock` (or `unix://$SARENA_SOCKET_PATH`).
     #[arg(short = 'H', long, global = true)]
     pub host: Option<String>,
 
