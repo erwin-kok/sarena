@@ -6,6 +6,7 @@ use std::{
 };
 
 use config::{Config as ConfigLoader, Environment, File};
+use sarena_infra::is_global_unicast;
 use sarena_utils::LogFormat;
 use serde::Deserialize;
 
@@ -89,16 +90,15 @@ pub struct Config {
     /// IPv4 one (`<base>:<ipv4 network>:0:0/96`). Default: `f00d::`.
     pub ipv6_cluster_alloc_cidr_base: Ipv6Prefix64,
 
-    /// IPv4 address of the node-side gateway that endpoints use as their
-    /// default route.
-    pub gateway_ip: Option<Ipv4Addr>,
+    /// IPv4 address of this node (its external address), overriding the one
+    /// autodetected from the system's addresses. Must be a global unicast
+    /// address (see [`is_global_unicast`]). Default: autodetected.
+    pub ipv4_node_address: Option<Ipv4Addr>,
 
-    /// IPv4 address of the node on the internal (pod-facing) network.
-    pub internal_ip: Option<Ipv4Addr>,
-
-    /// IPv4 subnet in CIDR notation (e.g. `10.0.10.0/24`) from which IPAM
-    /// allocates endpoint addresses.
-    pub ipam_ipv4_subnet: Option<String>,
+    /// IPv6 address of this node, overriding the one autodetected from the
+    /// system's addresses. Must be a global unicast address (see
+    /// [`is_global_unicast`]). Default: autodetected.
+    pub ipv6_node_address: Option<Ipv6Addr>,
 }
 
 #[derive(Deserialize)]
@@ -126,9 +126,8 @@ struct ConfigBuilder {
     #[serde(default = "default_ipv6_cluster_alloc_cidr_base")]
     ipv6_cluster_alloc_cidr_base: Ipv6Prefix64,
 
-    gateway_ip: Option<Ipv4Addr>,
-    internal_ip: Option<Ipv4Addr>,
-    ipam_ipv4_subnet: Option<String>,
+    ipv4_node_address: Option<Ipv4Addr>,
+    ipv6_node_address: Option<Ipv6Addr>,
 }
 
 fn default_pin_root() -> PathBuf {
@@ -153,6 +152,17 @@ impl TryFrom<ConfigBuilder> for Config {
             anyhow::bail!("IPv4 and/or IPv6 addressing must be enabled");
         }
 
+        if let Some(ip) = config.ipv4_node_address
+            && !is_global_unicast(&ip.into())
+        {
+            anyhow::bail!("ipv4_node_address {ip} is not a global unicast address");
+        }
+        if let Some(ip) = config.ipv6_node_address
+            && !is_global_unicast(&ip.into())
+        {
+            anyhow::bail!("ipv6_node_address {ip} is not a global unicast address");
+        }
+
         let statedir_path = config
             .statedir_path
             .unwrap_or_else(|| config.runtime_path.join("state"));
@@ -170,9 +180,8 @@ impl TryFrom<ConfigBuilder> for Config {
             enable_ipv4,
             enable_ipv6,
             ipv6_cluster_alloc_cidr_base: config.ipv6_cluster_alloc_cidr_base,
-            gateway_ip: config.gateway_ip,
-            internal_ip: config.internal_ip,
-            ipam_ipv4_subnet: config.ipam_ipv4_subnet,
+            ipv4_node_address: config.ipv4_node_address,
+            ipv6_node_address: config.ipv6_node_address,
         })
     }
 }

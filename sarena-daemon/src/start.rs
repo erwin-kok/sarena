@@ -97,16 +97,20 @@ pub async fn start_daemon(cli: Cli) -> anyhow::Result<()> {
         .ensure_bpffs()
         .context("BPF filesystem is not usable")?;
 
-    if !config.enable_ipv4 && !config.enable_ipv6 {
-        anyhow::bail!("IPv4 and/or IPv6 addressing must be enabled");
-    }
-
     let network_provisioner = NetlinkNetworkProvisioner;
 
     let mut local_node = LocalNode::default();
     local_node
         .initialize(&network_provisioner, &config, None)
         .await?;
+
+    if let Some(ipv4) = config.ipv4_node_address {
+        local_node.ipv4_external_address = Some(ipv4);
+    }
+
+    if let Some(ipv6) = config.ipv6_node_address {
+        local_node.ipv6_address = Some(ipv6);
+    }
 
     info!("LocalNode config: {local_node:?}");
 

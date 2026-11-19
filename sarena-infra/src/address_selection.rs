@@ -52,6 +52,29 @@ pub fn is_public_addr(ip: &IpAddr) -> bool {
     }
 }
 
+/// Whether `ip` is a global unicast address: not unspecified, loopback,
+/// multicast, link-local unicast or (IPv4) the limited broadcast address.
+///
+/// Unlike [`is_public_addr`] this holds for private addresses too (e.g.
+/// `10.0.0.1`, `fd00::1`); it's the same check as Go's `IP.IsGlobalUnicast`.
+pub fn is_global_unicast(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            !(ip.is_unspecified()
+                || ip.is_loopback()
+                || ip.is_multicast()
+                || ip.is_link_local()
+                || ip.is_broadcast())
+        }
+        IpAddr::V6(ip) => {
+            !(ip.is_unspecified()
+                || ip.is_loopback()
+                || ip.is_multicast()
+                || ip.is_unicast_link_local())
+        }
+    }
+}
+
 /// Shared implementation of `first_global_ipv{4,6}`: first `ifname`'s own
 /// addresses (without exclusions), then those of every link minus
 /// [`NetworkProvisioner::excluded_ips`].
@@ -170,6 +193,32 @@ mod tests {
             assert!(
                 !is_public_addr(&ip(private)),
                 "{private} should not be public"
+            );
+        }
+    }
+
+    #[test]
+    fn classifies_global_unicast_addresses() {
+        for global in ["10.0.0.1", "8.8.8.8", "fd00::1", "2001:4860::1"] {
+            assert!(
+                is_global_unicast(&ip(global)),
+                "{global} should be global unicast"
+            );
+        }
+        for other in [
+            "0.0.0.0",
+            "127.0.0.1",
+            "169.254.1.1",
+            "224.0.0.1",
+            "255.255.255.255",
+            "::",
+            "::1",
+            "fe80::1",
+            "ff02::1",
+        ] {
+            assert!(
+                !is_global_unicast(&ip(other)),
+                "{other} should not be global unicast"
             );
         }
     }

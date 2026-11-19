@@ -23,7 +23,7 @@ pub mod tcx;
 pub mod test_support;
 
 pub use address::{AddressFamily, AddressScope, InterfaceAddress, ScopedAddress};
-pub use address_selection::is_public_addr;
+pub use address_selection::{is_global_unicast, is_public_addr};
 pub use mac_address::MacAddress;
 pub use mock_provisioner::MockNetworkProvisioner;
 pub use netlink_provisioner::NetlinkNetworkProvisioner;
