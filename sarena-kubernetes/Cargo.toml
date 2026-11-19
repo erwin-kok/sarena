@@ -14,6 +14,7 @@ workspace = true
 axum = { workspace = true }
 axum-server = { workspace = true }
 futures = { workspace = true }
+http = { workspace = true }
 ipnet = { workspace = true }
 kube = { workspace = true, features = ["admission"] }
 k8s-openapi = { workspace = true }

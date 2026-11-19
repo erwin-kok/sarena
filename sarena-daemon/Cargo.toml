@@ -24,6 +24,7 @@ clap = { workspace = true }
 clap-markdown-generator = { workspace = true }
 config = { workspace = true, features = ["toml", "json", "yaml"] }
 ipnet = { workspace = true }
+kube = { workspace = true }
 metrics = { workspace = true }
 metrics-exporter-prometheus = { workspace = true }
 semver = { workspace = true }

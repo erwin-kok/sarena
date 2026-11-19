@@ -1,11 +1,9 @@
 use std::{
-    collections::HashMap,
     env::consts,
     fs,
-    future::Future,
     io::IsTerminal as _,
     net::{IpAddr, Ipv4Addr},
-    process,
+    path::PathBuf,
     sync::Arc,
     time::Duration,
 };
@@ -17,24 +15,24 @@ use sarena_api_types_v1::daemon::SarenaVersion;
 use sarena_data_plane::{
     DataPlane as _, DataPlaneConfig, DefaultDataPlane, EndpointManager, PinRoot,
 };
-use sarena_infra::NetlinkNetworkProvisioner;
+use sarena_infra::{NetlinkNetworkProvisioner, NetworkProvisioner};
+use sarena_kubernetes::client::ClientOptions;
 use sarena_services::{AppState, DefaultDaemonService, DefaultEndpointService, DefaultIpamService};
 use sarena_utils::{TracingConfig, logging, version};
 use semver::{Version, VersionReq};
-use tokio::{
-    signal::unix::{SignalKind, signal},
-    task::{Id, JoinError, JoinSet},
-    time::{Instant, MissedTickBehavior},
-};
+use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::info;
 
-use crate::{cli::Cli, config::load_config, metrics::BootstrapStatistics, node::LocalNode};
+use crate::{
+    cli::Cli,
+    config::{Config, load_config},
+    metrics::BootstrapStatistics,
+    node::LocalNode,
+    shutdown::{DaemonTasks, spawn_signal_handler, wait_for_shutdown},
+};
 
 const MINIMUM_KERNEL_VESRION: &str = "5.10.0";
-const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
-const TELEMETRY_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
-const SHUTDOWN_BUDGET: Duration = Duration::from_secs(25);
 const TCP_PORT: u16 = 3000;
 /// Same interval `PrometheusBuilder::install` would use for its own upkeep task.
 const METRICS_UPKEEP_INTERVAL: Duration = Duration::from_secs(5);
@@ -97,7 +95,7 @@ pub async fn start_daemon(cli: Cli) -> anyhow::Result<()> {
         .ensure_bpffs()
         .context("BPF filesystem is not usable")?;
 
-    let network_provisioner = NetlinkNetworkProvisioner;
+    let mut network_provisioner = NetlinkNetworkProvisioner;
 
     let mut local_node = LocalNode::default();
     local_node
@@ -111,6 +109,21 @@ pub async fn start_daemon(cli: Cli) -> anyhow::Result<()> {
     if let Some(ipv6) = config.ipv6_node_address {
         local_node.ipv6_address = Some(ipv6);
     }
+
+    network_provisioner
+        .enable_ip_forwarding(config.enable_ipv6)
+        .await?;
+
+    // Connecting may retry for a while; don't let that hold up a shutdown.
+    let k8s_client = tokio::select! {
+        () = shutdown.cancelled() => {
+            info!("shutdown requested while connecting to Kubernetes");
+            return Ok(());
+        }
+        client = connect_kubernetes(&config, &bootstrap_statistics) => client?,
+    };
+
+    //
 
     info!("LocalNode config: {local_node:?}");
 
@@ -136,113 +149,128 @@ pub async fn start_daemon(cli: Cli) -> anyhow::Result<()> {
 
     let state = setup_services(data_plane_config, endpoint_manager);
 
-    let mut tasks = JoinSet::new();
-    let mut task_names = HashMap::new();
-
-    {
-        // Metrics upkeep: `install_recorder` (unlike `install`) does not spawn this itself.
-        let token = shutdown.child_token();
-        let prometheus_handle = prometheus_handle.clone();
-        let handle = tasks.spawn(async move {
-            run_metrics_upkeep(prometheus_handle, token).await;
-            Ok(())
-        });
-        task_names.insert(handle.id(), "metrics upkeep");
-    }
-
-    {
-        // API SERVER
-        let server_shutdown = shutdown.child_token();
-        let handle = tasks.spawn(async move {
-            sarena_api_server::ApiServer::new()
-                .start(
-                    &config.socket_path,
-                    TCP_PORT,
-                    state,
-                    prometheus_handle,
-                    server_shutdown,
-                )
-                .await
-        });
-        task_names.insert(handle.id(), "API server");
-    }
-
-    {
-        // Kubernetes controllers
-        let token = shutdown.child_token();
-        let handle = tasks.spawn(async move {
-            sarena_kubernetes::server::start(token)
-                .await
-                .map_err(anyhow::Error::from)
-        });
-        task_names.insert(handle.id(), "Kubernetes controllers");
+    let mut tasks = DaemonTasks::new();
+    spawn_metrics_upkeep(&mut tasks, &shutdown, prometheus_handle.clone());
+    spawn_api_server(
+        &mut tasks,
+        &shutdown,
+        config.socket_path.clone(),
+        state,
+        prometheus_handle,
+    );
+    if let Some(k8s_client) = k8s_client {
+        spawn_kubernetes(
+            &mut tasks,
+            &shutdown,
+            k8s_client,
+            config.k8s_heartbeat_timeout,
+        );
     }
 
     bootstrap_statistics.overall.end(true);
     bootstrap_statistics.update_metrics();
 
-    // Wait for either an OS shutdown signal or a task exiting unexpectedly
-    // (e.g. panicking, or returning before we asked it to stop). Whichever
-    // happens first triggers the same graceful shutdown path below.
-    // `biased` so shutdown wins when both branches are ready: tasks return as
-    // soon as their child token is cancelled, which must not count as an early exit.
-    let early_exit = tokio::select! {
-        biased;
+    wait_for_shutdown(tasks, shutdown, data_plane).await
+}
 
-        () = shutdown.cancelled() => {
-            info!("shutdown signal received");
-            false
-        }
+/// Metrics upkeep: `install_recorder` (unlike `install`) does not spawn this
+/// itself.
+fn spawn_metrics_upkeep(
+    tasks: &mut DaemonTasks,
+    shutdown: &CancellationToken,
+    prometheus_handle: PrometheusHandle,
+) {
+    let token = shutdown.child_token();
+    tasks.spawn("metrics upkeep", async move {
+        run_metrics_upkeep(prometheus_handle, token).await;
+        Ok(())
+    });
+}
 
-        Some(result) = tasks.join_next_with_id() => {
-            error!("daemon task exited before shutdown was requested");
-            log_task_result(&mut task_names, result);
-            true
-        }
+/// The API server, on `socket_path` and on [`TCP_PORT`].
+fn spawn_api_server(
+    tasks: &mut DaemonTasks,
+    shutdown: &CancellationToken,
+    socket_path: PathBuf,
+    state: AppState,
+    prometheus_handle: PrometheusHandle,
+) {
+    let token = shutdown.child_token();
+    tasks.spawn("API server", async move {
+        sarena_api_server::ApiServer::new()
+            .start(&socket_path, TCP_PORT, state, prometheus_handle, token)
+            .await
+    });
+}
+
+/// Connects to the Kubernetes API server per `config`, waiting until it
+/// answers (see [`sarena_kubernetes::client::connect`]). `None` when there
+/// is no Kubernetes to connect to (see
+/// [`sarena_kubernetes::client::is_configured`]), in which case the daemon
+/// runs without its Kubernetes controllers.
+async fn connect_kubernetes(
+    config: &Config,
+    bootstrap_statistics: &BootstrapStatistics,
+) -> anyhow::Result<Option<kube::Client>> {
+    let options = ClientOptions {
+        api_server_url: config.k8s_api_server_url.clone(),
+        kubeconfig_path: config.k8s_kubeconfig_path.clone(),
+        heartbeat_timeout: config.k8s_heartbeat_timeout,
     };
-
-    // No-op on the signal path; on the early-exit path this tells the
-    // remaining tasks to stop gracefully.
-    shutdown.cancel();
-
-    let deadline = Instant::now() + SHUTDOWN_BUDGET;
-
-    shutdown_step("daemon tasks", SHUTDOWN_TIMEOUT, deadline, async {
-        while let Some(result) = tasks.join_next_with_id().await {
-            log_task_result(&mut task_names, result);
-        }
-    })
-    .await;
-
-    if !tasks.is_empty() {
-        let remaining: Vec<_> = task_names.values().collect();
-        warn!(
-            ?remaining,
-            "aborting daemon tasks that did not stop in time"
-        );
-        tasks.abort_all();
+    if !sarena_kubernetes::client::is_configured(&options) {
+        info!("no Kubernetes configuration found, running without Kubernetes");
+        return Ok(None);
     }
 
-    shutdown_step("data plane", SHUTDOWN_TIMEOUT, deadline, async {
-        if let Err(err) = data_plane.shutdown().await {
-            error!(?err, "failed to shutdown data plane");
-        }
-    })
-    .await;
+    bootstrap_statistics.k8s_init.start();
+    let result = sarena_kubernetes::client::connect(&options).await;
+    bootstrap_statistics.k8s_init.end(result.is_ok());
 
-    shutdown_step(
-        "OTel tracer provider",
-        TELEMETRY_SHUTDOWN_TIMEOUT,
-        deadline,
-        shutdown_blocking("OTel tracer provider", logging::shutdown_tracing),
-    )
-    .await;
+    result
+        .map(Some)
+        .context("unable to create Kubernetes client")
+}
 
-    if early_exit {
-        anyhow::bail!("daemon task exited before shutdown was requested");
+/// The Kubernetes controllers, plus the API server heartbeat when
+/// `heartbeat_timeout` is set.
+fn spawn_kubernetes(
+    tasks: &mut DaemonTasks,
+    shutdown: &CancellationToken,
+    client: kube::Client,
+    heartbeat_timeout: Option<Duration>,
+) {
+    if let Some(timeout) = heartbeat_timeout {
+        spawn_kubernetes_heartbeat(tasks, shutdown, client.clone(), timeout);
     }
+    spawn_kubernetes_controllers(tasks, shutdown, client);
+}
 
-    Ok(())
+/// Periodically checks the API server's health, see
+/// [`sarena_kubernetes::client::run_heartbeat`].
+fn spawn_kubernetes_heartbeat(
+    tasks: &mut DaemonTasks,
+    shutdown: &CancellationToken,
+    client: kube::Client,
+    timeout: Duration,
+) {
+    let token = shutdown.child_token();
+    tasks.spawn("Kubernetes heartbeat", async move {
+        sarena_kubernetes::client::run_heartbeat(client, timeout, token).await;
+        Ok(())
+    });
+}
+
+fn spawn_kubernetes_controllers(
+    tasks: &mut DaemonTasks,
+    shutdown: &CancellationToken,
+    client: kube::Client,
+) {
+    let token = shutdown.child_token();
+    tasks.spawn("Kubernetes controllers", async move {
+        sarena_kubernetes::server::start(client, token)
+            .await
+            .map_err(anyhow::Error::from)
+    });
 }
 
 async fn run_metrics_upkeep(prometheus_handle: PrometheusHandle, shutdown: CancellationToken) {
@@ -267,67 +295,6 @@ fn setup_services(config: DataPlaneConfig, endpoint_manager: EndpointManager) ->
     let daemon = Arc::new(DefaultDaemonService::new());
 
     AppState::new(ipam, endpoint, daemon)
-}
-
-fn spawn_signal_handler(shutdown: CancellationToken) -> anyhow::Result<()> {
-    let mut sigint = signal(SignalKind::interrupt()).context("failed to install SIGINT handler")?;
-    let mut sigterm =
-        signal(SignalKind::terminate()).context("failed to install SIGTERM handler")?;
-
-    tokio::spawn(async move {
-        tokio::select! {
-            _ = sigint.recv() => info!("received SIGINT, shutting down"),
-            _ = sigterm.recv() => info!("received SIGTERM, shutting down"),
-        }
-        shutdown.cancel();
-
-        let kind = tokio::select! {
-            _ = sigint.recv() => SignalKind::interrupt(),
-            _ = sigterm.recv() => SignalKind::terminate(),
-        };
-        error!("received second signal, forcing exit");
-        process::exit(128 + kind.as_raw_value());
-    });
-
-    Ok(())
-}
-
-/// Runs one shutdown step, bounded by its own `timeout` and by the overall
-/// shutdown `deadline`, whichever comes first.
-async fn shutdown_step(
-    name: &str,
-    timeout: Duration,
-    deadline: Instant,
-    fut: impl Future<Output = ()>,
-) {
-    let step_deadline = deadline.min(Instant::now() + timeout);
-    if tokio::time::timeout_at(step_deadline, fut).await.is_err() {
-        error!("timed out shutting down {name}");
-    }
-}
-
-async fn shutdown_blocking(name: &str, f: impl FnOnce() + Send + 'static) {
-    if tokio::task::spawn_blocking(f).await.is_err() {
-        error!("{name} shutdown task panicked");
-    }
-}
-
-/// Logs a finished task under its name, removing it from `names` so that what
-/// is left there are the tasks still running.
-fn log_task_result(
-    names: &mut HashMap<Id, &'static str>,
-    result: Result<(Id, anyhow::Result<()>), JoinError>,
-) {
-    let id = match &result {
-        Ok((id, _)) => *id,
-        Err(err) => err.id(),
-    };
-    let task = names.remove(&id).unwrap_or("unknown");
-    match result {
-        Ok((_, Ok(()))) => info!(task, "daemon task exited"),
-        Ok((_, Err(err))) => error!(task, ?err, "daemon task failed"),
-        Err(err) => error!(task, ?err, "daemon task panicked"),
-    }
 }
 
 pub fn print_banner() {

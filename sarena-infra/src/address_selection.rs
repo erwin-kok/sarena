@@ -54,9 +54,6 @@ pub fn is_public_addr(ip: &IpAddr) -> bool {
 
 /// Whether `ip` is a global unicast address: not unspecified, loopback,
 /// multicast, link-local unicast or (IPv4) the limited broadcast address.
-///
-/// Unlike [`is_public_addr`] this holds for private addresses too (e.g.
-/// `10.0.0.1`, `fd00::1`); it's the same check as Go's `IP.IsGlobalUnicast`.
 pub fn is_global_unicast(ip: &IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => {

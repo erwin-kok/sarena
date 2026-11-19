@@ -6,6 +6,7 @@ const BOOTSTRAP_HISTOGRAM: &str = "agent_bootstrap_seconds";
 #[derive(Default)]
 pub struct BootstrapStatistics {
     pub overall: SpanStat,
+    pub k8s_init: SpanStat,
 }
 
 impl BootstrapStatistics {
@@ -14,8 +15,11 @@ impl BootstrapStatistics {
         Self::default()
     }
 
-    fn named_stats(&self) -> [(&'static str, &SpanStat); 1] {
-        [("overall", &self.overall)]
+    fn named_stats(&self) -> [(&'static str, &SpanStat); 2] {
+        [
+	    ("overall", &self.overall),
+            ("k8sInit", &self.k8s_init),
+	]
     }
 
     fn record_duration(scope: &'static str, outcome: &'static str, duration: std::time::Duration) {

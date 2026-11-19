@@ -8,8 +8,9 @@ use crate::{
     webhook,
 };
 
-pub async fn start(shutdown: CancellationToken) -> Res<()> {
-    let client = Client::try_default().await?;
+/// Runs the Kubernetes controllers and the admission webhook on `client`
+/// until `shutdown` is cancelled.
+pub async fn start(client: Client, shutdown: CancellationToken) -> Res<()> {
     let mut tasks = JoinSet::new();
 
     tracing::info!("starting Kubernetes reconcilers");

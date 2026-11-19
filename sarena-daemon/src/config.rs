@@ -3,6 +3,7 @@ use std::{
     fmt,
     net::{Ipv4Addr, Ipv6Addr},
     path::PathBuf,
+    time::Duration,
 };
 
 use config::{Config as ConfigLoader, Environment, File};
@@ -99,6 +100,21 @@ pub struct Config {
     /// system's addresses. Must be a global unicast address (see
     /// [`is_global_unicast`]). Default: autodetected.
     pub ipv6_node_address: Option<Ipv6Addr>,
+
+    /// Kubernetes API server URL. `https://` URLs authenticate with the
+    /// in-cluster service account. Default: from the kubeconfig, or the
+    /// in-cluster configuration.
+    pub k8s_api_server_url: Option<String>,
+
+    /// Kubeconfig file to connect to Kubernetes with; takes precedence over
+    /// `k8s_api_server_url`. Default: `$KUBECONFIG` or `~/.kube/config` when
+    /// present, the in-cluster configuration otherwise.
+    pub k8s_kubeconfig_path: Option<PathBuf>,
+
+    /// Timeout for connecting to and getting a response from the Kubernetes
+    /// API server, and the interval of its heartbeat. Configured in seconds
+    /// as `k8s_heartbeat_timeout_secs`, where `0` disables both. Default: 30 s.
+    pub k8s_heartbeat_timeout: Option<Duration>,
 }
 
 #[derive(Deserialize)]
@@ -128,6 +144,12 @@ struct ConfigBuilder {
 
     ipv4_node_address: Option<Ipv4Addr>,
     ipv6_node_address: Option<Ipv6Addr>,
+
+    k8s_api_server_url: Option<String>,
+    k8s_kubeconfig_path: Option<PathBuf>,
+
+    #[serde(default = "default_k8s_heartbeat_timeout_secs")]
+    k8s_heartbeat_timeout_secs: u64,
 }
 
 fn default_pin_root() -> PathBuf {
@@ -140,6 +162,10 @@ fn default_runtime_path() -> PathBuf {
 
 const fn default_ipv6_cluster_alloc_cidr_base() -> Ipv6Prefix64 {
     DEFAULT_IPV6_CLUSTER_ALLOC_CIDR_BASE
+}
+
+const fn default_k8s_heartbeat_timeout_secs() -> u64 {
+    sarena_kubernetes::client::DEFAULT_HEARTBEAT_TIMEOUT.as_secs()
 }
 
 impl TryFrom<ConfigBuilder> for Config {
@@ -182,6 +208,10 @@ impl TryFrom<ConfigBuilder> for Config {
             ipv6_cluster_alloc_cidr_base: config.ipv6_cluster_alloc_cidr_base,
             ipv4_node_address: config.ipv4_node_address,
             ipv6_node_address: config.ipv6_node_address,
+            k8s_api_server_url: config.k8s_api_server_url,
+            k8s_kubeconfig_path: config.k8s_kubeconfig_path,
+            k8s_heartbeat_timeout: (config.k8s_heartbeat_timeout_secs != 0)
+                .then(|| Duration::from_secs(config.k8s_heartbeat_timeout_secs)),
         })
     }
 }
